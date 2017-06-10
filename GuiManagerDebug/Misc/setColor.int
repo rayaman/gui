@@ -1,0 +1,7 @@
+function gui:setColor(a,b,c)
+	if type(a)=="string" then
+		self.Color=Color[a]
+	elseif type(a)=="number" then
+		self.Color=Color.new(a,b,c)
+	end
+end

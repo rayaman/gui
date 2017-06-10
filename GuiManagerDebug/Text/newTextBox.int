@@ -1,0 +1,104 @@
+function gui:newTextBox(t,name, x, y, w, h, sx ,sy ,sw ,sh)
+	x,y,w,h,sx,sy,sw,sh=filter(name, x, y, w, h, sx ,sy ,sw ,sh)
+	local c=self:newBase("TextBox",name, x, y, w, h, sx ,sy ,sw ,sh)
+	c.ClearOnFocus=false
+	c.LoseFocusOnEnter=true
+	c.Tween=0
+	c.XTween=0
+	c.FontHeight=_defaultfont:getHeight()
+	c.Font=_defaultfont
+	c.FontSize=15
+	c.TextFormat="center"
+    c.text = t
+	c.ttext= t
+	c.AutoScaleText=false
+	c.TextVisibility=1 -- 0=invisible,1=solid (self.TextVisibility*254+1)
+    c.Color = {220, 220, 220}
+    c.TextColor = {0, 0, 0}
+	c.Active=false
+	c.hidden=false
+	c.funcF={function()
+		love.keyboard.setTextInput(true)
+	end}
+	c.cooldown=false
+	c.cooldown2=false
+	c.funcE={function()
+		love.keyboard.setTextInput(false)
+	end}
+	c.Enter=true
+	c.Alarm=multi:newAlarm(.1)
+	c.Alarm.parent=c
+	c.Alarm:OnRing(function(alarm) alarm.parent.cooldown=false end)
+	c.Alarm2=multi:newAlarm(.5)
+	c.Alarm2.parent=c
+	c.Alarm2:OnRing(function(alarm) alarm.parent.cooldown2=false end)
+	function c:OnFocus(func)
+		table.insert(self.funcF,func)
+	end
+	function c:OnEnter(func)
+		table.insert(self.funcE,func)
+	end
+	c:OnClicked(function(b,self)
+		for cc=1,#self.funcF do
+			self.funcF[cc](self)
+		end
+		if self.Active==false then
+			if self.ClearOnFocus==true then
+				self.text=""
+				self.ttext=""
+			end
+			for tb=1,#gui.TB do
+				if gui.TB[tb]~=nil then
+					gui.TB[tb].Active=false
+				end
+			end
+			self.Active=true
+		end
+	end)
+	c:OnUpdate(function(self)
+		if love.keyboard.isDown("backspace") and self.Active and self.cooldown==false then
+			self.text=string.sub(self.text,1,-2)
+			self.ttext=string.sub(self.ttext,1,-2)
+			self.cooldown=true
+			c.Alarm:Reset()
+		elseif love.keyboard.isDown("backspace")==false then
+			self.cooldown=false
+		end
+		if love.keyboard.isDown("delete") and self.Active then
+			self.text=string.sub(self.text,1,-2)
+			self.ttext=string.sub(self.text,1,-2)
+		elseif (love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) and love.keyboard.isDown("return") and self.cooldown2==false then
+			self.text=self.text.."\n"
+			self.ttext=self.ttext.."\n"
+			self.cooldown2=true
+			c.Alarm2:Reset()
+		elseif (love.keyboard.isDown("return") or love.keyboard.isDown("enter") or love.keyboard.isDown("kpenter")) and self.Active and self.Enter and not(love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) then
+			if self.LoseFocusOnEnter then
+				self.Active=false
+			else
+				self.Active=true
+			end
+			for cc=1,#self.funcE do
+				self.funcE[cc](self,self.ttext)
+			end
+		end
+	end)
+	table.insert(gui.TB,c)
+    return c
+end
+--TEXT BOX HELPER FUNCTION
+function love.textinput(t)
+	for tb=1,#gui.TB do
+		if gui.TB[tb]~=nil then
+			if gui.TB[tb].Active then
+				if gui.TB[tb].hidden then
+					gui.TB[tb].text=gui.TB[tb].text.."*"
+					gui.TB[tb].ttext=gui.TB[tb].ttext..t
+				else
+					gui.TB[tb].text=gui.TB[tb].text..t
+					gui.TB[tb].ttext=gui.TB[tb].ttext..t
+				end
+			end
+		end
+	end
+end
