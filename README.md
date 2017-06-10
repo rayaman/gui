@@ -13,3 +13,5 @@ test:centerY()
 ```
 
 Documentation will take a while. I have to finish writing the documentation for the multi library and start writing documentation for the bin, and net library 
+
+This is a basic library for allowing you the user to have 100% control over the look of your menus. You define your style and you make it your own. This just makes it eaiser to make stuff. Check out the intro software project: https://github.com/rayaman/IntroSoftwareProject to see how you can use this library. Note the multi library and the bin library are the older versions not the newer ones. But the methods and feel of the libraries are the same.
