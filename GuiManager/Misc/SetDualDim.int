@@ -1,4 +1,18 @@
 function gui:SetDualDim(x, y, w, h, sx ,sy ,sw ,sh)
+	if _GuiPro.DPI_ENABLED then
+		if x then
+			x=self.DPI*x
+		end
+		if y then
+			y=self.DPI*y
+		end
+		if w then
+			w=self.DPI*w
+		end
+		if h then
+			h=self.DPI*h
+		end
+	end
 	if sx then
 		self.scale.pos.x=sx
 	end

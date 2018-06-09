@@ -1,20 +1,20 @@
 utf8 = require("utf8")
-_defaultfont = love.graphics.getFont()
 gui = {}
 gui.__index = gui
 gui.TB={}
-gui.Version="8.0.0" -- Is it really ready for release?
+gui.Version="9.0.0" -- Is it really ready for release?
 _GuiPro={GBoost=true,hasDrag=false,DragItem={},Children={},Visible=true,count=0,x=0,y=0,height=0,width=0,update=function(self) local things=GetAllChildren2(self) UpdateThings(things) end,draw=function(self) local things=GetAllChildren(self) DrawThings(things) end,getChildren=function(self) return self.Children end}
 _GuiPro.Clips={}
 _GuiPro.rotate=0
+_defaultfont = love.graphics.setNewFont(12)
 setmetatable(_GuiPro, gui)
 function gui:LoadInterface(file)
 	local add=".int"
 	if string.find(file,".",1,true) then add="" end
-	if love.filesystem.exists(file..add) then
+	if love.filesystem.getInfo(file..add) then
     a,b=pcall(love.filesystem.load(file..add))
 		if a then
-			print("Loaded: "..file)
+			--print("Loaded: "..file)
 		else
 			print("Error loading file: "..file)
       print(a,b)
@@ -48,8 +48,22 @@ function gui:Clickable()
 	end
 	return not(mx>x+w or mx<x or my>y+h or my<y)
 end
+local function HSL(h, s, l, a)
+	if s<=0 then return l,l,l,a end
+	h, s, l = h/256*6, s/255, l/255
+	local c = (1-math.abs(2*l-1))*s
+	local x = (1-math.abs(h%2-1))*c
+	local m,r,b,g = (l-.5*c), 0,0,0
+	if h < 1     then r,b,g = c,x,0
+	elseif h < 2 then r,b,g = x,c,0
+	elseif h < 3 then r,b,g = 0,c,x
+	elseif h < 4 then r,b,g = 0,x,c
+	elseif h < 5 then r,b,g = x,0,c
+	else              r,b,g = c,0,x
+	end return (r+m)*255,(g+m)*255,(b+m)*255,a
+end
 Color={
-new=function(r,g,b)
+new=function(r,b,g)
 	mt = {
 		__add = function (c1,c2)
 			return Color.new(c1[1]+c2[1],c1[2]+c2[2],c1[2]+c2[2])
@@ -79,7 +93,7 @@ new=function(r,g,b)
 		__lt = Color.LT,
 		__le = Color.LE,
 	}
-	local temp = {r,g,b,255}
+	local temp = {r/255,b/255,g/255,1}
 	setmetatable(temp, mt)
 	return temp
 end,
@@ -107,14 +121,13 @@ Darken=function(color,v)
 	currentR=color[1]
 	currentG=color[2]
 	currentB=color[3]
-	return Color.new(currentR * (1 - v),currentG * (1 - v),currentB * (1 - v))
+	return Color.new((currentR*255) * (1 - v),(currentG*255) * (1 - v),(currentB*255) * (1 - v))
 end,
 Lighten=function(color,v)
 	currentR=color[1]
 	currentG=color[2]
 	currentB=color[3]
-
-	return Color.new(currentR + (255 - currentR) * v,currentG + (255 - currentG) * v,currentB + (255 - currentB) * v)
+	return Color.new(currentR*255 + (255 - (currentR*255)) * v,currentG*255 + (255 - (currentG*255)) * v,currentB*255 + (255 - (currentB*255)) * v)
 end
 }
 Color.IndexColor("Black",20,20,20)
@@ -1820,6 +1833,7 @@ function gui:MRelease()
 		self.funcs2[i]("m",self)
 	end
 end
+
 function gui:full()
   self:SetDualDim(nil,nil,nil,nil,nil,nil,1,1)
 end
@@ -1849,15 +1863,15 @@ function gui:newBase(tp,name, x, y, w, h, sx ,sy ,sw ,sh)
 	else
 		c.Parent=self
 	end
-  c.segments=nil
-  c.ry=nil
-  c.rx=nil
-  c.DPI=1
-  if _GuiPro.DPI_ENABLED then
-    c.DPI=love.window.getPixelScale()
-    x, y, w, h=c.DPI*x,c.DPI*y,c.DPI*w,c.DPI*h
-  end
-  c.centerFontY=true
+	c.segments=nil
+	c.ry=nil
+	c.rx=nil
+	c.DPI=1
+	if _GuiPro.DPI_ENABLED then
+		c.DPI=love.window.getPixelScale()
+		x, y, w, h=c.DPI*x,c.DPI*y,c.DPI*w,c.DPI*h
+	end
+	c.centerFontY=true
 	c.FormFactor="rectangle"
 	c.Type=tp
 	c.Active=true
@@ -2002,6 +2016,13 @@ function gui:newBase(tp,name, x, y, w, h, sx ,sy ,sw ,sh)
 			_GuiPro.self=self
 			if type(i)=="number" then
 				loadstring("_GuiPro.self:"..v)()
+			elseif i:match"__self__" then
+				local ind=i:match"__self__(.+)"
+				if not self[ind] then self[ind]={} end
+				loadstring("_GuiPro.self."..ind.."=_GuiPro.self:"..v)()
+			elseif i:match"__child__" then
+				local ind,child = i:match"__child__(%S-)_(.+)"
+				self[ind][child]=v
 			else
 				self[i]=v
 			end
@@ -2066,6 +2087,46 @@ function love.mouse.isDown(b)
 		return false
 	end
 	return _GuiPro.mousedownfunc(({["l"]=1,["r"]=2,["m"]=3})[b] or b)
+end
+function gui:toString() -- oh boy this is gonna be painful lol
+	multi:newThread("saving data: ",function()
+		local dat=bin.stream("test.dat",false)
+		function GetAllChildren2(Object)
+			local Stuff = {}
+			function Seek(Items)
+				for i=1,#Items do
+					--table.insert(Stuff,Items[i])
+					for a,v in pairs(Items[i]) do
+						-- dat:tackE(a.."|"..tostring(v))
+						print(a.."|"..tostring(v))
+						-- dat.workingfile:flush()
+					end
+					thread.skip()
+					local NItems = Items[i]:getChildren()
+					if NItems ~= nil then
+						Seek(NItems)
+					end
+				end
+			end
+			local Objs = Object:getChildren()
+			for i=1,#Objs do
+				-- table.insert(Stuff,Objs[i])
+				for a,v in pairs(Objs[i]) do
+					-- dat:tackE(a.."|"..tostring(v))
+					print(Objs[i].Type..":"..a.."|"..tostring(v))
+					-- dat.workingfile:flush()
+				end
+				thread.skip()
+				local Items = Objs[i]:getChildren()
+				if Items ~= nil then
+					Seek(Items)
+				end
+			end
+			-- dat:tofile("test.dat")
+			return Stuff
+		end
+		GetAllChildren2(self)
+	end)
 end
 --[[WORKING ON
 doubleTap - UnFinished!
@@ -2558,7 +2619,7 @@ end
 function gui:newImageButton(i,name, x, y, w, h, sx ,sy ,sw ,sh)
 	x,y,w,h,sx,sy,sw,sh=filter(name, x, y, w, h, sx ,sy ,sw ,sh)
 	local c=self:newBase("ImageButton",name, x, y, w, h, sx ,sy ,sw ,sh)
-	if type(i)=="string" then
+	if type(i)=="string" or type(i):find("ImageData") then
 		c.Image=love.graphics.newImage(i)
 	else
 		c.Image=i
@@ -2573,17 +2634,17 @@ function gui:newImageButton(i,name, x, y, w, h, sx ,sy ,sw ,sh)
 		c.Quad=love.graphics.newQuad(0,0,w,h,c.ImageWidth,c.ImageHeigth)
 	end
 	c:OnEnter(function()
-		--love.mouse.setCursor(_GuiPro.CursorH)
+		love.mouse.setCursor(_GuiPro.CursorH)
 	end)
 	c:OnExit(function()
-		--love.mouse.setCursor(_GuiPro.CursorN)
+		love.mouse.setCursor(_GuiPro.CursorN)
 	end)
     return c
 end
 function gui:newImageLabel(i,name, x, y, w, h, sx ,sy ,sw ,sh)
 	x,y,w,h,sx,sy,sw,sh=filter(name, x, y, w, h, sx ,sy ,sw ,sh)
 	local c=self:newBase("ImageLabel",name, x, y, w, h, sx ,sy ,sw ,sh)
-	if type(i)=="string" then
+	if type(i)=="string" or type(i):find("ImageData") then
 		c.Image=love.graphics.newImage(i)
 	else
 		c.Image=i
@@ -2591,7 +2652,7 @@ function gui:newImageLabel(i,name, x, y, w, h, sx ,sy ,sw ,sh)
 	c.Visibility=0
 	c.ImageVisibility=1
 	c.rotation=0
-	if c.Image~=nil then
+	if c.Image then
 		c.ImageHeigth=c.Image:getHeight()
 		c.ImageWidth=c.Image:getWidth()
 		c.Quad=love.graphics.newQuad(0,0,w,h,c.ImageWidth,c.ImageHeigth)
@@ -2661,12 +2722,12 @@ function gui:newVideo(name,i,x,y,w,h,sx,sy,sw,sh)
     return c
 end
 function gui:SetImage(i)
-	if type(i)=="string" then
+	if type(i)=="string" or tostring(i):find("ImageData") then
 		self.Image=love.graphics.newImage(i)
 	else
 		self.Image=i
 	end
-	if self.Image~=nil then
+	if self.Image then
 		self.ImageHeigth=self.Image:getHeight()
 		self.ImageWidth=self.Image:getWidth()
 		self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
@@ -2933,7 +2994,7 @@ end
 function _GuiPro.gradient(colors)
     local direction = colors.direction or "horizontal"
 	colors.direction=nil
-	trans = colors.trans or 255
+	trans = colors.trans or 1
 	trans=math.floor(trans)
     if direction == "horizontal" then
         direction = true
@@ -2942,7 +3003,7 @@ function _GuiPro.gradient(colors)
     else
         error("Invalid direction '" .. tostring(direction) "' for gradient.  Horizontal or vertical expected.")
     end
-    local result = love.image.newImageData(direction and 1 or #colors, direction and #colors or 1)
+    local result = love.image.newImageData(direction and 1 or #colors, direction and #colors or 1,"rgba32f")
     for __i, color in ipairs(colors) do
         local x, y
         if direction then
@@ -2976,9 +3037,9 @@ function gui:BottomStack()
 		end
 	end
 end
-function gui:Center()
-	local x,y=self:getFullSize()
-	self:SetDualDim(-math.floor(x/2),-math.floor(y/2),nil,nil,.5,.5)
+function gui:center()
+	self:centerX()
+	self:centerY()
 end
 function gui:centerX()
 	self:SetDualDim(-(self.width/2),nil,nil,nil,.5)
@@ -2994,6 +3055,7 @@ function gui:Destroy()
 			table.remove(self.Parent.Children,cc)
 		end
 	end
+	self.Destroyed = true
 end
 function gui:disrespectHierarchy()
 	_GuiPro.Hierarchy=false
@@ -3036,9 +3098,9 @@ function gui:getFullSize()
 	local maxx,maxy=-math.huge,-math.huge
 	local temp = self:GetAllChildren()
 	for i=1,#temp do
-		if temp[i].width>maxx then
+		if temp[i].width+temp[i].offset.pos.x>maxx then
 			maxx=temp[i].width+temp[i].offset.pos.x
-		elseif temp[i].height>maxy then
+		elseif temp[i].height+temp[i].offset.pos.y>maxy then
 			maxy=temp[i].height+temp[i].offset.pos.y
 		end
 	end
@@ -3095,7 +3157,7 @@ function gui:Move(x,y)
 	self.offset.pos.x=self.offset.pos.x+x
 	self.offset.pos.y=self.offset.pos.y+y
 end
-if love.filesystem.exists("CheckBoxes.png") then
+if love.filesystem.getInfo("CheckBoxes.png") then
 	_GuiPro.UC=gui:getTile("CheckBoxes.png",0,0,16,16)
 	_GuiPro.C=gui:getTile("CheckBoxes.png",16,0,16,16)
 	_GuiPro.UCH=gui:getTile("CheckBoxes.png",0,16,16,16)
@@ -3494,10 +3556,10 @@ end
 function gui:getText(txt)
 	return self.text
 end
---_GuiPro.CursorN=love.mouse.getSystemCursor("arrow")
---_GuiPro.CursorH=love.mouse.getSystemCursor("hand")
+_GuiPro.CursorN=love.mouse.getSystemCursor("arrow")
+_GuiPro.CursorH=love.mouse.getSystemCursor("hand")
 function gui:SetHand(img,x,y)
-	--_GuiPro.CursorN=love.mouse.newCursor(img,x,y)
+	_GuiPro.CursorN=love.mouse.newCursor(img,x,y)
 end
 function gui:setHotKey(key)
 	local tab=key:split("+")
@@ -3524,14 +3586,18 @@ function gui:setHotKey(key)
 	end)
 end
 function gui:SetHover(img,x,y)
-	--_GuiPro.CursorH=love.mouse.newCursor(img,x,y)
+	_GuiPro.CursorH=love.mouse.newCursor(img,x,y)
 end
 function gui:SetName(name)
 	self.Parent.Children[name]=self
 	self.Name=name
 end
-function gui:setNewFont(FontSize)
-	self.Font=love.graphics.setNewFont(tonumber(FontSize))
+function gui:setNewFont(FontSize,filename)
+	if filename then
+		self.Font = love.graphics.newFont(filename, tonumber(FontSize))
+	else
+		self.Font=love.graphics.setNewFont(tonumber(FontSize))
+	end
 end
 function gui:setParent(parent,name)-- Needs fixing!!!
 	local temp=self.Parent:getChildren()
@@ -3601,7 +3667,7 @@ function gui:newTextBox(t,name, x, y, w, h, sx ,sy ,sw ,sh)
 	c.mark=nil
 	c.arrowkeys=false
 	c.funcF={function()
-		love.keyboard.setTextInput(true)
+		love.keyboard.setTextInput(true,0,200,400,200)
 	end}
 	c.cooldown=false
 	c.cooldown2=false
@@ -3632,9 +3698,12 @@ function gui:newTextBox(t,name, x, y, w, h, sx ,sy ,sw ,sh)
 		table.insert(self.funcE,func)
 	end
 	c:OnClicked(function(b,self)
+		self:focus()
+	end)
+	function c:focus()
 		for cc=1,#self.funcF do
 			self.funcF[cc](self)
-		end
+		end 
 		if self.Active==false then
 			if self.ClearOnFocus==true then
 				self.text=""
@@ -3647,7 +3716,7 @@ function gui:newTextBox(t,name, x, y, w, h, sx ,sy ,sw ,sh)
 			end
 			self.Active=true
 		end
-	end)
+	end
 	c:OnClicked(function(b,self,x,y)
 		local dwidth, wrappedtext = _defaultfont:getWrap(self.text:sub(1,self.cursor[1]), self.width)
 		local height = _defaultfont:getHeight()
@@ -3717,7 +3786,7 @@ function gui:newTextBox(t,name, x, y, w, h, sx ,sy ,sw ,sh)
 			self.ttext=self.ttext.."\n"
 			self.cooldown2=true
 			c.Alarm2:Reset()
-		elseif (love.keyboard.isDown("return") or love.keyboard.isDown("enter") or love.keyboard.isDown("kpenter")) and self.Active and self.Enter and not(love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) then
+		elseif (love.keyboard.isDown("return") or love.keyboard.isDown("kpenter")) and self.Active and self.Enter and not(love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) then
 			if self.LoseFocusOnEnter then
 				self.Active=false
 			else
@@ -3764,10 +3833,10 @@ function gui:newTextButton(t,name, x, y, w, h, sx ,sy ,sw ,sh)
     c.Color = {220, 220, 220}
     c.TextColor = {0, 0, 0}
 	c:OnEnter(function()
-		--love.mouse.setCursor(_GuiPro.CursorH)
+		love.mouse.setCursor(_GuiPro.CursorH)
 	end)
 	c:OnExit(function()
-		--love.mouse.setCursor(_GuiPro.CursorN)
+		love.mouse.setCursor(_GuiPro.CursorN)
 	end)
     return c
 end
@@ -3786,6 +3855,11 @@ function gui:newTextLabel(t,name, x, y, w, h, sx ,sy ,sw ,sh)
     c.Color = {220, 220, 220}
     c.TextColor = {0, 0, 0}
     return c
+end
+function gui:widthToTextSize(n)
+	if self.Font then
+		self:setDualDim(nil,nil,self.Font:getWidth(self.text)+(n or 4),nil,nil,nil,0)
+	end
 end
 function gui:AddDrawRuleB(rule)
 	if not(self.DrawRulesB) then self.DrawRulesB={} end
@@ -3836,37 +3910,37 @@ function gui:drawC()
 			self.hovering=true
 			if love.mouse.isDown("l") and _GuiPro.hasDrag==false then
 				if string.find(self.Type, "Button") then
-					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.lclicked=true
 			elseif love.mouse.isDown("r") and _GuiPro.hasDrag==false then
 				if string.find(self.Type, "Button") then
-					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.rclicked=true
 			elseif love.mouse.isDown("m") and _GuiPro.hasDrag==false then
 				if string.find(self.Type, "Button") then
-					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.mclicked=true
 			else
 				if string.find(self.Type, "Button") and _GuiPro.hasDrag==false then
-					love.graphics.setColor(self.Color[1]-5, self.Color[2]-5, self.Color[3]-5,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-5, self.Color[2]-5, self.Color[3]-5,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.rclicked=false
 				self.lclicked=false
 				self.mclicked=false
 			end
 		else
-			love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+			love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 			self.hovering=false
 			self.rclicked=false
 			self.lclicked=false
@@ -3880,7 +3954,7 @@ function gui:drawC()
 			love.graphics.setStencilTest("notequal",0)
 		end
 		love.graphics.circle("fill",x,y,r,s)
-		love.graphics.setColor(self.BorderColor[1], self.BorderColor[2], self.BorderColor[3],self.Visibility*254)
+		love.graphics.setColor(self.BorderColor[1], self.BorderColor[2], self.BorderColor[3],self.Visibility)
 		for b=0,self.BorderSize-1 do
 			love.graphics.circle("line",x,y,r+b,s)
 		end
@@ -3889,7 +3963,7 @@ function gui:drawC()
 				if self.AutoScaleText then
 					self.FontSize=math.floor(self.height/1.45833)
 				end
-				love.graphics.setColor(self.TextColor[1],self.TextColor[2],self.TextColor[3],self.TextVisibility*254)
+				love.graphics.setColor(self.TextColor[1],self.TextColor[2],self.TextColor[3],self.TextVisibility)
 				love.graphics.setFont(self.Font)
 				love.graphics.printf(self.text, x-(r/2)+(self.XTween), y-(r/2)+self.Tween, r, self.TextFormat)
 			end
@@ -3925,37 +3999,37 @@ function gui:drawR()
 			self.hovering=true
 			if love.mouse.isDown("l") or self:touchable("r") and _GuiPro.hasDrag==false then
 				if string.find(self.Type, "Button") then
-					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.lclicked=true
 			elseif love.mouse.isDown("r") or self:touchable("r") and _GuiPro.hasDrag==false then
 				if string.find(self.Type, "Button") then
-					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.rclicked=true
 			elseif love.mouse.isDown("m") or self:touchable("r") and _GuiPro.hasDrag==false then
 				if string.find(self.Type, "Button") then
-					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-10, self.Color[2]-10, self.Color[3]-10,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.mclicked=true
 			else
 				if string.find(self.Type, "Button") or self:touchable("r") and _GuiPro.hasDrag==false then
-					love.graphics.setColor(self.Color[1]-5, self.Color[2]-5, self.Color[3]-5,self.Visibility*254)
+					love.graphics.setColor(self.Color[1]-5, self.Color[2]-5, self.Color[3]-5,self.Visibility)
 				else
-					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+					love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 				end
 				self.rclicked=false
 				self.lclicked=false
 				self.mclicked=false
 			end
 		else
-			love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility*254)
+			love.graphics.setColor(self.Color[1],self.Color[2],self.Color[3],self.Visibility)
 			self.hovering=false
 			self.rclicked=false
 			self.lclicked=false
@@ -3969,17 +4043,18 @@ function gui:drawR()
       love.graphics.stencil(self.stfunc, "replace", 1)
       love.graphics.setStencilTest("greater", 0)
     end
-		love.graphics.rectangle("fill", self.x, self.y, self.width, self.height,(self.rx or 1)*self.DPI,(self.ry or 1)*self.DPI,(self.segments or 1)*self.DPI)
-		if string.find(self.Type, "Image") then
-			self:ImageRule()
-		end
-		if self.Type=="Video" then
-			self:VideoRule()
-		end
+	
+	love.graphics.rectangle("fill", self.x, self.y, self.width, self.height,(self.rx or 1)*self.DPI,(self.ry or 1)*self.DPI,(self.segments or 1)*self.DPI)
+	if string.find(self.Type, "Image") then
+		self:ImageRule()
+	end
+	if self.Type=="Video" then
+		self:VideoRule()
+	end
     if self:hasRoundness() then
       love.graphics.setStencilTest()
     end
-		love.graphics.setColor(self.BorderColor[1], self.BorderColor[2], self.BorderColor[3],self.Visibility*254)
+		love.graphics.setColor(self.BorderColor[1], self.BorderColor[2], self.BorderColor[3],self.Visibility)
 		for b=0,self.BorderSize-1 do
 			love.graphics.rectangle("line", self.x-(b/2), self.y-(b/2), self.width+b, self.height+b,(self.rx or 1)*self.DPI,(self.ry or 1)*self.DPI,(self.segments or 1)*self.DPI)
 		end
@@ -3988,10 +4063,16 @@ function gui:drawR()
 				if self.AutoScaleText then
 					self.FontSize=math.floor(self.height/1.45833)
 				end
-				love.graphics.setColor(self.TextColor[1],self.TextColor[2],self.TextColor[3],self.TextVisibility*254)
+				love.graphics.setColor(self.TextColor[1],self.TextColor[2],self.TextColor[3],self.TextVisibility)
 				if self.Font==_defaultfont then
 					love.graphics.setFont(self.Font)
-					love.graphics.printf(self.text, self.x+2+(self.XTween*self.DPI)+((self.marginL or 0)*self.DPI or self.XTween*self.DPI), self.y+(self.FontHeight/2)+self.Tween*self.DPI, self.width+(0 or (self.marginR or 0)*self.DPI), self.TextFormat)
+					love.graphics.printf(
+						self.text,
+						(self.x+2+(self.marginL or 0) or self.XTween)*self.DPI, 
+						(self.y+math.floor((self.FontHeight-self.FontSize)/2)+self.Tween)*self.DPI, 
+						(self.width+(0 or (self.marginR or 0)))*self.DPI,
+						self.TextFormat,
+						self.TextRotation)
 				else
 					if type(self.Font)=="string" then
 						self.Font=love.graphics.newFont(self.Font,self.FontSize)
@@ -4003,7 +4084,13 @@ function gui:drawR()
 						self.FontSize=tonumber(self.FontSize)
 						love.graphics.setNewFont(self.FontSize)
 					end
-					love.graphics.printf(self.text, self.x+2+((self.marginL or 0)*self.DPI or self.XTween*self.DPI), self.y+math.floor((self.FontHeight-self.FontSize)/2)+self.Tween*self.DPI, self.width+(0 or (self.marginR or 0)*self.DPI), self.TextFormat)
+					love.graphics.printf(
+						self.text,
+						(self.x+2+(self.marginL or 0) or self.XTween)*self.DPI, 
+						(self.y+math.floor((self.FontHeight-self.FontSize)/2)+self.Tween)*self.DPI, 
+						(self.width+(0 or (self.marginR or 0)))*self.DPI,
+						self.TextFormat,
+						self.TextRotation)
 				end
 			end
 		end
@@ -4024,4 +4111,5 @@ gui.ff.Color={255,255,255}
 gui.ff:OnUpdate(function(self)
 	self:BottomStack()
 end)
+
 
