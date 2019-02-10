@@ -1,7 +1,7 @@
 function gui:newAnimFromTiles(file,xd,yd,delay, x, y, w, h, sx ,sy ,sw ,sh)
 	x,y,w,h,sx,sy,sw,sh=filter(file, x, y, w, h, sx ,sy ,sw ,sh)
 	local c=self:newBase("ImageAnimation",file, x, y, w, h, sx ,sy ,sw ,sh)
-	local im=love.graphics.newImage(file)
+	local im=love.image.newImageData(file)
 	local _x,_y=im:getDimensions()
 	c.Visibility=0
 	c.ImageVisibility=1
@@ -23,7 +23,7 @@ function gui:newAnimFromTiles(file,xd,yd,delay, x, y, w, h, sx ,sy ,sw ,sh)
 			step.parent.AnimStart[i](step.parent)
 		end
 	end)
-	c.step:OnStep(function(pos,step)
+	c.step:OnStep(function(step,pos)
 		step.parent:SetImage(step.parent.files[pos])
 	end)
 	c.step:OnEnd(function(step)

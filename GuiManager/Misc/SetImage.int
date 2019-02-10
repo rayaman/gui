@@ -1,0 +1,35 @@
+_GuiPro.jobqueue:registerJob("LoadImage",function(path)
+	local dat = love.image.newImageData(path)
+	return dat
+end)
+local cache = {}
+_GuiPro.jobqueue.OnJobCompleted(function(JOBID,n)
+	cache[JOBID].Image=_GuiPro.imagecache[n]
+	cache[JOBID].ImageHeigth=cache[JOBID].Image:getHeight()
+	cache[JOBID].ImageWidth=cache[JOBID].Image:getWidth()
+	cache[JOBID].Quad=love.graphics.newQuad(0,0,cache[JOBID].width,cache[JOBID].height,cache[JOBID].ImageWidth,cache[JOBID].ImageHeigth)
+end)
+function gui:SetImage(i)
+	local temp = self.Image
+	if _GuiPro.imagecache[i] then
+		self.Image=_GuiPro.imagecache[i]
+		self.ImageHeigth=self.Image:getHeight()
+		self.ImageWidth=self.Image:getWidth()
+		self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
+	else
+		if type(i)=="string" then
+			local ii = _GuiPro.jobqueue:pushJob("LoadImage",i)
+			cache[ii] = self
+		elseif tostring(i):find("ImageData") then
+			self.Image=love.graphics.newImage(i)
+			self.ImageHeigth=self.Image:getHeight()
+			self.ImageWidth=self.Image:getWidth()
+			self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
+		elseif i then
+			self.Image=i
+			self.ImageHeigth=self.Image:getHeight()
+			self.ImageWidth=self.Image:getWidth()
+			self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
+		end
+	end
+end

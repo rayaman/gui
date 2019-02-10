@@ -26,7 +26,7 @@ function gui:touchable(t)
 	end
 	self.id=-1
 end
-multi:newTask(function() -- A bit of post-loading haha
+--multi:newTask(function() -- A bit of post-loading haha
 	gui.touchpressed=multi:newConnection()
 	gui.touchreleased=multi:newConnection()
 	gui.touchmoved=multi:newConnection()
@@ -83,7 +83,7 @@ multi:newTask(function() -- A bit of post-loading haha
 			end
 		end
 	end)
-end)
+--end)
 -- now that that is done lets set up some more post loading checks
 _GuiPro.int=multi:newProcess()
 _GuiPro.int:Start()

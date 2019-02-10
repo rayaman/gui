@@ -1,85 +1,200 @@
+local buttonConv = {"l","r","m","x1","x2"} -- For the old stuff
 function gui:OnClicked(func)
-	table.insert(self.funcs,func)
+	if not self.clickEvnt then
+		self.clickEvnt = true
+		self._connClicked = multi:newConnection()
+		self._connClicked(func)
+		multi:newThread(self.Name.."_Updater",function()
+			while true do
+				thread.hold(function() return self.Active or self.Destroyed end)
+				if love.mouse.isDown(1) and self:canPress() then
+					self._connClicked:Fire("1",self,love.mouse.getX()-self.x,love.mouse.getY()-self.y)
+				end
+				if love.mouse.isDown(2) and self:canPress() then
+					self._connClicked:Fire("r",self,love.mouse.getX()-self.x,love.mouse.getY()-self.y)
+				end
+				if love.mouse.isDown(3) and self:canPress() then
+					self._connClicked:Fire("m",self,love.mouse.getX()-self.x,love.mouse.getY()-self.y)
+				end
+				if love.mouse.isDown(4) and self:canPress() then
+					self._connClicked:Fire("x1",self,love.mouse.getX()-self.x,love.mouse.getY()-self.y)
+				end
+				if love.mouse.isDown(5) and self:canPress() then
+					self._connClicked:Fire("x2",self,love.mouse.getX()-self.x,love.mouse.getY()-self.y)
+				end
+				if self.Destroyed then
+					thread.kill()
+				end
+			end
+		end)
+	else
+		self._connClicked(func)
+	end
+end
+function gui:OnPressed(func)
+	multi.OnMousePressed(function(x,y,b)
+		if self:canPress() then
+			func(buttonConv[b],self,x,y)
+		end
+	end)
+end
+function gui:OnPressedOuter(func)
+	multi.OnMousePressed(function(x,y,b)
+		if not(self:canPress()) then
+			func(buttonConv[b],self)
+		end
+	end,nil,1)
 end
 function gui:OnReleased(func)
-	table.insert(self.funcs2,func)
+	multi.OnMouseReleased(function(x,y,b)
+		if self:canPress() then
+			func(buttonConv[b],self,x,y)
+		end
+	end)
 end
-function gui:OnEnter(func)
-	table.insert(self.funcs3,func)
-end
-function gui:OnExit(func)
-	table.insert(self.funcs4,func)
+function gui:OnReleasedOuter(func)
+	multi.OnMouseReleased(function(x,y,b)
+		if not(self:canPress()) then
+			func(buttonConv[b],self)
+		end
+	end,nil,1)
 end
 function gui:OnUpdate(func)
-	table.insert(self.funcs5,func)
-end
-function gui:OnDragStart(func)
-	table.insert(self.func8,func)
-end
-function gui:OnDragging(func)
-	table.insert(self.func6,func)
-end
-function gui:OnDragEnd(func)
-	table.insert(self.func7,func)
-end
-function gui:WhileHovering(func)
-	table.insert(self.func9,func)
+	if not self.updateEvnt then
+		self._connUpdate = multi:newConnection()
+		self._connUpdate(func)
+		self.updateEvnt = true
+		multi:newThread(self.Name.."_Updater",function()
+			while true do
+				thread.hold(function() return self.Active end)
+				self._connUpdate:Fire(self)
+			end
+		end)
+	else
+		self._connUpdate(func)
+	end
 end
 function gui:OnMouseMoved(func)
-	table.insert(self.func10,func)
+	multi.OnMouseMoved(function(x,y,dx,dy)
+		if self:canPress() then
+			func(self,x-self.x,y-self.y,dx,dy)
+		end
+	end,nil,1)
 end
-function gui:getChildren()
-	return self.Children
+gui.WhileHovering=gui.OnMouseMoved -- To keep older features working
+local mbenter = multi:newConnection()
+function gui:OnMouseEnter(func)
+	self.HE=false
+	mbenter(func)
+	self:OnMouseMoved(function()
+		if self.HE == false then
+			self.HE=true
+			self._HE = true
+			mbenter:Fire(self)
+		end
+	end)
 end
-function gui:LClicked()
-	return self.lclicked
-end
-function gui:RClicked()
-	return self.rclicked
-end
-function gui:MClicked()
-	return self.mclicked
-end
-function gui:Clicked()
-	return (self.lclicked or self.rclicked)
-end
-function gui:Hovering()
-	return self.hovering
-end
-function gui:FreeConnections()
-	self.funcs={function(b,self) if b=="l" then self.LRE=true end end,function(b,self) if b=="r" then self.RRE=true end end,function(b,self) if b=="m" then self.MRE=true end end}
-	self.funcs2={function(b,self) if b=="l" then self.LRE=false end end,function(b,self) if b=="r" then self.RRE=false end end,function(b,self) if b=="m" then self.MRE=false end end}
-	self.funcs3={function(self) self.HE=true end}
-	self.funcs4={function(self) self.HE=false end}
-	self.funcs5={function(self) self.x=(self.Parent.width*self.scale.pos.x)+self.offset.pos.x+self.Parent.x self.y=(self.Parent.height*self.scale.pos.y)+self.offset.pos.y+self.Parent.y self.width=(self.Parent.width*self.scale.size.x)+self.offset.size.x self.height=(self.Parent.height*self.scale.size.y)+self.offset.size.y end}
-end
-function gui:LClick()
-	for i=1,#self.funcs do
-		self.funcs[i]("l",self)
+function gui:OnMouseExit(func)
+	if not self.exitEvnt then
+		self._connExit = multi:newConnection()
+		self._connExit(func)
+		self.exitEvnt = true
+		self.HE=false
+		multi:newThread(self.Name.."_OnExit",function()
+			while true do
+				thread.hold(function() return self.HE or self.Destroyed end)
+				if not(self:canPress()) then
+					self.HE=false
+					self._connExit:Fire(self)
+				end
+				if self.Destroyed then
+					thread.kill()
+				end
+			end
+		end)
+	else
+		self._connExit(func)
 	end
 end
-function gui:RClick()
-	for i=1,#self.funcs do
-		self.funcs[i]("r",self)
+--[[
+x=(love.mouse.getX()-self.x)
+y=(love.mouse.getY()-self.y)
+self:Move(x,y)
+]]
+function gui:OnMouseWheelMoved(func)
+	multi.OnMouseWheelMoved(function(...)
+		if self:canPress() then
+			func(self,...)
+		end
+	end)
+end
+function gui:enableDragging(bool)
+	self.draggable = bool
+	if self.dragEvnt then
+		return
+	end
+	self.dragEvnt = true
+	self._connDragStart = multi:newConnection()
+	self._connDragging = multi:newConnection()
+	self._connDragEnd = multi:newConnection()
+	self.hasDrag = false
+	local startX
+	local startY
+	self:OnPressed(function(b,self,x,y)
+		if b~=self.dragbut or not(self.draggable) then return end
+		self._connDragStart:Fire(self)
+		self.hasDrag = true
+		startX = x
+		startY = y
+	end)
+	multi.OnMouseMoved(function(x,y,dx,dy)
+		if self.hasDrag and self.draggable then
+			self:Move(dx,dy)
+			self._connDragging:Fire(self)
+		end
+	end)
+	multi.OnMouseReleased(function(x,y,b)
+		if buttonConv[b]~=self.dragbut or not(self.draggable) or not(self.hasDrag) then return end
+		self.hasDrag = false
+		startX = nil
+		startY = nil
+		self._connDragEnd:Fire(self)
+	end)
+end
+function gui:OnDragStart(func)
+	if not self.dragEvnt then
+		self:enableDragging(true)
+		self._connDragStart(func)
+	else
+		self._connDragStart(func)
 	end
 end
-function gui:MClick()
-	for i=1,#self.funcs do
-		self.funcs[i]("m",self)
+function gui:OnDragging(func)
+	if not self.dragEvnt then
+		self:enableDragging(true)
+		self._connDragging(func)
+	else
+		self._connDragging(func)
 	end
 end
-function gui:LRelease()
-	for i=1,#self.funcs2 do
-		self.funcs2[i]("l",self)
+function gui:OnDragEnd(func)
+	if not self.dragEvnt then
+		self:enableDragging(true)
+		self._connDragEnd(func)
+	else
+		self._connDragEnd(func)
 	end
 end
-function gui:RRelease()
-	for i=1,#self.funcs2 do
-		self.funcs2[i]("r",self)
-	end
+function gui:OnHotKey(key,func)
+	local tab=key:split("+")
+	multi.OnKeyPressed(function()
+		for i=1,#tab do
+			if not(love.keyboard.isDown(tab[i])) then
+				return
+			end
+		end
+		func(self)
+	end)
 end
-function gui:MRelease()
-	for i=1,#self.funcs2 do
-		self.funcs2[i]("m",self)
-	end
-end
+gui.addHotKey=gui.OnHotKey
+gui.setHotKey=gui.OnHotKey

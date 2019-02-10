@@ -21,7 +21,7 @@ function gui:newAnim(file,delay, x, y, w, h, sx ,sy ,sw ,sh)
 			step.parent.AnimStart[i](step.parent)
 		end
 	end)
-	c.step:OnStep(function(pos,step)
+	c.step:OnStep(function(step,pos)
 		step.parent:SetImage(step.parent.files[pos])
 	end)
 	c.step:OnEnd(function(step)
@@ -43,6 +43,7 @@ function gui:newAnim(file,delay, x, y, w, h, sx ,sy ,sw ,sh)
 	end
 	function c:Reset()
 		self.step.pos=1
+		self.step:Reset()
 	end
 	function c:getFrames()
 		return #self.files

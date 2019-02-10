@@ -71,7 +71,7 @@ function gui:drawC()
 			love.graphics.setStencilTest("notequal",0)
 		end
 		love.graphics.circle("fill",x,y,r,s)
-		love.graphics.setColor(self.BorderColor[1], self.BorderColor[2], self.BorderColor[3],self.Visibility)
+		love.graphics.setColor(self.BorderColor[1], self.BorderColor[2], self.BorderColor[3],(self.BorderVisibility or 1))
 		for b=0,self.BorderSize-1 do
 			love.graphics.circle("line",x,y,r+b,s)
 		end

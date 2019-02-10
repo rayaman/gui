@@ -7,4 +7,7 @@ function gui:Destroy()
 		end
 	end
 	self.Destroyed = true
+	if #self.Parent.Children==0 then
+		self.Parent.isLeaf = true
+	end
 end
