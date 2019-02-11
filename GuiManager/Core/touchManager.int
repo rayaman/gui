@@ -85,7 +85,7 @@ end
 	end)
 --end)
 -- now that that is done lets set up some more post loading checks
-_GuiPro.int=multi:newProcess()
+_GuiPro.int=multi:newProcessor()
 _GuiPro.int:Start()
 _GuiPro.int:setJobSpeed(.001)
 _GuiPro.EXACT=0
