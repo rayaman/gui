@@ -1,0 +1,60 @@
+-- local queueUpload = love.thread.getChannel("ImageUploader")
+-- local queueDownload = love.thread.getChannel("ImageDownloader")
+-- local code = [[
+-- require("love.image")
+-- local queueUpload = love.thread.getChannel("ImageUploader")
+-- local queueDownload = love.thread.getChannel("ImageDownloader")
+-- local clock = os.clock
+-- local idle = clock
+-- while true do
+	-- if not idle then
+		-- love.timer.sleep(.001)
+	-- elseif clock()-idle>=15 then
+		-- love.timer.sleep(.01)
+	-- end
+	-- local data = queue:pop()
+	-- if data then
+		-- idle = clock()
+		-- print(data[1],data[2])
+	-- end
+-- end
+-- ]]
+-- local t = love.thread.newThread(code)
+-- t:start()
+
+
+-- _GuiPro.jobqueue:registerJob("LoadImage",function(path)
+	-- local dat = love.image.newImageData(path)
+	-- return dat
+-- end)
+-- local cache = {}
+-- _GuiPro.jobqueue.OnJobCompleted(function(JOBID,n)
+	-- cache[JOBID].Image=love.graphics.newImage(n)
+	-- cache[JOBID].ImageHeigth=cache[JOBID].Image:getHeight()
+	-- cache[JOBID].ImageWidth=cache[JOBID].Image:getWidth()
+	-- cache[JOBID].Quad=love.graphics.newQuad(0,0,cache[JOBID].width,cache[JOBID].height,cache[JOBID].ImageWidth,cache[JOBID].ImageHeigth)
+-- end)
+-- function gui:ThreadedSetImage(i)
+	-- local temp = self.Image
+	-- if _GuiPro.imagecache[i] then
+		-- self.Image=_GuiPro.imagecache[i]
+		-- self.ImageHeigth=self.Image:getHeight()
+		-- self.ImageWidth=self.Image:getWidth()
+		-- self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
+	-- else
+		-- if type(i)=="string" then
+			-- local ii = _GuiPro.jobqueue:pushJob("LoadImage",i)
+			-- cache[ii] = self
+		-- elseif tostring(i):find("ImageData") then
+			-- self.Image=love.graphics.newImage(i)
+			-- self.ImageHeigth=self.Image:getHeight()
+			-- self.ImageWidth=self.Image:getWidth()
+			-- self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
+		-- elseif i then
+			-- self.Image=i
+			-- self.ImageHeigth=self.Image:getHeight()
+			-- self.ImageWidth=self.Image:getWidth()
+			-- self.Quad=love.graphics.newQuad(0,0,self.width,self.height,self.ImageWidth,self.ImageHeigth)
+		-- end
+	-- end
+-- end

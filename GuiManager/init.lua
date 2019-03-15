@@ -1,5 +1,7 @@
 local multi = require("multi")
 local GLOBAL,THREAD=require("multi.integration.loveManager").init()
+local p = print
+print = multi.print
 -- automatic resource loading will be added soonish
 utf8 = require("utf8")
 gui = {}
@@ -9,7 +11,7 @@ gui.Version="VERSION" -- Is it really ready for release?
 _GuiPro={
 	GLOBAL = GLOBAL,
 	THREAD = THREAD,
-	jobqueue = multi:newSystemThreadedJobQueue(4),
+	jobqueue = multi:newSystemThreadedJobQueue("ImageJobQueue"),
 	imagecache = {},
 	GBoost=true,
 	hasDrag=false,
@@ -25,10 +27,6 @@ _GuiPro={
 		return self.Children
 	end
 }
-_GuiPro.jobqueue:registerJob("LoadImage",function(path,t)
-	local dat = love.image.newImageData(path)
-	return dat,path,t
-end)
 _GuiPro.Clips={}
 _GuiPro.rotate=0
 _defaultfont = love.graphics.setNewFont(12)
@@ -69,7 +67,7 @@ gui.LoadAll("GuiManager/Drawing")
 -- End of Load
 gui:respectHierarchy()
 _GuiPro.width,_GuiPro.height=love.graphics.getDimensions()
-multi:newLoop(function() _GuiPro.width,_GuiPro.height=love.graphics.getDimensions() end)
+multi:newLoop(function() _GuiPro.width,_GuiPro.height=love.graphics.getDimensions() end):setName("gui.mainUpdater")
 multi:onDraw(function()
 	local items=GetAllChildren(_GuiPro)
 	for i=1,#items do
@@ -81,3 +79,4 @@ gui.ff.Color={0,0,0}
 gui.ff:OnUpdate(function(self)
 	self:BottomStack()
 end)
+print = p

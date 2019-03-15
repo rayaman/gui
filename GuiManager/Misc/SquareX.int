@@ -1,0 +1,8 @@
+function gui:SquareX(n)
+	local n = n or 0
+	local w = self.Parent.width
+	local rw = w*n
+	local s = (w-rw)/2
+	self:setDualDim(self.x+s,self.y+s,rw,rw,sx,sy)
+	return self.Parent.width
+end

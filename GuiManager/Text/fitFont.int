@@ -1,4 +1,4 @@
-function gui:fitFont()
+function gui:fitFont(n)
 	local font
 	if self.FontFile then
 		if self.FontFile:match("ttf") then
@@ -22,7 +22,8 @@ function gui:fitFont()
 		s = s + 1
 		Font = font(s)
 	end
-	Font = font(s - 2)
+	Font = font(s - (2+(n or 0)))
 	Font:setFilter("linear","nearest",4)
 	self.Font = Font
+	return s - (2+(n or 0))
 end
