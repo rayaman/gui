@@ -9,13 +9,13 @@ gui.__index = gui
 gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
-local frame, label ,button, image, text, box = 0, 1, 2, 4, 8, 16
-local children = {}
+
+local label, image, text, button, box, video = 1, 2, 4, 8, 16, 32
 function gui:getChildren()
 	return self.Children
 end
 function gui:getAllChildren()
-	for i=0, #children do children[i]=nil end
+	local Stuff = {}
 	function Seek(Items)
 		for i=1,#Items do
 			if Items[i].Visible==true then
@@ -50,6 +50,10 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.Visible = true
 	c.Visibility = 1
 	setmetatable(c, gui)
+	
+	-- Add to the parents children table
+	table.insert(self.Children,c)
+	return c
 end
 function gui:newDualDim(x, y, w, h, sx, sy, sw, sh)
 	local dd = {}
@@ -104,8 +108,64 @@ function gui:newImageButton(x, y, w, h, sx, sy, sw, sh)
 end
 -- Draw Function
 
-drawer:newLoop(function()
+--local label, image, text, button, box, video
 
+local drawtypes = {
+	[0]= function() end, -- 0 
+	[1] = function() -- 1
+		-- label
+	end,
+	[2]=function() -- 2
+		-- image
+	end,
+	[4] = function() -- 4
+		-- text
+	end,
+	[8] = function() -- 8
+		-- button
+	end,
+	[16] = function() -- 16
+		-- box
+	end,
+	[32] = function() -- 32
+		-- video
+	end,
+	[64] = function() -- 64
+		-- item
+	end
+}
+--[[
+	dd.offset.pos = {
+		x = x or 0,
+		y = y or 0
+	}
+	dd.offset.size = {
+		x = w or 0,
+		y = h or 0
+	}
+	dd.scale.pos = {
+		x = sx or 0,
+		y = sy or 0
+	}
+	dd.scale.size = {
+		x = sw or 0,
+		y = sh or 0
+	}
+]]
+drawer:newLoop(function()
+	local children = gui:getAllChildren()
+	for i=1,#children do
+		local child = children[i]
+		local type = child.Type
+		local x = (child.Parent.dualDim.offset.size.x*child.dualDim.scale.pos.x)+child.dualDim.offset.pos.x+child.Parent.dualdim.offset.pos.x
+		local y = (child.Parent.dualDim.offset.size.y*child.dualDim.scale.pos.y)+child.dualDim.offset.pos.y+child.Parent.dualdim.offset.pos.y
+		local width = (child.Parent.dualDim.offset.size.x*child.dualDim.scale.size.x)+child.dualDim.offset.size.x
+		local heigh = (child.Parent.dualDim.offset.size.y*child.dualDim.scale.size.y)+child.dualDim.offset.size.y
+		-- Do Frame stuff first
+
+		-- Start object specific stuff
+		drawtypes[band(type,label)](child)
+	end
 end)
 
 -- Drawing and Updating
