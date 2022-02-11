@@ -10,7 +10,7 @@ gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
 
-local label, image, text, button, box, video = 1, 2, 4, 8, 16, 32
+local frame, label, image, text, button, box, video = 0, 1, 2, 4, 8, 16, 32
 function gui:getChildren()
 	return self.Children
 end
@@ -43,12 +43,14 @@ end
 -- Base Library
 function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = {}
-	c.parent = self
+	c.Parent = self
 	c.Type = typ
 	c.dualDim = self:newDualDim(x, y, w, h, sx, sy, sw, sh)
 	c.Children = {}
 	c.Visible = true
 	c.Visibility = 1
+	c.Color = {.6,.6,.6}
+	c.BorderColor = {0,0,0}
 	setmetatable(c, gui)
 	
 	-- Add to the parents children table
@@ -81,30 +83,46 @@ end
 -- Frames
 function gui:newFrame(x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(frame, x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 -- Texts
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(text + typ,x, y, w, h, sx, sy, sw, sh)
 	c.text = txt
+
+	return c
 end
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(label, txt, x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 -- Images
 function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(image + typ,x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 function gui:newImageLabel(x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(label, x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 function gui:newImageButton(x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(button, x, y, w, h, sx, sy, sw, sh)
+
+	return c
 end
 -- Draw Function
 
@@ -134,35 +152,26 @@ local drawtypes = {
 		-- item
 	end
 }
---[[
-	dd.offset.pos = {
-		x = x or 0,
-		y = y or 0
-	}
-	dd.offset.size = {
-		x = w or 0,
-		y = h or 0
-	}
-	dd.scale.pos = {
-		x = sx or 0,
-		y = sy or 0
-	}
-	dd.scale.size = {
-		x = sw or 0,
-		y = sh or 0
-	}
-]]
+
 drawer:newLoop(function()
 	local children = gui:getAllChildren()
 	for i=1,#children do
 		local child = children[i]
+		local bg = child.Color
+		local bbg = child.BorderColor
 		local type = child.Type
-		local x = (child.Parent.dualDim.offset.size.x*child.dualDim.scale.pos.x)+child.dualDim.offset.pos.x+child.Parent.dualdim.offset.pos.x
-		local y = (child.Parent.dualDim.offset.size.y*child.dualDim.scale.pos.y)+child.dualDim.offset.pos.y+child.Parent.dualdim.offset.pos.y
-		local width = (child.Parent.dualDim.offset.size.x*child.dualDim.scale.size.x)+child.dualDim.offset.size.x
-		local heigh = (child.Parent.dualDim.offset.size.y*child.dualDim.scale.size.y)+child.dualDim.offset.size.y
+		local vis = child.Visibility
+		local x = (child.Parent.dualDim.offset.size.x*child.dualDim.scale.pos.x)+child.dualDim.offset.pos.x+child.Parent.dualDim.offset.pos.x
+		local y = (child.Parent.dualDim.offset.size.y*child.dualDim.scale.pos.y)+child.dualDim.offset.pos.y+child.Parent.dualDim.offset.pos.y
+		local w = (child.Parent.dualDim.offset.size.x*child.dualDim.scale.size.x)+child.dualDim.offset.size.x
+		local h = (child.Parent.dualDim.offset.size.y*child.dualDim.scale.size.y)+child.dualDim.offset.size.y
+		
 		-- Do Frame stuff first
-
+		-- Set Color
+		love.graphics.setColor(bg[1],bg[2],bg[3],vis)
+		love.graphics.rectangle("fill", x, y, w, h--[[, rx, ry, segments]])
+		love.graphics.setColor(bbg[1],bbg[2],bbg[3],vis)
+		love.graphics.rectangle("line", x, y, w, h--[[, rx, ry, segments]])
 		-- Start object specific stuff
 		drawtypes[band(type,label)](child)
 	end
@@ -173,8 +182,8 @@ gui.draw = drawer.run
 gui.update = updater.run
 
 -- Root gui
-gui.Type = "root"
+gui.Type = frame
 gui.Children = {}
 gui.dualDim = gui:newDualDim()
-updater:newLoop(function() gui.dualDim.offset.width, gui.dualDim.offset.height = love.graphics.getDimensions() end)
+updater:newLoop(function() gui.dualDim.offset.size.x, gui.dualDim.offset.size.y = love.graphics.getDimensions() end)
 return gui
