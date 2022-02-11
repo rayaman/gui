@@ -11,9 +11,11 @@ gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
 
 local frame, label, image, text, button, box, video = 0, 1, 2, 4, 8, 16, 32
+
 function gui:getChildren()
 	return self.Children
 end
+
 function gui:getAllChildren()
 	local Stuff = {}
 	function Seek(Items)
@@ -57,6 +59,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	table.insert(self.Children,c)
 	return c
 end
+
 function gui:newDualDim(x, y, w, h, sx, sy, sw, sh)
 	local dd = {}
 	dd.offset={}
@@ -79,13 +82,14 @@ function gui:newDualDim(x, y, w, h, sx, sy, sw, sh)
 	}
 	return dd
 end
--- Objects
+
 -- Frames
 function gui:newFrame(x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(frame, x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 -- Texts
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(text + typ,x, y, w, h, sx, sy, sw, sh)
@@ -93,32 +97,38 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(label, txt, x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 -- Images
 function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(image + typ,x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 function gui:newImageLabel(x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(label, x, y, w, h, sx, sy, sw, sh)
 
 	return c
 end
+
 function gui:newImageButton(x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(button, x, y, w, h, sx, sy, sw, sh)
 

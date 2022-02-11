@@ -12,6 +12,7 @@ local function HSL(h, s, l, a)
 	else              r,b,g = c,0,x
 	end return (r+m)*255,(g+m)*255,(b+m)*255,a
 end
+local color={}
 local mt = {
 	__add = function (c1,c2)
 		return color.new(c1[1]+c2[1],c1[2]+c2[2],c1[2]+c2[2])
@@ -37,49 +38,54 @@ local mt = {
 	__tostring = function(c)
 		return "("..c[1]..","..c[2]..","..c[3]..")"
 	end,
-	__eq = color.EQ,
-	__lt = color.LT,
-	__le = color.LE,
+	__eq = function (c1,c2)
+		return (c1[1]==c2[1] and c1[2]==c2[2] and c1[2]==c2[2])
+	end,
+	__lt = function (c1,c2)
+		return (c1[1]<c2[1] and c1[2]<c2[2] and c1[2]<c2[2])
+	end,
+	__le = function (c1,c2)
+		return (c1[1]<=c2[1] and c1[2]<=c2[2] and c1[2]<=c2[2])
+	end
 }
-local color={
-new=function(r,b,g)
-	local temp = {r/255,b/255,g/255,1}
+
+function color.new(r, b, g, fmt)
+	local temp
+	if fmt then
+		temp = {r,b,g}
+	else
+		temp = {love.math.colorFromBytes(r, b, g)}
+	end
 	setmetatable(temp, mt)
 	return temp
-end,
-Random=function()
-	return color.new(math.random(0,255),math.random(0,255),math.random(0,255))
-end,
-EQ = function (c1,c2)
-	return (c1[1]==c2[1] and c1[2]==c2[2] and c1[2]==c2[2])
-end,
-LT = function (c1,c2)
-	return (c1[1]<c2[1] and c1[2]<c2[2] and c1[2]<c2[2])
-end,
-LE = function (c1,c2)
-	return (c1[1]<=c2[1] and c1[2]<=c2[2] and c1[2]<=c2[2])
-end,
-indexColor=function(name,r,b,g)
+end
+
+function color.random()
+	return color.new(math.random(0,10000)/10000, math.random(0,10000)/10000, math.random(0,10000)/10000, true)
+end
+
+function color.indexColor(name,r,b,g)
 	if type(r)=="string" then
 		r,b,g=tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 	end
+	-- Other ways to index a color
 	color[string.lower(name)]=color.new(r,b,g)
-	color[string.upper(name)]=color.new(r,b,g)
-	color[string.upper(string.sub(name,1,1))..string.lower(string.sub(name,2))]=color.new(r,b,g)
-end,
-Darken=function(color,v)
-	currentR=color[1]
-	currentG=color[2]
-	currentB=color[3]
+	color[string.upper(name)]=color[string.lower(name)] -- These should link to the original and not be cloned
+	color[string.upper(string.sub(name,1,1))..string.lower(string.sub(name,2))]=color[string.lower(name)]
+end
+
+function color.darken(c, v)
+	local currentR,currentG,currentB=c[1],c[2],c[3]
 	return color.new((currentR*255) * (1 - v),(currentG*255) * (1 - v),(currentB*255) * (1 - v))
-end,
-Lighten=function(color,v)
-	currentR=color[1]
-	currentG=color[2]
-	currentB=color[3]
+end
+
+function color.lighten(c, v)
+	local currentR,currentG,currentB=c[1],c[2],c[3]
 	return color.new(currentR*255 + (255 - (currentR*255)) * v,currentG*255 + (255 - (currentG*255)) * v,currentB*255 + (255 - (currentB*255)) * v)
 end
-}
+
+-- Add a ton of colors sourced from online
+
 color.indexColor("WHITE",255,255,255)
 color.indexColor("MAROON",128,20,20)
 color.indexColor("DARK_RED",139,20,20)
@@ -181,7 +187,7 @@ color.indexColor("LEMON_CHIFFON",255,250,205)
 color.indexColor("LIGHT_GOLDEN_ROD_YELLOW",250,250,210)
 color.indexColor("LIGHT_YELLOW",255,255,224)
 color.indexColor("SADDLE_BROWN",139,69,19)
-color.indexColor("SEXY_PURPLE",85,85,127)
+color.indexColor("CALM_PURPLE",85,85,127)
 color.indexColor("SIENNA",160,82,45)
 color.indexColor("CHOCOLATE",210,105,30)
 color.indexColor("PERU",205,133,63)
@@ -1674,7 +1680,7 @@ color.indexColor("dust","b2996e")
 color.indexColor("dark_pastel_green","56ae57")
 color.indexColor("cloudy_blue","acc2d9")
 for i=0,255 do
-	color.indexColor("Gray"..i,i,i,i)
+	color.indexColor("gray"..i,i,i,i)
 end
 
 return color
