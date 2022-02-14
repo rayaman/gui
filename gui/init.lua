@@ -6,13 +6,81 @@ local updater = multi:newProcessor("UpdateManager",true)
 local drawer = multi:newProcessor("DrawManager",true)
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
-local floor, ceil = math.floor,math.ceil
+local clips = {}
+local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
 
-local frame, image, text, button, box, video = 0, 1, 2, 4, 8, 16
+local frame, image, text, box, video = 0, 1, 2, 4, 8
+
+-- Utils
+
+function gui:move(x,y)
+	self.dualDim.offset.pos.x = self.dualDim.offset.pos.x + x
+	self.dualDim.offset.pos.y = self.dualDim.offset.pos.y + y
+end
+
+function gui:moveInBounds(dx,dy)
+	local x, y, w, h = self:getAbsolutes()
+	local x1, y1, w1, h1 = self.parent:getAbsolutes()
+	if (x + dx >= x1 or dx > 0) and (x + w + dx <= x1 + w1 or dx < 0) and (y + dy >= y1 or dy > 0) and (y + h + dy <= y1 + h1 or dy < 0) then
+		self:move(dx,dy)
+	end
+end
+
+local function intersecpt(x1,y1,x2,y2,x3,y3,x4,y4)
+
+	-- gives bottom-left point
+    -- of intersection rectangle
+    local x5 = max(x1, x3)
+    local y5 = max(y1, y3)
+
+	-- gives top-right point
+	-- of intersection rectangle
+    local x6 = min(x2, x4);
+    local y6 = min(y2, y4);
+
+	-- no intersection
+    if x5 > x6 or y5 > y6 then
+        return 0, 0, 0, 0 -- Return a no
+	end
+
+	-- gives top-left point
+    -- of intersection rectangle
+    local x7 = x5
+    local y7 = y6
+ 
+    -- gives bottom-right point
+    -- of intersection rectangle
+    local x8 = x6
+    local y8 = y5
+
+	return x7, y7, abs(x7-x8), abs(y7-y8)
+end
+
+local function toCoordPoints(x, y, w, h)
+	return x,y,x+w,y+h
+end
+
+function gui:intersecpt(x, y, w, h)
+	local x1,y1,x2,y2 = toCoordPoints(self:getAbsolutes())
+	local x3,y3,x4,y4 = toCoordPoints(x,y,w,h)
+
+	return intersecpt(x1,y1,x2,y2,x3,y3,x4,y4)
+end
+
+function gui:isDescendantOf(obj)
+	local parent = self.parent
+	while parent~=gui do
+		if parent==obj then
+			return true
+		end
+		parent = parent.parent
+	end
+	return false
+end
 
 function gui:getChildren()
 	return self.children
@@ -41,7 +109,7 @@ function gui:getAllChildren()
 	local Objs = self:getChildren()
 	for i=1,#Objs do
 		if Objs[i].visible==true then
-			table.insert(Stuff,Objs[i])
+			table.insert(Stuff, Objs[i])
 			local Items = Objs[i]:getChildren()
 			if Items ~= nil then
 				Seek(Items)
@@ -68,14 +136,33 @@ end
 
 local mainupdater = updater:newLoop().OnLoop
 
+
+function gui:canPress(mx,my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
+	local x, y, w, h
+	if self.__variables.clip[1] then
+		local clip = self.__variables.clip
+		x, y, w, h = self:intersecpt(clip[2], clip[3], clip[4], clip[5])
+		--x1, y1, w1, h1 = self:getAbsolutes()
+		return mx < x + w and mx > x and my+h < y + h and my+h > y
+	else
+		x, y, w, h = self:getAbsolutes()
+	end
+	return not(mx > x + w or mx < x or my > y + h or my < y)
+end
+
 -- Base Library
 function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = {}
 	local centerX = false
 	local centerY = false
 	local centering = false
-	local pressed = false
+	local dragbutton = 2
+	local draggable = false
+
 	setmetatable(c, gui)
+	c.__variables = {
+		clip = {false,0,0,0,0}
+	}
 	c.parent = self
 	c.type = typ
 	c.dualDim = self:newDualDim(x, y, w, h, sx, sy, sw, sh)
@@ -85,39 +172,68 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.color = {.6,.6,.6}
 	c.borderColor = color.black
 	c.rotation = 0
+	c.maxMouseButtons = 5
 
 	c.WhilePressing = multi:newConnection()
 	c.OnPressed = multi:newConnection()
 	c.OnReleased = multi:newConnection()
-	c.maxMouseButtons = 5
 
+	c.OnDragStart = multi:newConnection()
+	c.OnDragging = multi:newConnection()
+	c.OnDragEnd = multi:newConnection()
+
+	-- Mouse event thread
 	c:newThread(function()
+		local dragging = false
+		local waiting = {}
+		local pressed = {}
+		local ox, oy = 0, 0
 		while true do
-			thread.sleep(.1)
+			thread.sleep(.005) -- Limits the potiential speed for events to 1/200. So 200 fps max, to be fair pressing mouse click 200 times by hand in a second is probably not possible
 			local x, y, w, h = c:getAbsolutes()
 			local mx, my = love.mouse.getPosition()
 			for i=1,c.maxMouseButtons do
-				if love.mouse.isDown(i) and not(mx > x + w or mx < x or my > y + h or my < y) then
-					if not pressed then
-						c.OnPressed:Fire(c, i, mx, my)
-					end
-					pressed = true
-					c.WhilePressing:Fire(c, i, mx, my)
-					c:newThread(function()
-						thread.hold(function() return not(love.mouse.isDown(i)) end)
-						if pressed then
-							c.OnReleased:Fire(c, i, mx, my)
+				if dragging and i == dragbutton then
+					c.OnDragging:Fire(c, mx - ox, my - oy)
+					ox = mx
+					oy = my
+				end
+				if love.mouse.isDown(i) and c:canPress(mx,my) then
+					if not pressed[i] then
+						if draggable and love.mouse.isDown(dragbutton) then
+							if not dragging then
+								c.OnDragStart:Fire(c, mx, my)
+								ox, oy = mx, my
+								c:newThread(function()
+									thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
+									if dragging then
+										dragging = false
+										c.OnDragEnd:Fire(c,mx,my)
+									end
+								end)
+							end
+							dragging = true
 						end
-						pressed = false
-					end)
+						c:newThread(function()
+							c.OnPressed:Fire(c, i, mx, my)
+						end)
+					end
+					pressed[i] = true
+					-- Only process when the drag button turn is active
+					c.WhilePressing:Fire(c, i, mx, my)
+					if not waiting[i] then
+						waiting[i] = true
+						c:newThread(function()
+							thread.hold(function() return not(love.mouse.isDown(i)) end)
+							if pressed[i] then
+								pressed[i] = false
+								waiting[i] = false
+								c.OnReleased:Fire(c, i, mx, my)
+							end
+						end)
+					end
 				end
 			end
-		end
-	end)
-	c:WhilePressing(function(x,y,self)
-		if not pressed then
-			pressed = true
-			c.OnPressed:Fire(x,y,self)
 		end
 	end)
 
@@ -144,12 +260,23 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 			end
 		end)
 	end
+
+	function c:enableDragging(but)
+		if not but then
+			draggable = false
+			return
+		end
+		dragbutton = but or dragbutton
+		draggable = true
+	end
+
 	function c:centerX(bool)
 		centerX = bool
 		if centering then return end
 		centering = true
 		centerthread()
 	end
+
 	function c:centerY(bool)
 		centerY = bool
 		if centering then return end
@@ -396,9 +523,9 @@ local drawtypes = {
 		if child.image then
 			love.graphics.setColor(child.imageColor[1],child.imageColor[2],child.imageColor[3],child.imageVisibility)
 			if w~=child.imageWidth and h~=child.imageHeigth then
-				love.graphics.draw(child.image,x,y,math.rad(child.rotation),w/child.imageWidth,h/child.imageHeigth)
+				love.graphics.draw(child.image,x,y,rad(child.rotation),w/child.imageWidth,h/child.imageHeigth)
 			else
-				love.graphics.draw(child.image,child.quad,x,y,math.rad(child.rotation),w/child.imageWidth,h/child.imageHeigth)
+				love.graphics.draw(child.image,child.quad,x,y,rad(child.rotation),w/child.imageWidth,h/child.imageHeigth)
 			end
 		end
 	end,
@@ -408,18 +535,15 @@ local drawtypes = {
 		love.graphics.printf(child.text, x + child.textOffsetX, y + child.textOffsetY, w, child.align, child.rotation, child.textScaleX, child.textScaleY, 0, 0, child.textShearingFactorX, child.textShearingFactorY)
 	end,
 	[4] = function(child, x, y, w, h)
-		-- button
-	end,
-	[8] = function(child, x, y, w, h)
 		-- box
 	end,
-	[16] = function(child, x, y, w, h)
+	[8] = function(child, x, y, w, h)
 		if child.video and child.playing then
 			love.graphics.setColor(child.videoColor[1],child.videoColor[2],child.videoColor[3],child.videoVisibility)
 			if w~=child.imageWidth and h~=child.imageHeigth then
-				love.graphics.draw(child.video,x,y,math.rad(child.rotation),w/child.videoWidth,h/child.videoHeigth)
+				love.graphics.draw(child.video,x,y,rad(child.rotation),w/child.videoWidth,h/child.videoHeigth)
 			else
-				love.graphics.draw(child.video,child.quad,x,y,math.rad(child.rotation),w/child.videoWidth,h/child.videoHeigth)
+				love.graphics.draw(child.video,child.quad,x,y,rad(child.rotation),w/child.videoWidth,h/child.videoHeigth)
 			end
 		end
 	end,
@@ -438,11 +562,24 @@ drawer:newLoop(function()
 		child.y = y
 		child.w = w
 		child.h = h
-		-- local x = (child.parent.dualDim.offset.size.x*child.dualDim.scale.pos.x)+child.dualDim.offset.pos.x+child.parent.dualDim.offset.pos.x
-		-- local y = (child.parent.dualDim.offset.size.y*child.dualDim.scale.pos.y)+child.dualDim.offset.pos.y+child.parent.dualDim.offset.pos.y
-		-- local w = (child.parent.dualDim.offset.size.x*child.dualDim.scale.size.x)+child.dualDim.offset.size.x
-		-- local h = (child.parent.dualDim.offset.size.y*child.dualDim.scale.size.y)+child.dualDim.offset.size.y
 		
+		if child.clipDescendants then
+			local children = child:getAllChildren()
+			for c = 1, #children do -- Tell the children to clip themselves
+				local clip = children[c].__variables.clip
+				clip[1] = true
+				clip[2] = x
+				clip[3] = y
+				clip[4] = w
+				clip[5] = h
+			end
+		end
+
+		if child.__variables.clip[1] then
+			local clip = child.__variables.clip
+			love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
+		end
+
 		-- Set color
 		love.graphics.setColor(bg[1],bg[2],bg[3],vis)
 		love.graphics.rectangle("fill", x, y, w, h--[[, rx, ry, segments]])
@@ -452,6 +589,8 @@ drawer:newLoop(function()
 		drawtypes[band(type,video)](child,x,y,w,h)
 		drawtypes[band(type,image)](child,x,y,w,h)
 		drawtypes[band(type,text)](child,x,y,w,h)
+
+		love.graphics.setScissor() -- Remove the scissor
 	end
 end)
 
