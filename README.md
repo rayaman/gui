@@ -3,28 +3,28 @@
 This library due to the changes in love2d. Too many things are broken and instead of doing patch work, I've decided to do a total rewrite. Also I'll be able to make use of the new multi manager features and build a better library from the ground up.
 
 Core Objects:
-- Frame
+- ~~Frame~~ ✔️
 - Text:
-  - Label
+  - ~~Label~~ ✔️
   - Box
-  - Button
+  - ~~Button~~
 - Image:
-  - Label
-  - Button
+  - ~~Label~~ ✔️
+  - ~~Button~~
   - Animation
-- Video
+- ~~Video~~ ✔️
 
 Events:
 - Mouse Events
   - Enter
   - Exit
-  - Pressed/Other
-  - Released/Other
+  - ~~Pressed~~ ✔️
+  - ~~Released~~ ✔️
   - Moved
   - WheelMoved
-  - DragStart
-  - Dragging
-  - DragEnd
+  - ~~DragStart~~ ✔️
+  - ~~Dragging~~ ✔️
+  - ~~DragEnd~~ ✔️
   - Hotkey
 - Other Events
-  - OnUpdate
+  - OnUpdate ✔️
