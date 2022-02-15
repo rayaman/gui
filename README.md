@@ -7,24 +7,24 @@ Core Objects:
 - Text:
   - ~~Label~~ ✔️
   - Box
-  - Button
+  - ~~Button~~ ✔️
 - Image:
   - ~~Label~~ ✔️
-  - Button
+  - ~~Button~~ ✔️
   - Animation
 - ~~Video~~ ✔️
 
 Events:
 - Mouse Events
-  - Enter
-  - Exit
+  - ~~Enter~~ ✔️
+  - ~~Exit~~ ✔️
   - ~~Pressed~~ ✔️
   - ~~Released~~ ✔️
-  - Moved
+  - ~~Moved~~ ✔️
   - WheelMoved
   - ~~DragStart~~ ✔️
   - ~~Dragging~~ ✔️
   - ~~DragEnd~~ ✔️
   - Hotkey
 - Other Events
-  - OnUpdate ✔️
+  - ~~OnUpdate~~ ✔️
