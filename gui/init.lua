@@ -269,7 +269,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 				end
 			end
 		end
-	end).OnError(print)
+	end)
 
 	function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
 		if type(self)=="function" then func = self end
