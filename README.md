@@ -7,10 +7,10 @@ Core Objects:
 - Text:
   - ~~Label~~ ✔️
   - Box
-  - ~~Button~~
+  - Button
 - Image:
   - ~~Label~~ ✔️
-  - ~~Button~~
+  - Button
   - Animation
 - ~~Video~~ ✔️
 

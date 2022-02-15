@@ -6,14 +6,15 @@ local updater = multi:newProcessor("UpdateManager",true)
 local drawer = multi:newProcessor("DrawManager",true)
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
+local cursor_hand = love.mouse.getSystemCursor("hand")
 local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
+local frame, image, text, box, video = 0, 1, 2, 4, 8
+
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
-
-local frame, image, text, box, video = 0, 1, 2, 4, 8
 
 -- Utils
 
@@ -163,6 +164,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.__variables = {
 		clip = {false,0,0,0,0}
 	}
+	c.active = true
 	c.parent = self
 	c.type = typ
 	c.dualDim = self:newDualDim(x, y, w, h, sx, sy, sw, sh)
@@ -182,16 +184,48 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.OnDragging = multi:newConnection()
 	c.OnDragEnd = multi:newConnection()
 
+	c.OnEnter = multi:newConnection()
+	c.OnExit = multi:newConnection()
+
+	c.OnMoved = multi:newConnection()
+
 	-- Mouse event thread
 	c:newThread(function()
 		local dragging = false
 		local waiting = {}
 		local pressed = {}
 		local ox, oy = 0, 0
+		local mox, moy = 0, 0
+		local entered = false
+		local moved = false
+		local mx, my
 		while true do
-			thread.sleep(.005) -- Limits the potiential speed for events to 1/200. So 200 fps max, to be fair pressing mouse click 200 times by hand in a second is probably not possible
+			thread.hold(function() -- Only Progress thread if events are subscribed to!
+				return c.active and (draggable or c.OnEnter:hasConnections() or c.OnExit:hasConnections() or c.WhilePressing:hasConnections() or c.OnPressed:hasConnections() or c.OnReleased:hasConnections() or c.OnDragStart:hasConnections() or c.OnDragging:hasConnections() or c.OnDragEnd:hasConnections())
+			end)
+			thread.sleep(.001) -- Limits the potiential speed for events to 1/200. So 200 fps max, to be fair pressing mouse click 200 times by hand in a second is probably not possible
 			local x, y, w, h = c:getAbsolutes()
-			local mx, my = love.mouse.getPosition()
+			mx, my = love.mouse.getPosition()
+			-- mouse moved
+			if mx~=mox or my~=moy then
+				moved = true
+				c.OnMoved:Fire(c, mx - mox, my - moy)
+			end
+
+			-- enter/exit
+			if moved and not entered and c:canPress(mx,my) then
+				entered = true
+				c.OnEnter:Fire(c,mx,my)
+				c:newThread(function()
+					thread.hold(function()
+						return not c:canPress(mx,my)
+					end)
+					c.OnExit:Fire(c,mx,my)
+					entered = false
+				end)
+			end
+
+			-- pressed/released/drag events
 			for i=1,c.maxMouseButtons do
 				if dragging and i == dragbutton then
 					c.OnDragging:Fire(c, mx - ox, my - oy)
@@ -235,7 +269,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 				end
 			end
 		end
-	end)
+	end).OnError(print)
 
 	function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
 		if type(self)=="function" then func = self end
@@ -245,7 +279,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	end
 
 	local function centerthread()
-		updater:newThread("Object_Centering",function()
+		c:newThread("Object_Centering",function()
 			while true do
 				thread.hold(function()
 					return centerX or centerY -- If the condition is true it acts like a yield
@@ -401,7 +435,15 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
-	local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
+	local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+
+	c.OnEnter(function()
+		love.mouse.setCursor(cursor_hand)
+	end)
+
+	c.OnExit(function()
+		love.mouse.setCursor()
+	end)
 
 	return c
 end
@@ -451,8 +493,17 @@ function gui:newImageLabel(source, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
-	local c = self:newImageBase(button, x, y, w, h, sx, sy, sw, sh)
+	local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
 	c:setImage(source)
+
+	c.OnEnter(function()
+		love.mouse.setCursor(cursor_hand)
+	end)
+
+	c.OnExit(function()
+		love.mouse.setCursor()
+	end)
+
 	return c
 end
 
