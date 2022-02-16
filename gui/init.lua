@@ -11,6 +11,8 @@ local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
 local frame, image, text, box, video = 0, 1, 2, 4, 8
 
+local global_drag
+
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
@@ -135,8 +137,18 @@ function gui:setDualDim(x,y,w,h,sx,sy,sw,sh)
 	}
 end
 
-local mainupdater = updater:newLoop().OnLoop
+function gui:topStack()
+	local siblings = self.parent.children
+	for i=1,#siblings do
+		if siblings[i]==self then
+			table.remove(siblings,i)
+			break
+		end
+	end
+	siblings[#siblings+1]=self
+end
 
+local mainupdater = updater:newLoop().OnLoop
 
 function gui:canPress(mx,my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
 	local x, y, w, h
@@ -149,6 +161,20 @@ function gui:canPress(mx,my) -- Get the intersection of the clip area and the se
 		x, y, w, h = self:getAbsolutes()
 	end
 	return not(mx > x + w or mx < x or my > y + h or my < y)
+end
+
+function gui:isBeingCovered(mx,my)
+	local children = gui:getAllChildren()
+	local start = false
+	for i=#children, 1, -1 do
+		if start and children[i]:canPress(mx,my) then
+			return true
+		end
+		if children[i]==self then
+			start = true
+		end
+	end
+	return false
 end
 
 -- Base Library
@@ -234,16 +260,21 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 				end
 				if love.mouse.isDown(i) and c:canPress(mx,my) then
 					if not pressed[i] then
-						if draggable and love.mouse.isDown(dragbutton) then
+						if draggable and love.mouse.isDown(dragbutton) and (not global_drag or global_drag==c) then
 							if not dragging then
+								global_drag = c
 								c.OnDragStart:Fire(c, mx, my)
 								ox, oy = mx, my
 								c:newThread(function()
 									thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
 									if dragging then
+										global_drag = nil
 										dragging = false
 										c.OnDragEnd:Fire(c,mx,my)
 									end
+								end).OnError(function()
+									global_drag = nil
+									dragging = false
 								end)
 							end
 							dragging = true
@@ -269,7 +300,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 				end
 			end
 		end
-	end)
+	end).OnError(print)
 
 	function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
 		if type(self)=="function" then func = self end
