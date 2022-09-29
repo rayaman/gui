@@ -180,6 +180,7 @@ end
 -- Base Library
 function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = {}
+	local buildBackBetter
 	local centerX = false
 	local centerY = false
 	local centering = false
@@ -216,92 +217,111 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.OnMoved = multi:newConnection()
 
 	-- Mouse event thread
-	c:newThread(function()
-		local dragging = false
-		local waiting = {}
-		local pressed = {}
-		local ox, oy = 0, 0
-		local mox, moy = 0, 0
-		local entered = false
-		local moved = false
-		local mx, my
-		while true do
-			thread.hold(function() -- Only Progress thread if events are subscribed to!
-				return c.active and (draggable or c.OnEnter:hasConnections() or c.OnExit:hasConnections() or c.WhilePressing:hasConnections() or c.OnPressed:hasConnections() or c.OnReleased:hasConnections() or c.OnDragStart:hasConnections() or c.OnDragging:hasConnections() or c.OnDragEnd:hasConnections())
-			end)
-			thread.sleep(.001) -- Limits the potiential speed for events to 1/200. So 200 fps max, to be fair pressing mouse click 200 times by hand in a second is probably not possible
-			local x, y, w, h = c:getAbsolutes()
-			mx, my = love.mouse.getPosition()
-			-- mouse moved
-			if mx~=mox or my~=moy then
-				moved = true
-				c.OnMoved:Fire(c, mx - mox, my - moy)
-			end
-
-			-- enter/exit
-			if moved and not entered and c:canPress(mx,my) then
-				entered = true
-				c.OnEnter:Fire(c,mx,my)
-				c:newThread(function()
-					thread.hold(function()
-						return not c:canPress(mx,my)
-					end)
-					c.OnExit:Fire(c,mx,my)
-					entered = false
+	buildBackBetter = function()
+		c:newThread(function()
+			local dragging = false
+			local waiting = {}
+			local pressed = {}
+			local ox, oy = 0, 0
+			local mox, moy = 0, 0
+			local entered = false
+			local moved = false
+			local mx, my
+			local movedFunc = thread:newFunction(function(self,ref,mx,my)
+				self:Pause()
+				thread.hold(function()
+					return ref:canPress(mx,my)
 				end)
-			end
-
-			-- pressed/released/drag events
-			for i=1,c.maxMouseButtons do
-				if dragging and i == dragbutton then
-					c.OnDragging:Fire(c, mx - ox, my - oy)
-					ox = mx
-					oy = my
+				ref.OnExit(ref,mx,my)
+				entered = false
+				self:Resume()
+			end)
+			local dragFunc = thread:newFunction(function(self, ref, mx, my)
+				self:Pause()
+				thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
+				if dragging then
+					global_drag = nil
+					dragging = false
+					ref.OnDragEnd:Fire(ref,mx,my)
 				end
-				if love.mouse.isDown(i) and c:canPress(mx,my) then
-					if not pressed[i] then
-						if draggable and love.mouse.isDown(dragbutton) and (not global_drag or global_drag==c) then
-							if not dragging then
-								global_drag = c
-								c.OnDragStart:Fire(c, mx, my)
-								ox, oy = mx, my
-								c:newThread(function()
-									thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
-									if dragging then
-										global_drag = nil
-										dragging = false
-										c.OnDragEnd:Fire(c,mx,my)
-									end
-								end).OnError(function()
-									global_drag = nil
-									dragging = false
-								end)
+				self:Resume()
+			end)
+			local releaseFunc = thread:newFunction(function(self, ref, mx, my, i)
+				self:Pause()
+				thread.hold(function() return not(love.mouse.isDown(i)) end)
+				if pressed[i] then
+					pressed[i] = false
+					waiting[i] = false
+					ref.OnReleased:Fire(ref, i, mx, my)
+				end
+				self:Resume()
+			end)
+			while true do
+				thread.hold(function() -- Only Progress thread if events are subscribed to!
+					return c.active and (draggable or c.OnEnter:hasConnections() or c.OnExit:hasConnections() or c.WhilePressing:hasConnections() or c.OnPressed:hasConnections() or c.OnReleased:hasConnections() or c.OnDragStart:hasConnections() or c.OnDragging:hasConnections() or c.OnDragEnd:hasConnections())
+				end)
+				thread.sleep(.01) -- Limits the potiential speed for events to 1/200. So 200 fps max, to be fair pressing mouse click 200 times by hand in a second is probably not possible
+				if not love.mouse.isDown(1,2,3,4,5) then
+					dragging = false
+					waiting = {}
+					pressed = {}
+					ox, oy = 0, 0
+					mox, moy = 0, 0
+					entered = false
+					moved = false
+					mx, my = nil, nil
+					global_drag = nil
+				end
+				local x, y, w, h = c:getAbsolutes()
+				mx, my = love.mouse.getPosition()
+				-- mouse moved
+				if mx~=mox or my~=moy then
+					moved = true
+					c.OnMoved:Fire(c, mx - mox, my - moy)
+				end
+
+				-- enter/exit
+				if moved and not entered and c:canPress(mx,my) then
+					entered = true
+					c.OnEnter:Fire(c,mx,my)
+					movedFunc(movedFunc, c, mx, my)
+				end
+
+				-- pressed/released/drag events
+				for i=1,c.maxMouseButtons do
+					if dragging and i == dragbutton then
+						c.OnDragging:Fire(c, mx - ox, my - oy)
+						ox = mx
+						oy = my
+					end
+					if love.mouse.isDown(i) and c:canPress(mx,my) then
+						if not pressed[i] then
+							if draggable and love.mouse.isDown(dragbutton) and (not global_drag or global_drag == c) then
+								if not dragging then
+									global_drag = c
+									c.OnDragStart:Fire(c, mx, my)
+									ox, oy = mx, my
+									dragFunc(dragFunc, c, mx, my)
+								end
+								dragging = true
 							end
-							dragging = true
-						end
-						c:newThread(function()
 							c.OnPressed:Fire(c, i, mx, my)
-						end)
-					end
-					pressed[i] = true
-					-- Only process when the drag button turn is active
-					c.WhilePressing:Fire(c, i, mx, my)
-					if not waiting[i] then
-						waiting[i] = true
-						c:newThread(function()
-							thread.hold(function() return not(love.mouse.isDown(i)) end)
-							if pressed[i] then
-								pressed[i] = false
-								waiting[i] = false
-								c.OnReleased:Fire(c, i, mx, my)
-							end
-						end)
+						end
+						pressed[i] = true
+						-- Only process when the drag button turn is active
+						c.WhilePressing:Fire(c, i, mx, my)
+						if not waiting[i] then
+							waiting[i] = true
+							releaseFunc(releaseFunc, c, mx, my, i)
+						end
 					end
 				end
 			end
-		end
-	end).OnError(print)
-
+		end).OnError(function()
+			buildBackBetter()
+		end)
+	end
+	buildBackBetter()
 	function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
 		if type(self)=="function" then func = self end
 		mainupdater(function()
@@ -310,7 +330,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	end
 
 	local function centerthread()
-		c:newThread("Object_Centering",function()
+		c:newThread(function()
 			while true do
 				thread.hold(function()
 					return centerX or centerY -- If the condition is true it acts like a yield
