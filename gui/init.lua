@@ -123,7 +123,7 @@ function gui:getAllChildren()
 end
 
 function gui:newThread(func)
-	return updater:newThread("ThreadHandler", func, self, thread)
+	return updater:newThread("ThreadHandler<"..self.type..">", func, self, thread)
 end
 
 function gui:setDualDim(x,y,w,h,sx,sy,sw,sh)
@@ -135,6 +135,26 @@ function gui:setDualDim(x,y,w,h,sx,sy,sw,sh)
 		pos={x=sx or self.dualDim.scale.pos.x,y=sy or self.dualDim.scale.pos.y},
 		size={x=sw or self.dualDim.scale.size.x,y=sh or self.dualDim.scale.size.y}
 	}
+end
+
+function gui:getTile(i,x,y,w,h)-- returns imagedata
+	if type(i)=="string" then
+		i=love.graphics.newImage(i)
+	elseif type(i)=="userdata" then
+		-- do nothing
+	elseif string.find(self.Type,"Image",1,true) then
+		local i,x,y,w,h=self.Image,i,x,y,w
+	else
+		error("getTile invalid args!!! Usage: ImageElement:getTile(x,y,w,h) or gui:getTile(imagedata,x,y,w,h)")
+	end
+	local iw,ih=i:getDimensions()
+	local id,_id=i:getData(),love.image.newImageData(w,h)
+	for _x=x,w+x-1 do
+		for _y=y,h+y-1 do
+			_id:setPixel(_x-x,_y-y,id:getPixel(_x,_y))
+		end
+	end
+	return love.graphics.newImage(_id)
 end
 
 function gui:topStack()
@@ -167,11 +187,10 @@ function gui:isBeingCovered(mx,my)
 	local children = gui:getAllChildren()
 	local start = false
 	for i=#children, 1, -1 do
-		if start and children[i]:canPress(mx,my) then
+		if children[i]:canPress(mx,my) and not(children[i] == self) then
 			return true
-		end
-		if children[i]==self then
-			start = true
+		elseif children[i] == self then
+			return false
 		end
 	end
 	return false
@@ -236,16 +255,6 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 				entered = false
 				self:Resume()
 			end)
-			local dragFunc = thread:newFunction(function(self, ref, mx, my)
-				self:Pause()
-				thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
-				if dragging then
-					global_drag = nil
-					dragging = false
-					ref.OnDragEnd:Fire(ref,mx,my)
-				end
-				self:Resume()
-			end)
 			local releaseFunc = thread:newFunction(function(self, ref, mx, my, i)
 				self:Pause()
 				thread.hold(function() return not(love.mouse.isDown(i)) end)
@@ -266,20 +275,21 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 					waiting = {}
 					pressed = {}
 					ox, oy = 0, 0
-					mox, moy = 0, 0
 					entered = false
-					moved = false
 					mx, my = nil, nil
 					global_drag = nil
 				end
 				local x, y, w, h = c:getAbsolutes()
 				mx, my = love.mouse.getPosition()
+				--thread.hold(function() return c:canPress(mx,my) end)
+				moved = false
 				-- mouse moved
 				if mx~=mox or my~=moy then
 					moved = true
 					c.OnMoved:Fire(c, mx - mox, my - moy)
+					mox = mx
+					moy = my
 				end
-
 				-- enter/exit
 				if moved and not entered and c:canPress(mx,my) then
 					entered = true
@@ -290,20 +300,27 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 				-- pressed/released/drag events
 				for i=1,c.maxMouseButtons do
 					if dragging and i == dragbutton then
-						c.OnDragging:Fire(c, mx - ox, my - oy)
+						c.OnDragging:Fire(c, mx - ox, my - oy, mx, my)
 						ox = mx
 						oy = my
 					end
 					if love.mouse.isDown(i) and c:canPress(mx,my) then
 						if not pressed[i] then
 							if draggable and love.mouse.isDown(dragbutton) and (not global_drag or global_drag == c) then
-								if not dragging then
+								if not dragging and not c:isBeingCovered(mx, my) then
 									global_drag = c
 									c.OnDragStart:Fire(c, mx, my)
 									ox, oy = mx, my
-									dragFunc(dragFunc, c, mx, my)
+									dragging = true
+									c:newThread(function()
+										thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
+										if dragging then
+											global_drag = nil
+											dragging = false
+											c.OnDragEnd:Fire(c, mx, my)
+										end
+									end)
 								end
-								dragging = true
 							end
 							c.OnPressed:Fire(c, i, mx, my)
 						end
@@ -317,7 +334,8 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 					end
 				end
 			end
-		end).OnError(function()
+		end).OnError(function(self,err)
+			print(err)
 			buildBackBetter()
 		end)
 	end
@@ -563,40 +581,60 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(video, x, y, w, h, sx, sy, sw, sh)
 	c.OnVideoFinished = multi:newConnection()
 	c.playing = false
+
 	function c:setVideo(v)
 		if type(v)=="string" then
 			c.video=love.graphics.newVideo(v)
 		elseif v then
 			c.video=v
 		end
+		c.audiosource = c.video:getSource( )
 		c.videoHeigth=c.video:getHeight()
 		c.videoWidth=c.video:getWidth()
 		c.quad=love.graphics.newQuad(0,0,w,h,c.videoWidth,c.videoHeigth)
 	end
+
+	function c:getVideo()
+		return self.video
+	end
+
 	if type(source)=="string" then
 		c:setVideo(source)
 	end
+
 	function c:play()
 		c.playing = true
 		c.video:play()
 	end
+
+	function c:setVolume(vol)
+		if self.audiosource then
+			self.audiosource:setVolume(vol)
+		end
+	end
+
 	function c:pause()
 		c.video:pause()
 	end
+
 	function c:stop()
 		c.playing = false
 		c.video:pause()
 		c.video:rewind()
 	end
+
 	function c:rewind()
 		c.video:rewind()
 	end
+
 	function c:seek(n)
 		c.video:seek(n)
 	end
+
 	function c:tell()
 		return c.video:tell()
 	end
+
 	c:newThread(function(self)
 		while true do
 			thread.hold(function() return self.video:isPlaying() end)
@@ -611,8 +649,10 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 			end
 		end
 	end)
+
 	c.videoVisibility = 1
 	c.videoColor = color.white
+
 	return c
 end
 
@@ -651,48 +691,61 @@ local drawtypes = {
 	end,
 }
 
+local draw_handler = function(child)
+	local bg = child.color
+	local bbg = child.borderColor
+	local type = child.type
+	local vis = child.visibility
+	local x, y, w, h = child:getAbsolutes()
+	child.x = x
+	child.y = y
+	child.w = w
+	child.h = h
+
+	if child.clipDescendants then
+		local children = child:getAllChildren()
+		for c = 1, #children do -- Tell the children to clip themselves
+			local clip = children[c].__variables.clip
+			clip[1] = true
+			clip[2] = x
+			clip[3] = y
+			clip[4] = w
+			clip[5] = h
+		end
+	end
+
+	if child.__variables.clip[1] then
+		local clip = child.__variables.clip
+		love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
+	end
+
+	-- Set color
+	love.graphics.setColor(bg[1],bg[2],bg[3],vis)
+	love.graphics.rectangle("fill", x, y, w, h--[[, rx, ry, segments]])
+	love.graphics.setColor(bbg[1],bbg[2],bbg[3],vis)
+	love.graphics.rectangle("line", x, y, w, h--[[, rx, ry, segments]])
+	-- Start object specific stuff
+	drawtypes[band(type,video)](child,x,y,w,h)
+	drawtypes[band(type,image)](child,x,y,w,h)
+	drawtypes[band(type,text)](child,x,y,w,h)
+
+	love.graphics.setScissor() -- Remove the scissor
+end
 drawer:newLoop(function()
 	local children = gui:getAllChildren()
 	for i=1,#children do
 		local child = children[i]
-		local bg = child.color
-		local bbg = child.borderColor
-		local type = child.type
-		local vis = child.visibility
-		local x, y, w, h = child:getAbsolutes()
-		child.x = x
-		child.y = y
-		child.w = w
-		child.h = h
-		
-		if child.clipDescendants then
-			local children = child:getAllChildren()
-			for c = 1, #children do -- Tell the children to clip themselves
-				local clip = children[c].__variables.clip
-				clip[1] = true
-				clip[2] = x
-				clip[3] = y
-				clip[4] = w
-				clip[5] = h
-			end
+		if child.effect then
+			child.effect(function()
+				draw_handler(child)
+			end)
+		elseif child.chain then
+			child.chain.draw(function()
+				draw_handler(child)
+			end)
+		else
+			draw_handler(child)
 		end
-
-		if child.__variables.clip[1] then
-			local clip = child.__variables.clip
-			love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
-		end
-
-		-- Set color
-		love.graphics.setColor(bg[1],bg[2],bg[3],vis)
-		love.graphics.rectangle("fill", x, y, w, h--[[, rx, ry, segments]])
-		love.graphics.setColor(bbg[1],bbg[2],bbg[3],vis)
-		love.graphics.rectangle("line", x, y, w, h--[[, rx, ry, segments]])
-		-- Start object specific stuff
-		drawtypes[band(type,video)](child,x,y,w,h)
-		drawtypes[band(type,image)](child,x,y,w,h)
-		drawtypes[band(type,text)](child,x,y,w,h)
-
-		love.graphics.setScissor() -- Remove the scissor
 	end
 end)
 

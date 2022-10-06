@@ -3,3 +3,5 @@ conf.lua
 *.ttf
 *.png
 *.ogv
+multi/*
+moonshine/*
