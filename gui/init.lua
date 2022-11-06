@@ -10,7 +10,7 @@ local cursor_hand = love.mouse.getSystemCursor("hand")
 local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
 local frame, image, text, box, video = 0, 1, 2, 4, 8
-
+local has_moonshine, moonshine = pcall(require,"moonshine")
 local global_drag
 
 gui.__index = gui
@@ -728,8 +728,10 @@ local draw_handler = function(child)
 	drawtypes[band(type,video)](child,x,y,w,h)
 	drawtypes[band(type,image)](child,x,y,w,h)
 	drawtypes[band(type,text)](child,x,y,w,h)
-
-	love.graphics.setScissor() -- Remove the scissor
+	
+	if child.__variables.clip[1] then
+		love.graphics.setScissor() -- Remove the scissor
+	end
 end
 drawer:newLoop(function()
 	local children = gui:getAllChildren()
@@ -737,10 +739,6 @@ drawer:newLoop(function()
 		local child = children[i]
 		if child.effect then
 			child.effect(function()
-				draw_handler(child)
-			end)
-		elseif child.chain then
-			child.chain.draw(function()
 				draw_handler(child)
 			end)
 		else
