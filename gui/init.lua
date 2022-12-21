@@ -1,4 +1,5 @@
-local multi,thread = require("multi"):init()
+local utf8 = require("utf8")
+local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.color")
 local gui = {}
@@ -10,13 +11,71 @@ local cursor_hand = love.mouse.getSystemCursor("hand")
 local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
 local frame, image, text, box, video = 0, 1, 2, 4, 8
-local has_moonshine, moonshine = pcall(require,"moonshine")
 local global_drag
 
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
+
+-- Connections
+gui.Events = {}
+gui.Events.OnQuit = multi:newConnection()
+gui.Events.OnDirectoryDropped = multi:newConnection()
+gui.Events.OnDisplayRotated = multi:newConnection()
+gui.Events.OnFilesDropped = multi:newConnection()
+gui.Events.OnFocus = multi:newConnection()
+gui.Events.OnMouseFocus = multi:newConnection()
+gui.Events.OnResized = multi:newConnection()
+gui.Events.OnVisible = multi:newConnection()
+gui.Events.OnKeyPressed = multi:newConnection()
+gui.Events.OnKeyReleased = multi:newConnection()
+gui.Events.OnTextEdited = multi:newConnection()
+gui.Events.OnTextInputed = multi:newConnection()
+gui.Events.OnMouseMoved = multi:newConnection()
+gui.Events.OnMousePressed = multi:newConnection()
+gui.Events.OnMouseReleased = multi:newConnection()
+gui.Events.OnWheelMoved = multi:newConnection()
+gui.Events.OnTouchMoved = multi:newConnection()
+gui.Events.OnTouchPressed = multi:newConnection()
+gui.Events.OnTouchReleased = multi:newConnection()
+
+-- Hooks
+
+local function Hook(funcname, func)
+	if love[funcname] then
+		local cache = love[funcname]
+		love[funcname] = function(...)
+			cache(...)
+			func({},...)
+		end
+	else
+		love[funcname] = function(...) func({},...) end
+	end
+end
+
+-- This will run the hooks after everything has loaded
+updater:newTask(function()
+	Hook("quit", gui.Events.OnQuit.Fire)
+	Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
+	Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
+	Hook("filedropped", gui.Events.OnFilesDropped.Fire)
+	Hook("focus", gui.Events.OnFocus.Fire)
+	Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
+	Hook("resize", gui.Events.OnResized.Fire)
+	Hook("visible", gui.Events.OnVisible.Fire)
+	Hook("keypressed", gui.Events.OnKeyPressed.Fire)
+	Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
+	Hook("textedited", gui.Events.OnTextEdited.Fire)
+	Hook("textinput", gui.Events.OnTextInputed.Fire)
+	Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
+	Hook("mousepressed", gui.Events.OnMousePressed.Fire)
+	Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
+	Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
+	Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
+	Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
+	Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
+end)
 
 -- Utils
 
@@ -222,9 +281,10 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.rotation = 0
 	c.maxMouseButtons = 5
 
-	c.WhilePressing = multi:newConnection()
 	c.OnPressed = multi:newConnection()
+	c.OnPressedOuter = multi:newConnection()
 	c.OnReleased = multi:newConnection()
+	c.OnReleasedOuter = multi:newConnection()
 
 	c.OnDragStart = multi:newConnection()
 	c.OnDragging = multi:newConnection()
@@ -235,111 +295,53 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 
 	c.OnMoved = multi:newConnection()
 
-	-- Mouse event thread
-	buildBackBetter = function()
-		c:newThread(function()
-			local dragging = false
-			local waiting = {}
-			local pressed = {}
-			local ox, oy = 0, 0
-			local mox, moy = 0, 0
-			local entered = false
-			local moved = false
-			local mx, my
-			local movedFunc = thread:newFunction(function(self,ref,mx,my)
-				self:Pause()
-				thread.hold(function()
-					return ref:canPress(mx,my)
-				end)
-				ref.OnExit(ref,mx,my)
-				entered = false
-				self:Resume()
-			end)
-			local releaseFunc = thread:newFunction(function(self, ref, mx, my, i)
-				self:Pause()
-				thread.hold(function() return not(love.mouse.isDown(i)) end)
-				if pressed[i] then
-					pressed[i] = false
-					waiting[i] = false
-					ref.OnReleased:Fire(ref, i, mx, my)
-				end
-				self:Resume()
-			end)
-			while true do
-				thread.hold(function() -- Only Progress thread if events are subscribed to!
-					return c.active and (draggable or c.OnEnter:hasConnections() or c.OnExit:hasConnections() or c.WhilePressing:hasConnections() or c.OnPressed:hasConnections() or c.OnReleased:hasConnections() or c.OnDragStart:hasConnections() or c.OnDragging:hasConnections() or c.OnDragEnd:hasConnections())
-				end)
-				thread.sleep(.01) -- Limits the potiential speed for events to 1/200. So 200 fps max, to be fair pressing mouse click 200 times by hand in a second is probably not possible
-				if not love.mouse.isDown(1,2,3,4,5) then
-					dragging = false
-					waiting = {}
-					pressed = {}
-					ox, oy = 0, 0
-					entered = false
-					mx, my = nil, nil
-					global_drag = nil
-				end
-				local x, y, w, h = c:getAbsolutes()
-				mx, my = love.mouse.getPosition()
-				--thread.hold(function() return c:canPress(mx,my) end)
-				moved = false
-				-- mouse moved
-				if mx~=mox or my~=moy then
-					moved = true
-					c.OnMoved:Fire(c, mx - mox, my - moy)
-					mox = mx
-					moy = my
-				end
-				-- enter/exit
-				if moved and not entered and c:canPress(mx,my) then
-					entered = true
-					c.OnEnter:Fire(c,mx,my)
-					movedFunc(movedFunc, c, mx, my)
-				end
+	local dragging = false
+	local entered = false
+	local moved = false
+	local pressed = false
 
-				-- pressed/released/drag events
-				for i=1,c.maxMouseButtons do
-					if dragging and i == dragbutton then
-						c.OnDragging:Fire(c, mx - ox, my - oy, mx, my)
-						ox = mx
-						oy = my
-					end
-					if love.mouse.isDown(i) and c:canPress(mx,my) then
-						if not pressed[i] then
-							if draggable and love.mouse.isDown(dragbutton) and (not global_drag or global_drag == c) then
-								if not dragging and not c:isBeingCovered(mx, my) then
-									global_drag = c
-									c.OnDragStart:Fire(c, mx, my)
-									ox, oy = mx, my
-									dragging = true
-									c:newThread(function()
-										thread.hold(function() return not(love.mouse.isDown(dragbutton)) end)
-										if dragging then
-											global_drag = nil
-											dragging = false
-											c.OnDragEnd:Fire(c, mx, my)
-										end
-									end)
-								end
-							end
-							c.OnPressed:Fire(c, i, mx, my)
-						end
-						pressed[i] = true
-						-- Only process when the drag button turn is active
-						c.WhilePressing:Fire(c, i, mx, my)
-						if not waiting[i] then
-							waiting[i] = true
-							releaseFunc(releaseFunc, c, mx, my, i)
-						end
-					end
-				end
+	gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+		if c:canPress(x,y) then
+			c.OnMoved:Fire(c,x, y, dx, dy, istouch)
+			entered = true
+			c.OnEnter:Fire(c, x, y)
+			if dragging then
+				c.OnDragging:Fire(c, dx, dy, x, y, istouch)
 			end
-		end).OnError(function(self,err)
-			print(err)
-			buildBackBetter()
-		end)
-	end
-	buildBackBetter()
+		elseif entered then
+			entered = false
+			c.OnExit:Fire(c, x, y)
+		end
+	end)
+
+	gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+		if c:canPress(x, y) then
+			c.OnReleased:Fire(c, x, y, dx, dy, istouch, presses)
+		else
+			c.OnReleasedOuter:Fire(c, x, y, button, istouch, presses)
+		end
+		pressed = false
+		if dragging and button == dragbutton then
+			dragging = false
+			global_drag = false
+			c.OnDragEnd:Fire(c, dx, dy, x, y, istouch, presses)
+		end
+	end)
+
+	gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+		if c:canPress(x,y) then
+			c.OnPressed:Fire(c,x, y, dx, dy, istouch)
+			pressed = true
+			if draggable and button == dragbutton and not c:isBeingCovered(x, y) and not global_drag then
+				dragging = true
+				global_drag = true
+				c.OnDragStart:Fire(c, dx, dy, x, y, istouch)
+			end
+		else
+			c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
+		end
+	end)
+
 	function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
 		if type(self)=="function" then func = self end
 		mainupdater(function()
@@ -348,11 +350,12 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	end
 
 	local function centerthread()
+		local centerfunc = function()
+			return centerX or centerY -- If the condition is true it acts like a yield
+		end
 		c:newThread(function()
 			while true do
-				thread.hold(function()
-					return centerX or centerY -- If the condition is true it acts like a yield
-				end)
+				thread.hold(centerfunc)
 				local x, y, w, h = c:getAbsolutes()
 				if centerX then
 					c:setDualDim(-w/2,nil,nil,nil,.5)
@@ -538,18 +541,18 @@ function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 		drawer:newThread(function()
 			thread.yield()
 			local img
-			if type(i)=="userdata" and i:type() == "Image" then
+			if type(i) == "userdata" and i:type() == "Image" then
 				img = i
-			elseif type(i)=="string" then
+			elseif type(i) == "string" then
 				img = love.graphics.newImage(i)
 			end
 			local x, y, w, h = self:getAbsolutes()
 			self.imageColor = color.white
 			self.imageVisibility = 1
-			self.image=img
-			self.imageHeigth=img:getHeight()
-			self.imageWidth=img:getWidth()
-			self.quad=love.graphics.newQuad(0,0,w,h,self.imageWidth,self.imageHeigth)
+			self.image = img
+			self.imageHeigth = img:getHeight()
+			self.imageWidth = img:getWidth()
+			self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth, self.imageHeigth)
 		end).OnError(print)
 	end
 	return c
@@ -589,6 +592,9 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 			c.video=v
 		end
 		c.audiosource = c.video:getSource( )
+		if c.audiosource then
+			c.audioLength = c.audiosource:getDuration()
+		end
 		c.videoHeigth=c.video:getHeight()
 		c.videoWidth=c.video:getWidth()
 		c.quad=love.graphics.newQuad(0,0,w,h,c.videoWidth,c.videoHeigth)
@@ -636,18 +642,22 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 	end
 
 	c:newThread(function(self)
-		while true do
-			thread.hold(function() return self.video:isPlaying() end)
-			if self.video:isPlaying() then
-				status.color = color.green
-			else
-				status.color = color.red
+
+		local testCompletion = function() -- More intensive test
+			if self.video:tell() == 0 then 
 				self.OnVideoFinished:Fire(self)
-				thread.hold(function()
-					return self.video:isPlaying()
-				end)
+				return true
 			end
 		end
+
+		local isplaying = function() -- Less intensive test
+			return self.video:isPlaying() 
+		end
+
+		while true do
+			thread.chain(isplaying, testCompletion)
+		end
+	
 	end)
 
 	c.videoVisibility = 1
@@ -733,6 +743,7 @@ local draw_handler = function(child)
 		love.graphics.setScissor() -- Remove the scissor
 	end
 end
+
 drawer:newLoop(function()
 	local children = gui:getAllChildren()
 	for i=1,#children do
@@ -757,9 +768,19 @@ gui.children = {}
 gui.dualDim = gui:newDualDim()
 gui.x = 0
 gui.y = 0
-updater:newLoop(function()
-	gui.dualDim.offset.size.x, gui.dualDim.offset.size.y = love.graphics.getDimensions()
-	gui.w = gui.dualDim.offset.size.x
-	gui.h = gui.dualDim.offset.size.y
+
+gui.Events.OnResized(function(w,h)
+	gui.dualDim.offset.size.x = w
+	gui.dualDim.offset.size.y = h
+	gui.w = w
+	gui.h = h
 end)
+
+-- Init gui size
+w, h = love.graphics.getDimensions()
+gui.dualDim.offset.size.x = w
+gui.dualDim.offset.size.y = h
+gui.w = w
+gui.h = h
+
 return gui
