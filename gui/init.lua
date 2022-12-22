@@ -12,6 +12,7 @@ local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
 local frame, image, text, box, video = 0, 1, 2, 4, 8
 local global_drag
+local object_focus = gui
 
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
@@ -94,28 +95,18 @@ end
 
 local function intersecpt(x1,y1,x2,y2,x3,y3,x4,y4)
 
-	-- gives bottom-left point
-    -- of intersection rectangle
     local x5 = max(x1, x3)
     local y5 = max(y1, y3)
-
-	-- gives top-right point
-	-- of intersection rectangle
-    local x6 = min(x2, x4);
-    local y6 = min(y2, y4);
+    local x6 = min(x2, x4)
+    local y6 = min(y2, y4)
 
 	-- no intersection
     if x5 > x6 or y5 > y6 then
         return 0, 0, 0, 0 -- Return a no
 	end
 
-	-- gives top-left point
-    -- of intersection rectangle
     local x7 = x5
     local y7 = y6
- 
-    -- gives bottom-right point
-    -- of intersection rectangle
     local x8 = x6
     local y8 = y5
 
@@ -234,7 +225,6 @@ function gui:canPress(mx,my) -- Get the intersection of the clip area and the se
 	if self.__variables.clip[1] then
 		local clip = self.__variables.clip
 		x, y, w, h = self:intersecpt(clip[2], clip[3], clip[4], clip[5])
-		--x1, y1, w1, h1 = self:getAbsolutes()
 		return mx < x + w and mx > x and my+h < y + h and my+h > y
 	else
 		x, y, w, h = self:getAbsolutes()
@@ -332,6 +322,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 		if c:canPress(x,y) then
 			c.OnPressed:Fire(c,x, y, dx, dy, istouch)
 			pressed = true
+			object_focus = c
 			if draggable and button == dragbutton and not c:isBeingCovered(x, y) and not global_drag then
 				dragging = true
 				global_drag = true
@@ -528,9 +519,15 @@ end
 
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
-
+	
 	return c
 end
+
+gui.Events.OnTextInputed(function(text)
+	if band(object_focus.type, box) == box then
+		object_focus
+	end
+end)
 
 -- Images
 function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
@@ -769,18 +766,17 @@ gui.dualDim = gui:newDualDim()
 gui.x = 0
 gui.y = 0
 
+local w, h = love.graphics.getDimensions()
+gui.dualDim.offset.size.x = w
+gui.dualDim.offset.size.y = h
+gui.w = w
+gui.h = h
+
 gui.Events.OnResized(function(w,h)
 	gui.dualDim.offset.size.x = w
 	gui.dualDim.offset.size.y = h
 	gui.w = w
 	gui.h = h
 end)
-
--- Init gui size
-w, h = love.graphics.getDimensions()
-gui.dualDim.offset.size.x = w
-gui.dualDim.offset.size.y = h
-gui.w = w
-gui.h = h
 
 return gui
