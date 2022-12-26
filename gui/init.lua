@@ -20,26 +20,29 @@ gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
 
 -- Connections
-gui.Events = {}
-gui.Events.OnQuit = multi:newConnection()
-gui.Events.OnDirectoryDropped = multi:newConnection()
-gui.Events.OnDisplayRotated = multi:newConnection()
-gui.Events.OnFilesDropped = multi:newConnection()
-gui.Events.OnFocus = multi:newConnection()
-gui.Events.OnMouseFocus = multi:newConnection()
-gui.Events.OnResized = multi:newConnection()
-gui.Events.OnVisible = multi:newConnection()
-gui.Events.OnKeyPressed = multi:newConnection()
-gui.Events.OnKeyReleased = multi:newConnection()
-gui.Events.OnTextEdited = multi:newConnection()
-gui.Events.OnTextInputed = multi:newConnection()
-gui.Events.OnMouseMoved = multi:newConnection()
-gui.Events.OnMousePressed = multi:newConnection()
-gui.Events.OnMouseReleased = multi:newConnection()
-gui.Events.OnWheelMoved = multi:newConnection()
-gui.Events.OnTouchMoved = multi:newConnection()
-gui.Events.OnTouchPressed = multi:newConnection()
-gui.Events.OnTouchReleased = multi:newConnection()
+gui.Events = {} -- We are using fastmode for all connection objects.
+gui.Events.OnQuit = multi:newConnection():fastMode()
+gui.Events.OnDirectoryDropped = multi:newConnection():fastMode()
+gui.Events.OnDisplayRotated = multi:newConnection():fastMode()
+gui.Events.OnFilesDropped = multi:newConnection():fastMode()
+gui.Events.OnFocus = multi:newConnection():fastMode()
+gui.Events.OnMouseFocus = multi:newConnection():fastMode()
+gui.Events.OnResized = multi:newConnection():fastMode()
+gui.Events.OnVisible = multi:newConnection():fastMode()
+gui.Events.OnKeyPressed = multi:newConnection():fastMode()
+gui.Events.OnKeyReleased = multi:newConnection():fastMode()
+gui.Events.OnTextEdited = multi:newConnection():fastMode()
+gui.Events.OnTextInputed = multi:newConnection():fastMode()
+gui.Events.OnMouseMoved = multi:newConnection():fastMode()
+gui.Events.OnMousePressed = multi:newConnection():fastMode()
+gui.Events.OnMouseReleased = multi:newConnection():fastMode()
+gui.Events.OnWheelMoved = multi:newConnection():fastMode()
+gui.Events.OnTouchMoved = multi:newConnection():fastMode()
+gui.Events.OnTouchPressed = multi:newConnection():fastMode()
+gui.Events.OnTouchReleased = multi:newConnection():fastMode()
+
+-- Internal Connections
+gui.Events.OnObjectFocusChanged = multi:newConnection():fastMode()
 
 -- Hooks
 
@@ -322,7 +325,13 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 		if c:canPress(x,y) then
 			c.OnPressed:Fire(c,x, y, dx, dy, istouch)
 			pressed = true
-			object_focus = c
+			
+			-- Only change and trigger the event if it is a different object
+			if c ~= object_focus then
+				gui.Events.OnObjectFocusChanged:Fire(object_focus, c)
+				object_focus = c
+			end
+
 			if draggable and button == dragbutton and not c:isBeingCovered(x, y) and not global_drag then
 				dragging = true
 				global_drag = true
@@ -519,14 +528,26 @@ end
 
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
-	
+	c.cur_pos = -1
 	return c
 end
 
+local function tb_helper(text, pos)
+
+end
+
+gui.Events.OnObjectFocusChanged(function(prev, new)
+	--
+end)
+
 gui.Events.OnTextInputed(function(text)
 	if band(object_focus.type, box) == box then
-		object_focus
+		object_focus.text = object_focus.text .. text
 	end
+end)
+
+gui.Events.OnKeyPressed(function()
+
 end)
 
 -- Images
