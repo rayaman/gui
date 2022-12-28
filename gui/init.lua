@@ -19,6 +19,10 @@ gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
 
+gui.ALLIGN_CENTER = 0
+gui.ALLIGN_LEFT = 1
+gui.ALLIGN_RIGHT = 2
+
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
 gui.Events.OnQuit = multi:newConnection():fastMode()
@@ -80,6 +84,74 @@ updater:newTask(function()
 	Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
 	Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
 end)
+
+-- Hotkeys
+
+local has_hotkey = false
+local hot_keys = {}
+
+-- Wait for keys to release to reset
+local unPress = updater:newFunction(function(keys)
+	thread.hold(function()
+		for key = 1, #keys["Keys"] do
+			if not love.keyboard.isDown(keys["Keys"][key]) then
+				keys.isBusy = false
+				return true
+			end
+		end
+	end)
+end)
+
+updater:newThread("GUI Hotkey Manager",function()
+	while true do
+		thread.hold(function() return has_hotkey end)
+		for i = 1, #hot_keys do
+			local good = true
+			for key = 1, #hot_keys[i]["Keys"] do
+				if not love.keyboard.isDown(hot_keys[i]["Keys"][key]) then
+					good = false
+					break
+				end
+			end
+			if good and not hot_keys[i].isBusy then
+				hot_keys[i]["Connection"]:Fire(hot_keys[i]["Ref"])
+				hot_keys[i].isBusy = true
+				unPress(hot_keys[i])
+			end
+		end
+		thread.sleep(.001)
+	end
+end).OnError(print)
+
+function gui:SetHotKey(keys, conn)
+	has_hotkey = true
+	local conn = conn or multi:newConnection():fastMode()
+	table.insert(hot_keys, {Ref=self, Connection = conn, Keys = {unpack(keys)}})
+	return conn
+end
+
+-- Default HotKeys
+gui.HotKeys = {}
+
+-- Connections can be added together to create an OR logic to them, they can be multiplied together to create an AND logic to them
+gui.HotKeys.OnSelectAll	= gui:SetHotKey({"lctrl","a"})
+						+ gui:SetHotKey({"rctrl","a"})
+
+gui.HotKeys.OnCopy		= gui:SetHotKey({"lctrl","c"})
+						+ gui:SetHotKey({"rctrl","c"})
+
+gui.HotKeys.OnPaste		= gui:SetHotKey({"lctrl","v"})
+						+ gui:SetHotKey({"rctrl","v"})
+
+gui.HotKeys.OnUndo		= gui:SetHotKey({"lctrl","z"}) 
+						+ gui:SetHotKey({"rctrl","z"})
+
+gui.HotKeys.OnRedo 		= gui:SetHotKey({"lctrl","y"}) 
+						+ gui:SetHotKey({"rctrl","y"})
+						+ gui:SetHotKey({"lctrl", "lshift", "z"}) 
+						+ gui:SetHotKey({"rctrl", "lshift", "z"}) 
+						+ gui:SetHotKey({"lctrl", "rshift", "z"}) 
+						+ gui:SetHotKey({"rctrl", "rshift", "z"})
 
 -- Utils
 
@@ -433,7 +505,7 @@ end
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(text + typ,x, y, w, h, sx, sy, sw, sh)
 	c.text = txt
-	c.align = "center"
+	c.align = gui.ALLIGN_LEFT
 	c.textScaleX = 1
 	c.textScaleY = 1
 	c.textOffsetX = 0
@@ -531,7 +603,10 @@ function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
 	return c
 end
 
-local function getTextPosition(text, mx, my)
+-- local val used when drawing
+
+local function getTextPosition(text, self, mx, my)
+
 	-- Initialize variables
 	local pos = 0
 	local font = love.graphics.getFont()
@@ -541,16 +616,18 @@ local function getTextPosition(text, mx, my)
 	for i = 1, #text do
 
 		local _w = font:getWidth(text:sub(i, i))
-		local x, y, w, h = width, 0, _w, height
+		local x, y, w, h = math.floor(width + self.adjust + self.textOffsetX), 0, _w, height
 
 		width = width + _w
 
 		if not(mx > x + w or mx < x or my > y + h or my < y) then
-			if _w - (width - mx) < _w/2  and i >= 2 then
+			if _w - (width - (mx - math.floor(self.adjust + self.textOffsetX))) < _w/2  and i >= 1 then
 				return i - 1
 			else
 				return i
 			end
+		elseif i == #text and mx > x + w then
+			return #text
 		end
 	end
 	return pos
@@ -559,7 +636,11 @@ end
 local cur = love.mouse.getCursor()
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
+
+	c.OnReturn = multi:newConnection():fastMode()
+
 	c.cur_pos = 0
+	c.adjust = 0
 
 	c.OnEnter(function()
 		love.mouse.setCursor(love.mouse.getSystemCursor("ibeam"))
@@ -571,7 +652,11 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 
 	c.OnPressed(function(c, x, y, dx, dy, istouch)
 		object_focus.bar_show = true
-		c.cur_pos = getTextPosition(c.text, c:getLocalCords(x, y))
+		c.cur_pos = getTextPosition(c.text, c, c:getLocalCords(x, y))
+	end)
+
+	c.OnPressedOuter(function()
+		c.bar_show = false
 	end)
 
 	return c
@@ -618,14 +703,12 @@ gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
 		object_focus.cur_pos = object_focus.cur_pos + 1
 		object_focus.bar_show = true
 	elseif key == "return" then
-		--
+		object_focus.OnReturn:Fire(object_focus, object_focus.text)
 	elseif key == "backspace" then
 		object_focus.text = delete(object_focus.text, object_focus.cur_pos)
 		object_focus.cur_pos = object_focus.cur_pos - 1
 	elseif key == "delete" then
-		--
-	elseif key == "" then
-		--
+		object_focus.text = delete(object_focus.text, object_focus.cur_pos + 1)
 	end
 end)
 
@@ -767,8 +850,8 @@ end
 
 --local label, image, text, button, box, video
 local drawtypes = {
-	[0]= function(child, x, y, w, h) end,
-	[1]=function(child, x, y, w, h)
+	[0] = function(child, x, y, w, h) end,
+	[1] = function(child, x, y, w, h)
 		if child.image then
 			love.graphics.setColor(child.imageColor[1],child.imageColor[2],child.imageColor[3],child.imageVisibility)
 			if w~=child.imageWidth and h~=child.imageHeigth then
@@ -781,14 +864,23 @@ local drawtypes = {
 	[2] = function(child, x, y, w, h)
 		love.graphics.setColor(child.textColor[1],child.textColor[2],child.textColor[3],child.textVisibility)
 		love.graphics.setFont(child.font)
-		love.graphics.printf(child.text, x + child.textOffsetX, y + child.textOffsetY, w, child.align, child.rotation, child.textScaleX, child.textScaleY, 0, 0, child.textShearingFactorX, child.textShearingFactorY)
+		if child.align == gui.ALLIGN_LEFT then
+			child.adjust = 0
+		elseif child.align == gui.ALLIGN_CENTER then
+			local fw = child.font:getWidth(child.text)
+			child.adjust = (w-fw)/2
+		elseif child.align == gui.ALLIGN_RIGHT then
+			local fw = child.font:getWidth(child.text)
+			child.adjust = w - fw - 4
+		end
+		love.graphics.printf(child.text, child.adjust + x + child.textOffsetX, y + child.textOffsetY, w, "left", child.rotation, child.textScaleX, child.textScaleY, 0, 0, child.textShearingFactorX, child.textShearingFactorY)
 	end,
 	[4] = function(child, x, y, w, h)
 		if child.bar_show then
 			local font = child.font
 			local fh = font:getHeight()
 			local fw = font:getWidth(child.text:sub(1, child.cur_pos))
-			love.graphics.line( x + fw, y + 4, x + fw, y + fh - 2)
+			love.graphics.line(child.textOffsetX + child.adjust + x + fw, y + 4, child.textOffsetX + child.adjust + x + fw, y + fh - 2)
 		end
 	end,
 	[8] = function(child, x, y, w, h)

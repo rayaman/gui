@@ -6,7 +6,7 @@ Core Objects:
 - ~~Frame~~ ✔️
 - Text:
   - ~~Label~~ ✔️
-  - Box
+  - ~~Box~~ ✔️
   - ~~Button~~ ✔️
 - Image:
   - ~~Label~~ ✔️
@@ -21,10 +21,19 @@ Events:
   - ~~Pressed~~ ✔️
   - ~~Released~~ ✔️
   - ~~Moved~~ ✔️
-  - WheelMoved
+  - ~~WheelMoved~~ ✔️
   - ~~DragStart~~ ✔️
   - ~~Dragging~~ ✔️
   - ~~DragEnd~~ ✔️
-  - Hotkey
+- Keyboard Events
+  - ~~Hotkey~~ ✔️ Refer to [KeyConstants](https://love2d.org/wiki/KeyConstant) wiki page
+    - Some default hotkeys have been added:
+      - ~~(conn)gui.HotKeys.OnSelectAll~~ ✔️ `Ctrl + A`
+      - ~~(conn)gui.HotKeys.OnCopy~~ ✔️ `Ctrl + C`
+      - ~~(conn)gui.HotKeys.OnPaste~~ ✔️ `Ctrl + V`
+      - ~~(conn)gui.HotKeys.OnUndo~~ ✔️ `Ctrl + Z`
+      - ~~(conn)gui.HotKeys.OnRedo~~ ✔️ `Ctrl + Y, Ctrl + Shift + Z`
 - Other Events
   - ~~OnUpdate~~ ✔️
+  - ~~OnDraw~~ ✔️
+
