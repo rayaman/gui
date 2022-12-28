@@ -248,6 +248,11 @@ function gui:isBeingCovered(mx,my)
 	return false
 end
 
+function gui:getLocalCords(mx, my)
+	x, y, w, h = self:getAbsolutes()
+	return mx - x, my - y
+end
+
 -- Base Library
 function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = {}
@@ -526,14 +531,70 @@ function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
 	return c
 end
 
+local function getTextPosition(text, mx, my)
+	-- Initialize variables
+	local pos = 0
+	local font = love.graphics.getFont()
+	local width = 0
+	local height = font:getHeight()
+	-- Loop through each character in the string
+	for i = 1, #text do
+
+		local _w = font:getWidth(text:sub(i, i))
+		local x, y, w, h = width, 0, _w, height
+
+		width = width + _w
+
+		if not(mx > x + w or mx < x or my > y + h or my < y) then
+			if _w - (width - mx) < _w/2  and i >= 2 then
+				return i - 1
+			else
+				return i
+			end
+		end
+	end
+	return pos
+end
+
+local cur = love.mouse.getCursor()
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
-	c.cur_pos = -1
+	c.cur_pos = 0
+
+	c.OnEnter(function()
+		love.mouse.setCursor(love.mouse.getSystemCursor("ibeam"))
+	end)
+
+	c.OnExit(function()
+		love.mouse.setCursor(cur)
+	end)
+
+	c.OnPressed(function(c, x, y, dx, dy, istouch)
+		object_focus.bar_show = true
+		c.cur_pos = getTextPosition(c.text, c:getLocalCords(x, y))
+	end)
+
 	return c
 end
 
-local function tb_helper(text, pos)
+updater:newThread("Textbox Handler", function()
+	while true do
+		-- Do nothing if we aren't dealing with a textbox
+		thread.hold(function() return band(object_focus.type, box) == box end)
+		local ref = object_focus
+		ref.bar_show = true
+		thread.sleep(.5)
+		ref.bar_show = false
+		thread.sleep(.5)
+	end
+end)
 
+local function insert(text, pos, n_text)
+	return text:sub(1,pos) .. n_text .. text:sub(pos+1,-1)
+end
+
+local function delete(text, pos)
+	return text:sub(1,pos-1) .. text:sub(pos+1,-1)
 end
 
 gui.Events.OnObjectFocusChanged(function(prev, new)
@@ -542,12 +603,30 @@ end)
 
 gui.Events.OnTextInputed(function(text)
 	if band(object_focus.type, box) == box then
-		object_focus.text = object_focus.text .. text
+		object_focus.text = insert(object_focus.text, object_focus.cur_pos, text)
+		object_focus.cur_pos = object_focus.cur_pos + 1
 	end
 end)
 
-gui.Events.OnKeyPressed(function()
-
+gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
+	-- Don't process if we aren't dealing with a textbox
+	if band(object_focus.type, box) ~= box then return end
+	if key == "left" then
+		object_focus.cur_pos = object_focus.cur_pos - 1
+		object_focus.bar_show = true
+	elseif key == "right" then
+		object_focus.cur_pos = object_focus.cur_pos + 1
+		object_focus.bar_show = true
+	elseif key == "return" then
+		--
+	elseif key == "backspace" then
+		object_focus.text = delete(object_focus.text, object_focus.cur_pos)
+		object_focus.cur_pos = object_focus.cur_pos - 1
+	elseif key == "delete" then
+		--
+	elseif key == "" then
+		--
+	end
 end)
 
 -- Images
@@ -705,7 +784,12 @@ local drawtypes = {
 		love.graphics.printf(child.text, x + child.textOffsetX, y + child.textOffsetY, w, child.align, child.rotation, child.textScaleX, child.textScaleY, 0, 0, child.textShearingFactorX, child.textShearingFactorY)
 	end,
 	[4] = function(child, x, y, w, h)
-		-- box
+		if child.bar_show then
+			local font = child.font
+			local fh = font:getHeight()
+			local fw = font:getWidth(child.text:sub(1, child.cur_pos))
+			love.graphics.line( x + fw, y + 4, x + fw, y + fh - 2)
+		end
 	end,
 	[8] = function(child, x, y, w, h)
 		if child.video and child.playing then
@@ -756,6 +840,7 @@ local draw_handler = function(child)
 	drawtypes[band(type,video)](child,x,y,w,h)
 	drawtypes[band(type,image)](child,x,y,w,h)
 	drawtypes[band(type,text)](child,x,y,w,h)
+	drawtypes[band(type,box)](child,x,y,w,h)
 	
 	if child.__variables.clip[1] then
 		love.graphics.setScissor() -- Remove the scissor
