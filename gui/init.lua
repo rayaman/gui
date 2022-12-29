@@ -10,7 +10,7 @@ local band, bor = bit.band, bit.bor
 local cursor_hand = love.mouse.getSystemCursor("hand")
 local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
-local frame, image, text, box, video = 0, 1, 2, 4, 8
+local frame, image, text, box, video, anim = 0, 1, 2, 4, 8, 16
 local global_drag
 local object_focus = gui
 
@@ -848,7 +848,7 @@ end
 
 -- Draw Function
 
---local label, image, text, button, box, video
+--local label, image, text, button, box, video, animation (spritesheet)
 local drawtypes = {
 	[0] = function(child, x, y, w, h) end,
 	[1] = function(child, x, y, w, h)
@@ -892,6 +892,9 @@ local drawtypes = {
 				love.graphics.draw(child.video,child.quad,x,y,rad(child.rotation),w/child.videoWidth,h/child.videoHeigth)
 			end
 		end
+	end,
+	[16] = function(child, x, y, w, h)
+		--
 	end,
 }
 
