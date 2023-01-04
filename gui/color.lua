@@ -1679,6 +1679,7 @@ color.indexColor("electric_lime","a8ff04")
 color.indexColor("dust","b2996e")
 color.indexColor("dark_pastel_green","56ae57")
 color.indexColor("cloudy_blue","acc2d9")
+color.indexColor("highlighter_blue","30C5FF")
 for i=0,255 do
 	color.indexColor("gray"..i,i,i,i)
 end

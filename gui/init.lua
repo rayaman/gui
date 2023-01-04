@@ -155,6 +155,14 @@ gui.HotKeys.OnRedo 		= gui:SetHotKey({"lctrl","y"})
 
 -- Utils
 
+function gui:getObjectFocus()
+	return object_focus
+end
+
+function gui:hasType(t)
+	return band(object_focus.type, t) == t
+end
+
 function gui:move(x,y)
 	self.dualDim.offset.pos.x = self.dualDim.offset.pos.x + x
 	self.dualDim.offset.pos.y = self.dualDim.offset.pos.y + y
@@ -355,6 +363,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.OnPressedOuter = multi:newConnection()
 	c.OnReleased = multi:newConnection()
 	c.OnReleasedOuter = multi:newConnection()
+	c.OnReleasedOther = multi:newConnection()
 
 	c.OnDragStart = multi:newConnection()
 	c.OnDragging = multi:newConnection()
@@ -372,7 +381,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 
 	gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
 		if c:canPress(x,y) then
-			c.OnMoved:Fire(c,x, y, dx, dy, istouch)
+			c.OnMoved:Fire(c, x, y, dx, dy, istouch)
 			entered = true
 			c.OnEnter:Fire(c, x, y)
 			if dragging then
@@ -387,8 +396,10 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
 		if c:canPress(x, y) then
 			c.OnReleased:Fire(c, x, y, dx, dy, istouch, presses)
-		else
+		elseif pressed then
 			c.OnReleasedOuter:Fire(c, x, y, button, istouch, presses)
+		else
+			c.OnReleasedOther:Fire(c, x, y, button, istouch, presses)
 		end
 		pressed = false
 		if dragging and button == dragbutton then
@@ -636,11 +647,23 @@ end
 local cur = love.mouse.getCursor()
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
+	c.doSelection = false
 
 	c.OnReturn = multi:newConnection():fastMode()
 
 	c.cur_pos = 0
 	c.adjust = 0
+	c.selection = {0,0}
+
+	function c:HasSelection()
+		return c.selection[1] ~= 0 or c.selection[2] ~= 0
+	end
+
+	function c:getSelectedText()
+		local sta, sto = c.selection[1], c.selection[2]
+		if sta > sto then sta, sto = sto, sta end
+		return c.text:sub(sta,sto)
+	end
 
 	c.OnEnter(function()
 		love.mouse.setCursor(love.mouse.getSystemCursor("ibeam"))
@@ -653,6 +676,25 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	c.OnPressed(function(c, x, y, dx, dy, istouch)
 		object_focus.bar_show = true
 		c.cur_pos = getTextPosition(c.text, c, c:getLocalCords(x, y))
+		c.selection[1] = c.cur_pos
+		c.doSelection = true
+	end)
+
+	c.OnMoved(function(c, x, y, dx, dy, istouch)
+		if c.doSelection then
+			c.selection[2] = getTextPosition(c.text, c, c:getLocalCords(x, y))
+		end
+	end); -- Needed to keep next line from being treated like a function call
+	
+	-- Connect to both events
+	(c.OnReleased + c.OnReleasedOuter)(function(c, x, y, dx, dy, istouch)
+		c.doSelection = false
+	end);
+
+	-- ReleasedOther is different than ReleasedOuter (Other/Outer)
+	(c.OnReleasedOther + c.OnPressedOuter)(function()
+		c.doSelection = false
+		c.selection = {0, 0}
 	end)
 
 	c.OnPressedOuter(function()
@@ -665,7 +707,7 @@ end
 updater:newThread("Textbox Handler", function()
 	while true do
 		-- Do nothing if we aren't dealing with a textbox
-		thread.hold(function() return band(object_focus.type, box) == box end)
+		thread.hold(function() return object_focus:hasType(box) end)
 		local ref = object_focus
 		ref.bar_show = true
 		thread.sleep(.5)
@@ -686,8 +728,14 @@ gui.Events.OnObjectFocusChanged(function(prev, new)
 	--
 end)
 
+gui.HotKeys.OnSelectAll(function()
+	if object_focus:hasType(box) then
+		object_focus.selection = {1, #object_focus.text}
+	end
+end)
+
 gui.Events.OnTextInputed(function(text)
-	if band(object_focus.type, box) == box then
+	if object_focus:hasType(box) then
 		object_focus.text = insert(object_focus.text, object_focus.cur_pos, text)
 		object_focus.cur_pos = object_focus.cur_pos + 1
 	end
@@ -695,7 +743,7 @@ end)
 
 gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
 	-- Don't process if we aren't dealing with a textbox
-	if band(object_focus.type, box) ~= box then return end
+	if not object_focus:hasType(box) then return end
 	if key == "left" then
 		object_focus.cur_pos = object_focus.cur_pos - 1
 		object_focus.bar_show = true
@@ -881,6 +929,17 @@ local drawtypes = {
 			local fh = font:getHeight()
 			local fw = font:getWidth(child.text:sub(1, child.cur_pos))
 			love.graphics.line(child.textOffsetX + child.adjust + x + fw, y + 4, child.textOffsetX + child.adjust + x + fw, y + fh - 2)
+		end
+		if child:HasSelection() then
+			local blue = color.highlighter_blue
+			local start, stop = child.selection[1], child.selection[2]
+			if start > stop then
+				start, stop = stop, start
+			end
+			local x1, y1 = child.font:getWidth(child.text:sub(1, start-1)), 0
+			local x2, y2 = child.font:getWidth(child.text:sub(1, stop)), h
+			love.graphics.setColor(blue[1],blue[2],blue[3],.5)
+			love.graphics.rectangle("fill", x + x1 + child.adjust, y + y1, x2 - x1, y2 - y1)
 		end
 	end,
 	[8] = function(child, x, y, w, h)
