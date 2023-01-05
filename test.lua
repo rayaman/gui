@@ -10,3 +10,4 @@ conn2:Fire()
 -- Looks like this is trigering a response. It shouldn't. We need to account for this
 conn1:Fire()
 conn1:Fire()
+conn2:Fire()

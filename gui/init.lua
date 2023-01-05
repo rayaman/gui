@@ -616,8 +616,7 @@ end
 
 -- local val used when drawing
 
-local function getTextPosition(text, self, mx, my)
-
+local function getTextPosition(text, self, mx, my, exact)
 	-- Initialize variables
 	local pos = 0
 	local font = love.graphics.getFont()
@@ -632,7 +631,7 @@ local function getTextPosition(text, self, mx, my)
 		width = width + _w
 
 		if not(mx > x + w or mx < x or my > y + h or my < y) then
-			if _w - (width - (mx - math.floor(self.adjust + self.textOffsetX))) < _w/2  and i >= 1 then
+			if not(exact) and (_w - (width - (mx - math.floor(self.adjust + self.textOffsetX))) < _w/2  and i >= 1) then
 				return i - 1
 			else
 				return i
@@ -656,13 +655,27 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	c.selection = {0,0}
 
 	function c:HasSelection()
-		return c.selection[1] ~= 0 or c.selection[2] ~= 0
+		return c.selection[1] ~= 0 and c.selection[2] ~= 0
 	end
 
-	function c:getSelectedText()
+	function c:GetSelection()
+		local start, stop = c.selection[1], c.selection[2]
+		if start > stop then
+			start, stop = stop, start
+		end
+		return start, stop
+	end
+
+	function c:GetSelectedText()
+		if not c:HasSelection() then return "" end
 		local sta, sto = c.selection[1], c.selection[2]
 		if sta > sto then sta, sto = sto, sta end
 		return c.text:sub(sta,sto)
+	end
+
+	function c:ClearSelection()
+		c.doSelection = false
+		c.selection = {0, 0}
 	end
 
 	c.OnEnter(function()
@@ -682,7 +695,8 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 
 	c.OnMoved(function(c, x, y, dx, dy, istouch)
 		if c.doSelection then
-			c.selection[2] = getTextPosition(c.text, c, c:getLocalCords(x, y))
+			local xx, yy = c:getLocalCords(x, y)
+			c.selection[2] = getTextPosition(c.text, c, xx, yy, true)
 		end
 	end); -- Needed to keep next line from being treated like a function call
 	
@@ -716,12 +730,39 @@ updater:newThread("Textbox Handler", function()
 	end
 end)
 
-local function insert(text, pos, n_text)
-	return text:sub(1,pos) .. n_text .. text:sub(pos+1,-1)
+local function insert(obj, n_text)
+	if obj:HasSelection() then
+		local start, stop = obj:GetSelection()
+		obj.text = obj.text:sub(1, start - 1) .. n_text .. obj.text:sub(stop + 1, -1)
+		obj:ClearSelection()
+		obj.cur_pos = start
+		if #n_text > 1 then
+			obj.cur_pos = start + #n_text
+		end
+	else
+		obj.text = obj.text:sub(1, obj.cur_pos) .. n_text .. obj.text:sub(obj.cur_pos + 1,-1)
+		obj.cur_pos = obj.cur_pos + 1
+		if #n_text > 1 then
+			obj.cur_pos = obj.cur_pos + #n_text
+		end
+	end
 end
 
-local function delete(text, pos)
-	return text:sub(1,pos-1) .. text:sub(pos+1,-1)
+local function delete(obj, cmd)
+	if obj:HasSelection() then
+		local start, stop = obj:GetSelection()
+		obj.text = obj.text:sub(1, start - 1) .. obj.text:sub(stop + 1, -1)
+		obj:ClearSelection()
+		obj.cur_pos = start - 1
+	else
+		if cmd == "delete" then
+			obj.text = obj.text:sub(1, obj.cur_pos) .. obj.text:sub(obj.cur_pos + 2, -1)
+		else
+			obj.text = obj.text:sub(1, obj.cur_pos - 1) .. obj.text:sub(obj.cur_pos + 1, -1)
+			object_focus.cur_pos = object_focus.cur_pos - 1
+			if object_focus.cur_pos == 0 then object_focus.cur_pos = 1 end
+		end
+	end
 end
 
 gui.Events.OnObjectFocusChanged(function(prev, new)
@@ -736,8 +777,19 @@ end)
 
 gui.Events.OnTextInputed(function(text)
 	if object_focus:hasType(box) then
-		object_focus.text = insert(object_focus.text, object_focus.cur_pos, text)
-		object_focus.cur_pos = object_focus.cur_pos + 1
+		insert(object_focus, text)
+	end
+end)
+
+gui.HotKeys.OnCopy(function()
+	if object_focus:hasType(box) then
+		love.system.setClipboardText(object_focus:GetSelectedText())
+	end
+end)
+
+gui.HotKeys.OnPaste(function()
+	if object_focus:hasType(box) then
+		insert(object_focus, love.system.getClipboardText())
 	end
 end)
 
@@ -753,10 +805,9 @@ gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
 	elseif key == "return" then
 		object_focus.OnReturn:Fire(object_focus, object_focus.text)
 	elseif key == "backspace" then
-		object_focus.text = delete(object_focus.text, object_focus.cur_pos)
-		object_focus.cur_pos = object_focus.cur_pos - 1
+		delete(object_focus, "backspace")
 	elseif key == "delete" then
-		object_focus.text = delete(object_focus.text, object_focus.cur_pos + 1)
+		delete(object_focus, "delete")
 	end
 end)
 
