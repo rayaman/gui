@@ -143,14 +143,17 @@ gui.HotKeys.OnCopy		= gui:SetHotKey({"lctrl","c"})
 gui.HotKeys.OnPaste		= gui:SetHotKey({"lctrl","v"})
 						+ gui:SetHotKey({"rctrl","v"})
 
-gui.HotKeys.OnUndo		= gui:SetHotKey({"lctrl","z"}) 
+gui.HotKeys.OnCut		= gui:SetHotKey({"lctrl","x"})
+						+ gui:SetHotKey({"rctrl","x"})
+
+gui.HotKeys.OnUndo		= gui:SetHotKey({"lctrl","z"})
 						+ gui:SetHotKey({"rctrl","z"})
 
-gui.HotKeys.OnRedo 		= gui:SetHotKey({"lctrl","y"}) 
+gui.HotKeys.OnRedo 		= gui:SetHotKey({"lctrl","y"})
 						+ gui:SetHotKey({"rctrl","y"})
-						+ gui:SetHotKey({"lctrl", "lshift", "z"}) 
-						+ gui:SetHotKey({"rctrl", "lshift", "z"}) 
-						+ gui:SetHotKey({"lctrl", "rshift", "z"}) 
+						+ gui:SetHotKey({"lctrl", "lshift", "z"})
+						+ gui:SetHotKey({"rctrl", "lshift", "z"})
+						+ gui:SetHotKey({"lctrl", "rshift", "z"})
 						+ gui:SetHotKey({"rctrl", "rshift", "z"})
 
 -- Utils
@@ -317,12 +320,11 @@ end
 
 function gui:isBeingCovered(mx,my)
 	local children = gui:getAllChildren()
-	local start = false
-	for i=#children, 1, -1 do
-		if children[i]:canPress(mx,my) and not(children[i] == self) then
-			return true
-		elseif children[i] == self then
+	for i = #children, 1, -1 do
+		if children[i] == self then
 			return false
+		elseif children[i]:canPress(mx,my) and not(children[i] == self) then
+			return true
 		end
 	end
 	return false
@@ -597,11 +599,13 @@ end
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
 
-	c.OnEnter(function()
+	c.OnEnter(function(c, x, y, dx, dy, istouch)
+		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(cursor_hand)
 	end)
 
-	c.OnExit(function()
+	c.OnExit(function(c, x, y, dx, dy, istouch)
+		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor()
 	end)
 
@@ -678,11 +682,13 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 		c.selection = {0, 0}
 	end
 
-	c.OnEnter(function()
+	c.OnEnter(function(c, x, y, dx, dy, istouch)
+		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(love.mouse.getSystemCursor("ibeam"))
 	end)
 
-	c.OnExit(function()
+	c.OnExit(function(c, x, y, dx, dy, istouch)
+		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(cur)
 	end)
 
@@ -793,6 +799,13 @@ gui.HotKeys.OnPaste(function()
 	end
 end)
 
+gui.HotKeys.OnCut(function()
+	if object_focus:hasType(box) and object_focus:HasSelection() then
+		love.system.setClipboardText(object_focus:GetSelectedText())
+		delete(object_focus, "backspace")
+	end
+end)
+
 gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
 	-- Don't process if we aren't dealing with a textbox
 	if not object_focus:hasType(box) then return end
@@ -847,11 +860,13 @@ function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
 	c:setImage(source)
 
-	c.OnEnter(function()
+	c.OnEnter(function(c, x, y, dx, dy, istouch)
+		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(cursor_hand)
 	end)
 
-	c.OnExit(function()
+	c.OnExit(function(c, x, y, dx, dy, istouch)
+		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor()
 	end)
 
@@ -1041,6 +1056,7 @@ local draw_handler = function(child)
 	love.graphics.rectangle("fill", x, y, w, h--[[, rx, ry, segments]])
 	love.graphics.setColor(bbg[1],bbg[2],bbg[3],vis)
 	love.graphics.rectangle("line", x, y, w, h--[[, rx, ry, segments]])
+
 	-- Start object specific stuff
 	drawtypes[band(type,video)](child,x,y,w,h)
 	drawtypes[band(type,image)](child,x,y,w,h)
