@@ -344,6 +344,14 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local centering = false
 	local dragbutton = 2
 	local draggable = false
+	local hierarchy = false
+
+	local function testHierarchy(c, x, y, button, istouch, presses)
+		if hierarchy then
+			return not(global_drag or c:isBeingCovered(x, y))
+		end
+		return true
+	end
 
 	setmetatable(c, gui)
 	c.__variables = {
@@ -356,25 +364,25 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.children = {}
 	c.visible = true
 	c.visibility = 1
-	c.color = {.6,.6,.6}
+	c.color = {.6, .6, .6}
 	c.borderColor = color.black
 	c.rotation = 0
 	c.maxMouseButtons = 5
 
-	c.OnPressed = multi:newConnection()
+	c.OnPressed = testHierarchy .. multi:newConnection()
 	c.OnPressedOuter = multi:newConnection()
-	c.OnReleased = multi:newConnection()
-	c.OnReleasedOuter = multi:newConnection()
+	c.OnReleased = testHierarchy .. multi:newConnection()
+	c.OnReleasedOuter =  multi:newConnection()
 	c.OnReleasedOther = multi:newConnection()
 
 	c.OnDragStart = multi:newConnection()
 	c.OnDragging = multi:newConnection()
 	c.OnDragEnd = multi:newConnection()
 
-	c.OnEnter = multi:newConnection()
-	c.OnExit = multi:newConnection()
+	c.OnEnter = testHierarchy .. multi:newConnection()
+	c.OnExit = testHierarchy .. multi:newConnection()
 
-	c.OnMoved = multi:newConnection()
+	c.OnMoved = testHierarchy .. multi:newConnection()
 
 	local dragging = false
 	local entered = false
@@ -384,8 +392,10 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
 		if c:canPress(x,y) then
 			c.OnMoved:Fire(c, x, y, dx, dy, istouch)
-			entered = true
-			c.OnEnter:Fire(c, x, y)
+			if entered == false then
+				c.OnEnter:Fire(c, x, y)
+				entered = true
+			end
 			if dragging then
 				c.OnDragging:Fire(c, dx, dy, x, y, istouch)
 			end
@@ -431,6 +441,10 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 			c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
 		end
 	end)
+
+	function c:respectHierarchy(bool)
+		hierarchy = bool
+	end
 
 	function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
 		if type(self)=="function" then func = self end
@@ -479,6 +493,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 		centering = true
 		centerthread()
 	end
+
 	-- Add to the parents children table
 	table.insert(self.children,c)
 	return c
@@ -516,7 +531,7 @@ end
 
 -- Texts
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
-	local c = self:newBase(text + typ,x, y, w, h, sx, sy, sw, sh)
+	local c = self:newBase(text + typ, x, y, w, h, sx, sy, sw, sh)
 	c.text = txt
 	c.align = gui.ALLIGN_LEFT
 	c.textScaleX = 1
@@ -529,6 +544,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	c.font = love.graphics.newFont(12)
 	c.textColor = color.black
 	c.OnFontUpdated = multi:newConnection()
+
 	function c:calculateFontOffset()
 		local width, height = floor(w+w/4), floor(h+h/4)
 		local canvas = love.graphics.newCanvas(width, height)
@@ -551,6 +567,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		end
 		return top-h/8, bottom-h/8
 	end
+
 	function c:setFont(font,size)
 		if type(font)=="string" then
 			self.fontFile = font
@@ -560,6 +577,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		end
 		self.OnFontUpdated:Fire(self)
 	end
+
 	function c:fitFont(n)
 		local font
 		if self.fontFile then
@@ -598,14 +616,13 @@ end
 
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+	c:respectHierarchy(true)
 
 	c.OnEnter(function(c, x, y, dx, dy, istouch)
-		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(cursor_hand)
 	end)
 
 	c.OnExit(function(c, x, y, dx, dy, istouch)
-		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor()
 	end)
 
@@ -650,6 +667,7 @@ end
 local cur = love.mouse.getCursor()
 function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
+	c:respectHierarchy(true)
 	c.doSelection = false
 
 	c.OnReturn = multi:newConnection():fastMode()
@@ -683,12 +701,10 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	end
 
 	c.OnEnter(function(c, x, y, dx, dy, istouch)
-		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(love.mouse.getSystemCursor("ibeam"))
 	end)
 
 	c.OnExit(function(c, x, y, dx, dy, istouch)
-		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(cur)
 	end)
 
@@ -858,15 +874,14 @@ end
 
 function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
+	c:respectHierarchy(true)
 	c:setImage(source)
 
 	c.OnEnter(function(c, x, y, dx, dy, istouch)
-		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor(cursor_hand)
 	end)
 
 	c.OnExit(function(c, x, y, dx, dy, istouch)
-		if global_drag or c:isBeingCovered(x, y) then return end
 		love.mouse.setCursor()
 	end)
 
