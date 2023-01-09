@@ -10,7 +10,7 @@ local band, bor = bit.band, bit.bor
 local cursor_hand = love.mouse.getSystemCursor("hand")
 local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, math.floor,math.ceil
-local frame, image, text, box, video, anim = 0, 1, 2, 4, 8, 16
+local frame, image, text, box, video, button, anim = 0, 1, 2, 4, 8, 16, 32
 local global_drag
 local object_focus = gui
 
@@ -44,6 +44,9 @@ gui.Events.OnWheelMoved = multi:newConnection():fastMode()
 gui.Events.OnTouchMoved = multi:newConnection():fastMode()
 gui.Events.OnTouchPressed = multi:newConnection():fastMode()
 gui.Events.OnTouchReleased = multi:newConnection():fastMode()
+
+-- Virtual gui init
+gui.virtual = {}
 
 -- Internal Connections
 gui.Events.OnObjectFocusChanged = multi:newConnection():fastMode()
@@ -232,11 +235,12 @@ function gui:getAbsolutes() -- returns x, y, w, h
 		(self.parent.h*self.dualDim.scale.size.y)+self.dualDim.offset.size.y
 end
 
-function gui:getAllChildren()
+function gui:getAllChildren(callback)
 	local Stuff = {}
 	function Seek(Items)
 		for i=1,#Items do
 			if Items[i].visible==true then
+				if callback then callback(Items[i]) end
 				table.insert(Stuff,Items[i])
 				local NItems = Items[i]:getChildren()
 				if NItems ~= nil then
@@ -248,6 +252,7 @@ function gui:getAllChildren()
 	local Objs = self:getChildren()
 	for i=1,#Objs do
 		if Objs[i].visible==true then
+			if callback then callback(Objs[i]) end
 			table.insert(Stuff, Objs[i])
 			local Items = Objs[i]:getChildren()
 			if Items ~= nil then
@@ -335,8 +340,101 @@ function gui:getLocalCords(mx, my)
 	return mx - x, my - y
 end
 
+function gui:setParent(parent)
+	local temp = self.parent:getChildren()
+	for i = 1, #temp do
+		if temp[i] == self then
+			table.remove(self.parent.children, i)
+			break
+		end
+	end
+	table.insert(parent.children, self)
+	self.parent = parent
+end
+
+local function processDo(ref)
+	ref.Do[1]()
+end
+
+function gui:clone(opt)
+	--[[
+		{
+			copyTo: Who to set the parent to
+			connections: Do we copy connections? (true/false)
+		}
+	]] 
+	-- DO = {[[setImage]], c.image or IMAGE}
+	-- Connections are used greatly throughout do we copy those
+	local temp
+	local u = self:getUniques()
+	if self.type == frame then
+		temp = gui:newFrame(self:getDualDim())
+	elseif self.type == text + box then
+		temp = gui:newTextBox(self.text, self:getDualDim())
+	elseif self.type == text + button then
+		temp = gui:newTextButton(self.text, self:getDualDim())
+	elseif self.type == text then
+		temp = gui:newTextLabel(self.text, self:getDualDim())
+	elseif self.type == image + button then
+		temp = gui:newImageButton(u.DO[2], self:getDualDim())
+	elseif self.type == image then
+		print(u.DO[2])
+		temp = gui:newImageLabel(u.DO[2], self:getDualDim())
+	else -- We are dealing with a complex object
+		temp = processDo(u)
+	end
+
+	for i, v in pairs(u) do
+		temp[i] = v
+	end
+
+	local conn
+	if opt then
+		temp:setParent(opt.copyTo or gui.virtual)
+		if opt.connections then
+			conn = true
+			for i, v in pairs(self) do
+				if v.Type == "connector" then
+					-- Add the 2 connections together, inheret the old connections while allowing new ones to not link
+					temp[i] = temp[i] + v
+				end
+			end
+		end
+	end
+
+	-- This recursively clones and sets the parent to the temp
+	for i, v in pairs(self:getChildren()) do
+		v:clone({copyTo = temp, connections = conn})
+	end
+
+	return temp
+end
+
+function gui:isActive()
+	return self.active and not(self:isDescendantOf(gui.virtual))
+end
+
+-- Base get uniques
+function gui:getUniques(tab)
+	local base = {
+		active = self.active,
+		visible = self.visible,
+		visibility = self.visibility,
+		color = self.color,
+		borderColor = self.borderColor,
+		rotation = self.rotation,
+	}
+
+	if tab then
+		for i, v in pairs(tab) do
+			base[i] = tab[i]
+		end
+	end
+	return base
+end
+
 -- Base Library
-function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
+function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh, virtual)
 	local c = {}
 	local buildBackBetter
 	local centerX = false
@@ -358,7 +456,6 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 		clip = {false,0,0,0,0}
 	}
 	c.active = true
-	c.parent = self
 	c.type = typ
 	c.dualDim = self:newDualDim(x, y, w, h, sx, sy, sw, sh)
 	c.children = {}
@@ -367,7 +464,6 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	c.color = {.6, .6, .6}
 	c.borderColor = color.black
 	c.rotation = 0
-	c.maxMouseButtons = 5
 
 	c.OnPressed = testHierarchy .. multi:newConnection()
 	c.OnPressedOuter = multi:newConnection()
@@ -390,6 +486,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local pressed = false
 
 	gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+		if not c:isActive() then return end
 		if c:canPress(x,y) then
 			c.OnMoved:Fire(c, x, y, dx, dy, istouch)
 			if entered == false then
@@ -406,6 +503,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	end)
 
 	gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+		if not c:isActive() then return end
 		if c:canPress(x, y) then
 			c.OnReleased:Fire(c, x, y, dx, dy, istouch, presses)
 		elseif pressed then
@@ -422,6 +520,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	end)
 
 	gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+		if not c:isActive() then return end
 		if c:canPress(x,y) then
 			c.OnPressed:Fire(c,x, y, dx, dy, istouch)
 			pressed = true
@@ -495,7 +594,13 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh)
 	end
 
 	-- Add to the parents children table
-	table.insert(self.children,c)
+	if virtual then
+		c.parent = gui.virtual
+		table.insert(gui.virtual.children, c)
+	else
+		c.parent = self
+		table.insert(self.children, c)
+	end
 	return c
 end
 
@@ -522,11 +627,18 @@ function gui:newDualDim(x, y, w, h, sx, sy, sw, sh)
 	return dd
 end
 
+function gui:getDualDim()
+	local dd = self.dualDim
+	return dd.offset.pos.x, dd.offset.pos.y, dd.offset.size.x, dd.offset.size.y, dd.scale.pos.x, dd.scale.pos.y, dd.scale.size.x, dd.scale.size.y
+end
+
 -- Frames
 function gui:newFrame(x, y, w, h, sx, sy, sw, sh)
-	local c = self:newBase(frame, x, y, w, h, sx, sy, sw, sh)
+	return self:newBase(frame, x, y, w, h, sx, sy, sw, sh)
+end
 
-	return c
+function gui:newVirtualFrame(x, y, w, h, sx, sy, sw, sh)
+	return self:newBase(frame, x, y, w, h, sx, sy, sw, sh, true)
 end
 
 -- Texts
@@ -611,6 +723,21 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		self.OnFontUpdated:Fire(self)
 		return s - (2+(n or 0))
 	end
+	function c:getUniques()
+		return gui.getUniques(c, {
+			text = c.text,
+			align = c.align,
+			textScaleX = c.textScaleX,
+			textScaleY = c.textScaleY,
+			textOffsetX = c.textOffsetX,
+			textOffsetY = c.textOffsetY,
+			textShearingFactorX = c.textShearingFactorX,
+			textShearingFactorY = c.textShearingFactorY,
+			textVisibility = c.textVisibility,
+			font = c.font,
+			textColor = c.textColor,
+		})
+	end
 	return c
 end
 
@@ -630,9 +757,7 @@ function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
-	local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
-
-	return c
+	return self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
 end
 
 -- local val used when drawing
@@ -675,6 +800,14 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	c.cur_pos = 0
 	c.adjust = 0
 	c.selection = {0,0}
+
+	function c:getUniques()
+		return gui.getUniques(c, {
+			doSelection = c.doSelection,
+			cur_pos = c.cur_pos,
+			adjust = c.adjust,
+		})
+	end
 
 	function c:HasSelection()
 		return c.selection[1] ~= 0 and c.selection[2] ~= 0
@@ -845,7 +978,15 @@ function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(image + typ,x, y, w, h, sx, sy, sw, sh)
 	c.color = color.white
 	c.visibility = 0
+	local IMAGE
+	function c:getUniques()
+		return gui.getUniques(c, {
+			-- Recreating the image object using set image is the way to go
+			DO = {[[setImage]], c.image or IMAGE}
+		})
+	end
 	function c:setImage(i)
+		IMAGE = i
 		drawer:newThread(function()
 			thread.yield()
 			local img
@@ -1100,6 +1241,19 @@ end)
 -- Drawing and Updating
 gui.draw = drawer.run
 gui.update = updater.run
+
+-- Virtual gui
+gui.virtual.type = frame
+gui.virtual.children = {}
+gui.virtual.dualDim = gui:newDualDim()
+gui.virtual.x = 0
+gui.virtual.y = 0
+
+local w, h = love.graphics.getDimensions()
+gui.virtual.dualDim.offset.size.x = w
+gui.virtual.dualDim.offset.size.y = h
+gui.virtual.w = w
+gui.virtual.h = h
 
 -- Root gui
 gui.type = frame
