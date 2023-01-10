@@ -378,7 +378,6 @@ function gui:clone(opt)
 	elseif self.type == image + button then
 		temp = gui:newImageButton(u.DO[2], self:getDualDim())
 	elseif self.type == image then
-		print(u.DO[2])
 		temp = gui:newImageLabel(u.DO[2], self:getDualDim())
 	else -- We are dealing with a complex object
 		temp = processDo(u)
@@ -387,7 +386,7 @@ function gui:clone(opt)
 	for i, v in pairs(u) do
 		temp[i] = v
 	end
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 	local conn
 	if opt then
 		temp:setParent(opt.copyTo or gui.virtual)
@@ -395,8 +394,12 @@ function gui:clone(opt)
 			conn = true
 			for i, v in pairs(self) do
 				if v.Type == "connector" then
-					-- Add the 2 connections together, inheret the old connections while allowing new ones to not link
-					temp[i] = temp[i] + v
+					-- We want to copy the connection functions from the original object and bind them to the new one
+					if not temp[i] then
+						-- Incase we are dealing with a custom object, create a connection if the custom objects unique declearation didn't
+						temp[i] = multi:newConnection()
+					end
+					temp[i]:Bind(v:getConnections())
 				end
 			end
 		end
