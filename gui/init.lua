@@ -479,7 +479,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh, virtual)
 	c.OnDragEnd = multi:newConnection()
 
 	c.OnEnter = testHierarchy .. multi:newConnection()
-	c.OnExit = testHierarchy .. multi:newConnection()
+	c.OnExit = multi:newConnection()
 
 	c.OnMoved = testHierarchy .. multi:newConnection()
 

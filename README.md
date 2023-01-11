@@ -8,6 +8,7 @@ Core Objects:
   - ~~Label~~ ✔️
   - ~~Box~~ ✔️
   - ~~Button~~ ✔️
+  - utf8 support with textbox (Forgot about this, will have to rework some things)
 - Image:
   - ~~Label~~ ✔️
   - ~~Button~~ ✔️
