@@ -50,9 +50,31 @@ function color.hsl(h, s, l)
 	end return (r+m)*255,(g+m)*255,(b+m)*255
 end
 
-function color.new(r, b, g, fmt)
+function color.isLight(r, g, b)
 	if type(r) == "string" then
-		r, b, g = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
+		r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
+	elseif type(r) == "table" then
+		r, g, b =  r[1], r[2], r[3]
+	end
+    return (r + g + b) / 3 >= 128
+end
+
+function color.rgbToHex(r, g, b)
+	if type(r) == "string" then
+		r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
+	elseif type(r) == "table" then
+		r, g, b =  r[1], r[2], r[3]
+	end
+
+	r, g, b = love.math.colorToBytes(r,g,b,0)
+
+	local rgb = (r * 0x10000) + (g * 0x100) + b
+    return string.format("%06x", rgb)
+  end
+
+function color.new(r, g, b, fmt)
+	if type(r) == "string" then
+		r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 	elseif type(r) == "table" then
 		return r
 	end
@@ -60,22 +82,22 @@ function color.new(r, b, g, fmt)
 	if fmt then
 		temp = {r,b,g}
 	else
-		temp = {love.math.colorFromBytes(r, b, g)}
+		temp = {love.math.colorFromBytes(r, g, b)}
 	end
 	setmetatable(temp, mt)
 	return temp
 end
 
 function color.random()
-	return color.new(math.random(0,10000)/10000, math.random(0,10000)/10000, math.random(0,10000)/10000, true)
+	return color.new(math.random(0,10000000)/10000000, math.random(0,10000000)/10000000, math.random(0,10000000)/10000000, true)
 end
 
-function color.indexColor(name,r,b,g)
+function color.indexColor(name,r, g, b)
 	if type(r)=="string" then
-		r,b,g=tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
+		r, g, b=tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 	end
 	-- Other ways to index a color
-	color[string.lower(name)]=color.new(r,b,g)
+	color[string.lower(name)]=color.new(r, g, b)
 	color[string.upper(name)]=color[string.lower(name)] -- These should link to the original and not be cloned
 	color[string.upper(string.sub(name,1,1))..string.lower(string.sub(name,2))]=color[string.lower(name)]
 end

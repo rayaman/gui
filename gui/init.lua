@@ -14,14 +14,25 @@ local frame, image, text, box, video, button, anim = 0, 1, 2, 4, 8, 16, 32
 local global_drag
 local object_focus = gui
 
+-- Types
+gui.TYPE_FRAME	= frame
+gui.TYPE_IMAGE	= image
+gui.TYPE_TEXT	= text
+gui.TYPE_BOX	= box
+gui.TYPE_VIDEO	= video
+gui.TYPE_BUTTON	= button
+gui.TYPE_ANIM	= anim
+
+--
+
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
 gui.MOUSE_SECONDARY = 2
 gui.MOUSE_MIDDLE = 3
 
-gui.ALLIGN_CENTER = 0
-gui.ALLIGN_LEFT = 1
-gui.ALLIGN_RIGHT = 2
+gui.ALIGN_CENTER = 0
+gui.ALIGN_LEFT = 1
+gui.ALIGN_RIGHT = 2
 
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
@@ -166,7 +177,7 @@ function gui:getObjectFocus()
 end
 
 function gui:hasType(t)
-	return band(object_focus.type, t) == t
+	return band(self.type, t) == t
 end
 
 function gui:move(x,y)
@@ -650,7 +661,8 @@ end
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(text + typ, x, y, w, h, sx, sy, sw, sh)
 	c.text = txt
-	c.align = gui.ALLIGN_LEFT
+	c.align = gui.ALIGN_LEFT
+	c.adjust = 0
 	c.textScaleX = 1
 	c.textScaleY = 1
 	c.textOffsetX = 0
@@ -748,7 +760,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
-	local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+	local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
 	c:respectHierarchy(true)
 
 	c.OnEnter(function(c, x, y, dx, dy, istouch)
@@ -804,7 +816,6 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	c.OnReturn = multi:newConnection():fastMode()
 
 	c.cur_pos = 0
-	c.adjust = 0
 	c.selection = {0,0}
 
 	function c:getUniques()
@@ -1140,12 +1151,12 @@ local drawtypes = {
 	[2] = function(child, x, y, w, h)
 		love.graphics.setColor(child.textColor[1],child.textColor[2],child.textColor[3],child.textVisibility)
 		love.graphics.setFont(child.font)
-		if child.align == gui.ALLIGN_LEFT then
+		if child.align == gui.ALIGN_LEFT then
 			child.adjust = 0
-		elseif child.align == gui.ALLIGN_CENTER then
+		elseif child.align == gui.ALIGN_CENTER then
 			local fw = child.font:getWidth(child.text)
 			child.adjust = (w-fw)/2
-		elseif child.align == gui.ALLIGN_RIGHT then
+		elseif child.align == gui.ALIGN_RIGHT then
 			local fw = child.font:getWidth(child.text)
 			child.adjust = w - fw - 4
 		end
