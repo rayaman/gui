@@ -124,7 +124,7 @@ updater:newThread("GUI Hotkey Manager",function()
 		end
 		thread.sleep(.001)
 	end
-end).OnError(print)
+end)
 
 function gui:SetHotKey(keys, conn)
 	has_hotkey = true
@@ -328,7 +328,7 @@ function gui:isBeingCovered(mx,my)
 	for i = #children, 1, -1 do
 		if children[i] == self then
 			return false
-		elseif children[i]:canPress(mx,my) and not(children[i] == self) then
+		elseif children[i]:canPress(mx,my) and not(children[i] == self) and not(children[i].ignore) then
 			return true
 		end
 	end
@@ -348,8 +348,10 @@ function gui:setParent(parent)
 			break
 		end
 	end
-	table.insert(parent.children, self)
-	self.parent = parent
+	if parent then
+		table.insert(parent.children, self)
+		self.parent = parent
+	end
 end
 
 local function processDo(ref)
@@ -710,7 +712,8 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 				return love.graphics.newFont(n)
 			end
 		end
-		local Font,width,height,text=self.Font,self.dualDim.offset.size.x,self.dualDim.offset.size.y,self.text
+		local x, y, width, height = self:getAbsolutes()
+		local Font, text = self.Font, self.text
 		local s = 3
 		Font = font(s)
 		while Font:getHeight()<height and Font:getWidth(text)<width do
@@ -1005,7 +1008,7 @@ function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 			self.imageHeigth = img:getHeight()
 			self.imageWidth = img:getWidth()
 			self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth, self.imageHeigth)
-		end).OnError(print)
+		end)
 	end
 	return c
 end
@@ -1251,6 +1254,7 @@ gui.virtual.children = {}
 gui.virtual.dualDim = gui:newDualDim()
 gui.virtual.x = 0
 gui.virtual.y = 0
+setmetatable(gui.virtual, gui)
 
 local w, h = love.graphics.getDimensions()
 gui.virtual.dualDim.offset.size.x = w

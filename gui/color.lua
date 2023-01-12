@@ -1,17 +1,3 @@
-local function HSL(h, s, l, a)
-	if s<=0 then return l,l,l,a end
-	h, s, l = h/256*6, s/255, l/255
-	local c = (1-math.abs(2*l-1))*s
-	local x = (1-math.abs(h%2-1))*c
-	local m,r,b,g = (l-.5*c), 0,0,0
-	if h < 1     then r,b,g = c,x,0
-	elseif h < 2 then r,b,g = x,c,0
-	elseif h < 3 then r,b,g = 0,c,x
-	elseif h < 4 then r,b,g = 0,x,c
-	elseif h < 5 then r,b,g = x,0,c
-	else              r,b,g = c,0,x
-	end return (r+m)*255,(g+m)*255,(b+m)*255,a
-end
 local color={}
 local mt = {
 	__add = function (c1,c2)
@@ -49,7 +35,27 @@ local mt = {
 	end
 }
 
+function color.hsl(h, s, l)
+	if s<=0 then return l,l,l end
+	h, s, l = h/256*6, s/255, l/255
+	local c = (1-math.abs(2*l-1))*s
+	local x = (1-math.abs(h%2-1))*c
+	local m,r,b,g = (l-.5*c), 0,0,0
+	if h < 1     then r,b,g = c,x,0
+	elseif h < 2 then r,b,g = x,c,0
+	elseif h < 3 then r,b,g = 0,c,x
+	elseif h < 4 then r,b,g = 0,x,c
+	elseif h < 5 then r,b,g = x,0,c
+	else              r,b,g = c,0,x
+	end return (r+m)*255,(g+m)*255,(b+m)*255
+end
+
 function color.new(r, b, g, fmt)
+	if type(r) == "string" then
+		r, b, g = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
+	elseif type(r) == "table" then
+		return r
+	end
 	local temp
 	if fmt then
 		temp = {r,b,g}
