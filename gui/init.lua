@@ -525,7 +525,7 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh, virtual)
 	gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
 		if not c:isActive() then return end
 		if c:canPress(x,y) then
-			c.OnPressed:Fire(c,x, y, dx, dy, istouch)
+			c.OnPressed:Fire(c, x, y, dx, dy, istouch)
 			pressed = true
 			
 			-- Only change and trigger the event if it is a different object
