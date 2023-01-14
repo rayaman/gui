@@ -1,7 +1,7 @@
 local utf8 = require("utf8")
 local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
-local color = require("gui.color")
+local color = require("gui.core.color")
 local gui = {}
 local updater = multi:newProcessor("UpdateManager",true)
 local drawer = multi:newProcessor("DrawManager",true)
@@ -13,6 +13,7 @@ local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad, 
 local frame, image, text, box, video, button, anim = 0, 1, 2, 4, 8, 16, 32
 local global_drag
 local object_focus = gui
+local first_loop = false
 
 -- Types
 gui.TYPE_FRAME	= frame
@@ -656,7 +657,7 @@ end
 function gui:newVirtualFrame(x, y, w, h, sx, sy, sw, sh)
 	return self:newBase(frame, x, y, w, h, sx, sy, sw, sh, true)
 end
-
+local testIMG
 -- Texts
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(text + typ, x, y, w, h, sx, sy, sw, sh)
@@ -673,28 +674,39 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	c.font = love.graphics.newFont(12)
 	c.textColor = color.black
 	c.OnFontUpdated = multi:newConnection()
-
-	function c:calculateFontOffset()
-		local width, height = floor(w+w/4), floor(h+h/4)
-		local canvas = love.graphics.newCanvas(width, height)
-		local top = height
+	
+	function c:calculateFontOffset(font)
+		local x, y, width, height = self:getAbsolutes()
+		local top = height+10
 		local bottom = 0
+		local canvas = love.graphics.newCanvas(width, height+10)
 		love.graphics.setCanvas(canvas)
+		love.graphics.clear( 0, 0, 0, .5, false, false)
 		love.graphics.setColor(1,1,1,1)
-		love.graphics.setFont(self.font)
-		love.graphics.printf(self.text, 0, h/8, self.dualDim.offset.size.x, "left", self.radians, self.textScaleX, self.textScaleY, 0, 0, self.textShearingFactorX, self.textShearingFactorY)
+		love.graphics.setFont(font)
+		love.graphics.printf(self.text, 0, 5, width, "left", self.rotation, self.textScaleX, self.textScaleY, 0, 0, self.textShearingFactorX, self.textShearingFactorY)
 		love.graphics.setCanvas()
-		local data = canvas:newImageData(nil, nil, 0, 0, width, height )
-		for x = 0, width-1 do
-			for y = 0, height-1 do
-				local r,g,b,a = data:getPixel(x,y)
-				if r==1 and g==1 and b==1 then
-					if y<top then top = y end
-					if y>bottom then bottom = y end
+		local data = canvas:newImageData()
+		testIMG:setDualDim(0, 0, width, height)
+		testIMG:setImage(data)
+		local f_top, f_bot = false, false
+		for yy = 0, height-1 do
+			for xx = 0, width-1 do
+				local r,g,b,a = data:getPixel(xx,yy)
+				if r~=0 or g~=0 or b~=0 then
+					if yy<top and not f_top then top = yy f_top = true end
 				end
 			end
 		end
-		return top-h/8, bottom-h/8
+		for yy = height-1, 0, -1 do
+			for xx = 0, width-1 do
+				local r,g,b,a = data:getPixel(xx,yy)
+				if r~=0 or g~=0 or b~=0 then
+					if yy>bottom and not f_bot then bottom = yy f_bot = false end
+				end
+			end
+		end
+		return top-10, bottom-10
 	end
 
 	function c:setFont(font,size)
@@ -721,7 +733,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 			end
 		else
 			font = function(n)
-				return love.graphics.newFont(n)
+				return love.graphics.setNewFont(n)
 			end
 		end
 		local x, y, width, height = self:getAbsolutes()
@@ -735,9 +747,16 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		Font = font(s - (2+(n or 0)))
 		Font:setFilter("linear","nearest",4)
 		self.font = Font
-		local h = (self.parent.dualDim.offset.size.y*self.dualDim.scale.size.y)+self.dualDim.offset.size.y
-		local top, bottom = self:calculateFontOffset()
-		self.textOffsetY = (h-bottom-top/2)/2
+		local top, bottom = self:calculateFontOffset(Font)
+		local fh = Font:getHeight()
+		local ch = floor((height - fh)/2)
+		local cch = height - (bottom + top)
+		--if cch < ch then
+			self.textOffsetY = cch/2
+		--else
+		--	self.textOffsetY = ch
+		--end
+		print(self.text, top, bottom, self.textOffsetY, height - (bottom + top))
 		self.OnFontUpdated:Fire(self)
 		return s - (2+(n or 0))
 	end
@@ -994,7 +1013,7 @@ end)
 function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 	local c = self:newBase(image + typ,x, y, w, h, sx, sy, sw, sh)
 	c.color = color.white
-	c.visibility = 0
+	--c.visibility = 0
 	local IMAGE
 	function c:getUniques()
 		return gui.getUniques(c, {
@@ -1003,23 +1022,43 @@ function gui:newImageBase(typ,x, y, w, h, sx, sy, sw, sh)
 		})
 	end
 	function c:setImage(i)
+		if i == nil then return end
 		IMAGE = i
-		drawer:newThread(function()
-			thread.yield()
-			local img
-			if type(i) == "userdata" and i:type() == "Image" then
-				img = i
-			elseif type(i) == "string" then
-				img = love.graphics.newImage(i)
-			end
-			local x, y, w, h = self:getAbsolutes()
-			self.imageColor = color.white
-			self.imageVisibility = 1
-			self.image = img
-			self.imageHeigth = img:getHeight()
-			self.imageWidth = img:getWidth()
-			self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth, self.imageHeigth)
-		end)
+		if not first_loop then 
+			-- Wait one cycle for things to load up
+			drawer:newThread(function()
+				thread.yield()
+				local img
+				if type(i) == "userdata" and i:type() == "Image" then
+					img = i
+				elseif type(i) == "userdata" and i:type() == "ImageData" then
+					img = love.graphics.newImage(i)
+				else
+					img = love.graphics.newImage(i)
+				end
+				local x, y, w, h = self:getAbsolutes()
+				self.imageColor = color.white
+				self.imageVisibility = 1
+				self.image = img
+				self.imageHeigth = img:getHeight()
+				self.imageWidth = img:getWidth()
+				self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth, self.imageHeigth)
+			end)
+			return
+		end
+		local img
+		if type(i) == "userdata" and i:type() == "Image" then
+			img = i
+		else
+			img = love.graphics.newImage(i)
+		end
+		local x, y, w, h = self:getAbsolutes()
+		self.imageColor = color.white
+		self.imageVisibility = 1
+		self.image = img
+		self.imageHeigth = img:getHeight()
+		self.imageWidth = img:getWidth()
+		self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth, self.imageHeigth)
 	end
 	return c
 end
@@ -1253,6 +1292,7 @@ drawer:newLoop(function()
 			draw_handler(child)
 		end
 	end
+	first_loop = true
 end)
 
 -- Drawing and Updating
@@ -1292,5 +1332,8 @@ gui.Events.OnResized(function(w,h)
 	gui.w = w
 	gui.h = h
 end)
+
+testIMG = gui:newImageLabel(nil,0,0,100,30)
+testIMG.color = color.Red
 
 return gui
