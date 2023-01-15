@@ -57,6 +57,10 @@ gui.Events.OnTouchMoved = multi:newConnection():fastMode()
 gui.Events.OnTouchPressed = multi:newConnection():fastMode()
 gui.Events.OnTouchReleased = multi:newConnection():fastMode()
 
+-- Non Love Events
+
+gui.Events.OnThemeChanged = multi:newConnection():fastMode()
+
 -- Virtual gui init
 gui.virtual = {}
 
@@ -675,26 +679,25 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 	c.textColor = color.black
 	c.OnFontUpdated = multi:newConnection()
 	
-	function c:calculateFontOffset(font)
+	function c:calculateFontOffset(font, adjust)
+		local adjust = adjust or 20
 		local x, y, width, height = self:getAbsolutes()
-		local top = height+10
+		local top = height + adjust
 		local bottom = 0
-		local canvas = love.graphics.newCanvas(width, height+10)
+		local canvas = love.graphics.newCanvas(width, height + adjust)
 		love.graphics.setCanvas(canvas)
 		love.graphics.clear( 0, 0, 0, .5, false, false)
 		love.graphics.setColor(1,1,1,1)
 		love.graphics.setFont(font)
-		love.graphics.printf(self.text, 0, 5, width, "left", self.rotation, self.textScaleX, self.textScaleY, 0, 0, self.textShearingFactorX, self.textShearingFactorY)
+		love.graphics.printf(self.text, 0, adjust/2, width, "left", self.rotation, self.textScaleX, self.textScaleY, 0, 0, self.textShearingFactorX, self.textShearingFactorY)
 		love.graphics.setCanvas()
 		local data = canvas:newImageData()
-		testIMG:setDualDim(0, 0, width, height)
-		testIMG:setImage(data)
 		local f_top, f_bot = false, false
 		for yy = 0, height-1 do
 			for xx = 0, width-1 do
 				local r,g,b,a = data:getPixel(xx,yy)
 				if r~=0 or g~=0 or b~=0 then
-					if yy<top and not f_top then top = yy f_top = true end
+					if yy<top and not f_top then top = yy f_top = true break end
 				end
 			end
 		end
@@ -702,11 +705,11 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 			for xx = 0, width-1 do
 				local r,g,b,a = data:getPixel(xx,yy)
 				if r~=0 or g~=0 or b~=0 then
-					if yy>bottom and not f_bot then bottom = yy f_bot = false end
+					if yy>bottom and not f_bot then bottom = yy f_bot = false break end
 				end
 			end
 		end
-		return top-10, bottom-10
+		return top - adjust, bottom - adjust
 	end
 
 	function c:setFont(font,size)
@@ -719,8 +722,10 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		self.OnFontUpdated:Fire(self)
 	end
 
-	function c:fitFont(n)
+	function c:fitFont(n, max)
+		local max = max or math.huge
 		local font
+		local isdefault = false
 		if self.fontFile then
 			if self.fontFile:match("ttf") then
 				font = function(n)
@@ -732,6 +737,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 				end
 			end
 		else
+			isdefault = true
 			font = function(n)
 				return love.graphics.setNewFont(n)
 			end
@@ -740,25 +746,21 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		local Font, text = self.Font, self.text
 		local s = 3
 		Font = font(s)
-		while Font:getHeight()<height and Font:getWidth(text)<width do
+		while height < max and Font:getHeight()<height and Font:getWidth(text)<width do
 			s = s + 1
 			Font = font(s)
 		end
-		Font = font(s - (2+(n or 0)))
+		Font = font(s - (4+(n or 0)))
 		Font:setFilter("linear","nearest",4)
 		self.font = Font
-		local top, bottom = self:calculateFontOffset(Font)
+		self.textOffsetY = 0
+		--if isdefault then return font(s - (4+(n or 0))) end
+		local top, bottom = self:calculateFontOffset(Font, 0)
 		local fh = Font:getHeight()
-		local ch = floor((height - fh)/2)
-		local cch = height - (bottom + top)
-		--if cch < ch then
-			self.textOffsetY = cch/2
-		--else
-		--	self.textOffsetY = ch
-		--end
-		print(self.text, top, bottom, self.textOffsetY, height - (bottom + top))
+		self.textOffsetY = floor(((height-bottom) - top)/2)--(height-(bottom - top))/2
+		print(self.text,top,bottom,self.textOffsetY)
 		self.OnFontUpdated:Fire(self)
-		return s - (2+(n or 0))
+		return s - (4+(n or 0))
 	end
 	function c:getUniques()
 		return gui.getUniques(c, {
@@ -1332,8 +1334,5 @@ gui.Events.OnResized(function(w,h)
 	gui.w = w
 	gui.h = h
 end)
-
-testIMG = gui:newImageLabel(nil,0,0,100,30)
-testIMG.color = color.Red
 
 return gui
