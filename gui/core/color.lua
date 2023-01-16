@@ -37,7 +37,7 @@ local mt = {
 
 function color.hsl(h, s, l)
 	if s<=0 then return l,l,l end
-	h, s, l = h/256*6, s/255, l/255
+	h, s, l = h/360*6, s/100, l/100
 	local c = (1-math.abs(2*l-1))*s
 	local x = (1-math.abs(h%2-1))*c
 	local m,r,b,g = (l-.5*c), 0,0,0
@@ -47,7 +47,20 @@ function color.hsl(h, s, l)
 	elseif h < 4 then r,b,g = 0,x,c
 	elseif h < 5 then r,b,g = x,0,c
 	else              r,b,g = c,0,x
-	end return (r+m)*255,(g+m)*255,(b+m)*255
+	end return (r+m)*255, (g+m)*255, (b+m)*255
+end
+
+min = math.min
+max = math.max
+abs = math.abs
+
+function color.hsv(h, s, v)
+    local k1 = v*(1-s)
+    local k2 = v - k1
+    local r = min (max (3*abs (((h      )/180)%2-1)-1, 0), 1)
+    local g = min (max (3*abs (((h  -120)/180)%2-1)-1, 0), 1)
+    local b = min (max (3*abs (((h  +120)/180)%2-1)-1, 0), 1)
+    return k1 + k2 * r, k1 + k2 * g, k1 + k2 * b
 end
 
 function color.isLight(r, g, b)
@@ -56,7 +69,16 @@ function color.isLight(r, g, b)
 	elseif type(r) == "table" then
 		r, g, b =  r[1], r[2], r[3]
 	end
-    return (r + g + b) / 3 >= 128
+    return (r + g + b) / 3 >= .5
+end
+
+function color.getAverageLightness(r, g, b)
+	if type(r) == "string" then
+		r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
+	elseif type(r) == "table" then
+		r, g, b =  r[1], r[2], r[3]
+	end
+    return (r + g + b) / 3
 end
 
 function color.rgbToHex(r, g, b)

@@ -3,32 +3,51 @@ local theme = {}
 local defaultFont = love.graphics.getFont()
 theme.__index = theme
 
-local function generate_harmonious_colors(num_colors)
+local function generate_harmonious_colors(num_colors, lightness)
     local base_hue = math.random(0, 360) -- random starting hue
     local colors = {}
     for i = 1, num_colors do
         local new_hue = (base_hue + (360 / num_colors) * i) % 360 -- offset hue by 1/n of the color wheel
-        table.insert(colors, color.new(color.hsl(new_hue, math.random(45, 110), math.random(30, 80))))
+        if lightness == "dark" then
+            table.insert(colors, color.new(color.hsl(new_hue, math.random(45, 55), math.random(30, 40))))
+        elseif lightness == "light" then
+            table.insert(colors, color.new(color.hsl(new_hue, math.random(45, 55), math.random(60, 80))))
+        else
+            table.insert(colors, color.new(color.hsl(new_hue, math.random(45, 55), math.random(30, 80))))
+        end
+            
     end
     return colors
 end
 
-function theme:random(seed)
+function theme:random(seed, lightness, rand)
     local seed = seed or math.random(0,9999999999)
     math.randomseed(seed)
-    local harmonious_colors = generate_harmonious_colors(3)
+    local harmonious_colors = generate_harmonious_colors(3, lightness)
     local t = theme:new(unpack(harmonious_colors))
-    if not color.isLight(t.colorPrimary) then
-        t.colorPrimaryText = color.lighten(t.colorPrimaryText, .5)
-        t.colorButtonNormal = color.lighten(t.colorButtonNormal, .2)
+
+    if lightness == "dark" then
+        t.colorPrimaryText = color.lighten(t.colorPrimaryText, .8)
+        t.colorButtonText = color.lighten(t.colorButtonText, .7)
+    elseif lightness == "light" then
+        t.colorPrimaryText = color.darken(t.colorPrimaryText, .8)
+        t.colorButtonText = color.darken(t.colorButtonText, .7)
     else
-        t.colorPrimaryText =  color.darken(t.colorPrimaryText, .3)
+        if color.getAverageLightness(t.colorPrimary)<.5 then
+            t.colorPrimaryText = color.lighten(t.colorPrimaryText, .5)
+            t.colorButtonNormal = color.lighten(t.colorButtonNormal, .2)
+        else
+            t.colorPrimaryText =  color.darken(t.colorPrimaryText, .3)
+        end
+
+        if color.getAverageLightness(t.colorPrimary)<.5 then
+            t.colorButtonText = color.lighten(t.colorButtonText, .5)
+        else
+            t.colorButtonText = color.darken(t.colorButtonText, .3)
+        end
     end
-    if not color.isLight(t.colorButtonNormal) then
-        t.colorButtonText = color.lighten(t.colorButtonText, .5)
-    else
-        t.colorButtonText = color.darken(t.colorButtonText, .3)
-    end
+    
+
     t.seed = seed
     return t
 end

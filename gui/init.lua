@@ -142,7 +142,7 @@ updater:newThread("GUI Hotkey Manager",function()
 	end
 end)
 
-function gui:SetHotKey(keys, conn)
+function gui:setHotKey(keys, conn)
 	has_hotkey = true
 	local conn = conn or multi:newConnection():fastMode()
 	table.insert(hot_keys, {Ref=self, Connection = conn, Keys = {unpack(keys)}})
@@ -153,27 +153,27 @@ end
 gui.HotKeys = {}
 
 -- Connections can be added together to create an OR logic to them, they can be multiplied together to create an AND logic to them
-gui.HotKeys.OnSelectAll	= gui:SetHotKey({"lctrl","a"})
-						+ gui:SetHotKey({"rctrl","a"})
+gui.HotKeys.OnSelectAll	= gui:setHotKey({"lctrl","a"})
+						+ gui:setHotKey({"rctrl","a"})
 
-gui.HotKeys.OnCopy		= gui:SetHotKey({"lctrl","c"})
-						+ gui:SetHotKey({"rctrl","c"})
+gui.HotKeys.OnCopy		= gui:setHotKey({"lctrl","c"})
+						+ gui:setHotKey({"rctrl","c"})
 
-gui.HotKeys.OnPaste		= gui:SetHotKey({"lctrl","v"})
-						+ gui:SetHotKey({"rctrl","v"})
+gui.HotKeys.OnPaste		= gui:setHotKey({"lctrl","v"})
+						+ gui:setHotKey({"rctrl","v"})
 
-gui.HotKeys.OnCut		= gui:SetHotKey({"lctrl","x"})
-						+ gui:SetHotKey({"rctrl","x"})
+gui.HotKeys.OnCut		= gui:setHotKey({"lctrl","x"})
+						+ gui:setHotKey({"rctrl","x"})
 
-gui.HotKeys.OnUndo		= gui:SetHotKey({"lctrl","z"})
-						+ gui:SetHotKey({"rctrl","z"})
+gui.HotKeys.OnUndo		= gui:setHotKey({"lctrl","z"})
+						+ gui:setHotKey({"rctrl","z"})
 
-gui.HotKeys.OnRedo 		= gui:SetHotKey({"lctrl","y"})
-						+ gui:SetHotKey({"rctrl","y"})
-						+ gui:SetHotKey({"lctrl", "lshift", "z"})
-						+ gui:SetHotKey({"rctrl", "lshift", "z"})
-						+ gui:SetHotKey({"lctrl", "rshift", "z"})
-						+ gui:SetHotKey({"rctrl", "rshift", "z"})
+gui.HotKeys.OnRedo 		= gui:setHotKey({"lctrl","y"})
+						+ gui:setHotKey({"rctrl","y"})
+						+ gui:setHotKey({"lctrl", "lshift", "z"})
+						+ gui:setHotKey({"rctrl", "lshift", "z"})
+						+ gui:setHotKey({"lctrl", "rshift", "z"})
+						+ gui:setHotKey({"rctrl", "rshift", "z"})
 
 -- Utils
 
@@ -251,32 +251,19 @@ function gui:getAbsolutes() -- returns x, y, w, h
 		(self.parent.h*self.dualDim.scale.size.y)+self.dualDim.offset.size.y
 end
 
-function gui:getAllChildren(callback)
-	local Stuff = {}
-	function Seek(Items)
-		for i=1,#Items do
-			if Items[i].visible==true then
-				if callback then callback(Items[i]) end
-				table.insert(Stuff,Items[i])
-				local NItems = Items[i]:getChildren()
-				if NItems ~= nil then
-					Seek(NItems)
-				end
+function gui:getAllChildren(vis)
+	local children = self:getChildren()
+	local allChildren = {}
+	for i, child in ipairs(children) do
+		if not(vis) and child.visible == true then
+			allChildren[#allChildren + 1] = child
+			local grandChildren = child:getAllChildren()
+			for j, grandChild in ipairs(grandChildren) do
+				allChildren[#allChildren + 1] = grandChild
 			end
 		end
-	end
-	local Objs = self:getChildren()
-	for i=1,#Objs do
-		if Objs[i].visible==true then
-			if callback then callback(Objs[i]) end
-			table.insert(Stuff, Objs[i])
-			local Items = Objs[i]:getChildren()
-			if Items ~= nil then
-				Seek(Items)
-			end
-		end
-	end
-	return Stuff
+    end
+    return allChildren
 end
 
 function gui:newThread(func)
@@ -562,6 +549,16 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh, virtual)
 		end
 	end)
 
+	function c:setRoundness(rx,ry,seg)
+		self.roundness = true
+		self.__rx, self.__ry, self.__segments = rx or 5, ry or 5, seg or 30
+	end
+
+	function c:setRoundnessDirection(hori, vert)
+		self.__rhori = hori
+		self.__rvert = vert
+	end
+
 	function c:respectHierarchy(bool)
 		hierarchy = bool
 	end
@@ -758,7 +755,6 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
 		local top, bottom = self:calculateFontOffset(Font, 0)
 		local fh = Font:getHeight()
 		self.textOffsetY = floor(((height-bottom) - top)/2)--(height-(bottom - top))/2
-		print(self.text,top,bottom,self.textOffsetY)
 		self.OnFontUpdated:Fire(self)
 		return s - (4+(n or 0))
 	end
@@ -1243,6 +1239,8 @@ local draw_handler = function(child)
 	local type = child.type
 	local vis = child.visibility
 	local x, y, w, h = child:getAbsolutes()
+	local roundness = child.roundness
+	local rx, ry, segments = child.__rx, child.__ry, child.__segments
 	child.x = x
 	child.y = y
 	child.w = w
@@ -1267,9 +1265,9 @@ local draw_handler = function(child)
 
 	-- Set color
 	love.graphics.setColor(bg[1],bg[2],bg[3],vis)
-	love.graphics.rectangle("fill", x, y, w, h--[[, rx, ry, segments]])
+	love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
 	love.graphics.setColor(bbg[1],bbg[2],bbg[3],vis)
-	love.graphics.rectangle("line", x, y, w, h--[[, rx, ry, segments]])
+	love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
 
 	-- Start object specific stuff
 	drawtypes[band(type,video)](child,x,y,w,h)
