@@ -37,35 +37,35 @@ gui.ALIGN_RIGHT = 2
 
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
-gui.Events.OnQuit = multi:newConnection():fastMode()
-gui.Events.OnDirectoryDropped = multi:newConnection():fastMode()
-gui.Events.OnDisplayRotated = multi:newConnection():fastMode()
-gui.Events.OnFilesDropped = multi:newConnection():fastMode()
-gui.Events.OnFocus = multi:newConnection():fastMode()
-gui.Events.OnMouseFocus = multi:newConnection():fastMode()
-gui.Events.OnResized = multi:newConnection():fastMode()
-gui.Events.OnVisible = multi:newConnection():fastMode()
-gui.Events.OnKeyPressed = multi:newConnection():fastMode()
-gui.Events.OnKeyReleased = multi:newConnection():fastMode()
-gui.Events.OnTextEdited = multi:newConnection():fastMode()
-gui.Events.OnTextInputed = multi:newConnection():fastMode()
-gui.Events.OnMouseMoved = multi:newConnection():fastMode()
-gui.Events.OnMousePressed = multi:newConnection():fastMode()
-gui.Events.OnMouseReleased = multi:newConnection():fastMode()
-gui.Events.OnWheelMoved = multi:newConnection():fastMode()
-gui.Events.OnTouchMoved = multi:newConnection():fastMode()
-gui.Events.OnTouchPressed = multi:newConnection():fastMode()
-gui.Events.OnTouchReleased = multi:newConnection():fastMode()
+gui.Events.OnQuit = multi:newConnection()
+gui.Events.OnDirectoryDropped = multi:newConnection()
+gui.Events.OnDisplayRotated = multi:newConnection()
+gui.Events.OnFilesDropped = multi:newConnection()
+gui.Events.OnFocus = multi:newConnection()
+gui.Events.OnMouseFocus = multi:newConnection()
+gui.Events.OnResized = multi:newConnection()
+gui.Events.OnVisible = multi:newConnection()
+gui.Events.OnKeyPressed = multi:newConnection()
+gui.Events.OnKeyReleased = multi:newConnection()
+gui.Events.OnTextEdited = multi:newConnection()
+gui.Events.OnTextInputed = multi:newConnection()
+gui.Events.OnMouseMoved = multi:newConnection()
+gui.Events.OnMousePressed = multi:newConnection()
+gui.Events.OnMouseReleased = multi:newConnection()
+gui.Events.OnWheelMoved = multi:newConnection()
+gui.Events.OnTouchMoved = multi:newConnection()
+gui.Events.OnTouchPressed = multi:newConnection()
+gui.Events.OnTouchReleased = multi:newConnection()
 
 -- Non Love Events
 
-gui.Events.OnThemeChanged = multi:newConnection():fastMode()
+gui.Events.OnThemeChanged = multi:newConnection()
 
 -- Virtual gui init
 gui.virtual = {}
 
 -- Internal Connections
-gui.Events.OnObjectFocusChanged = multi:newConnection():fastMode()
+gui.Events.OnObjectFocusChanged = multi:newConnection()
 
 -- Hooks
 
@@ -144,7 +144,7 @@ end)
 
 function gui:setHotKey(keys, conn)
 	has_hotkey = true
-	local conn = conn or multi:newConnection():fastMode()
+	local conn = conn or multi:newConnection()
 	table.insert(hot_keys, {Ref=self, Connection = conn, Keys = {unpack(keys)}})
 	return conn
 end
@@ -549,8 +549,8 @@ function gui:newBase(typ,x, y, w, h, sx, sy, sw, sh, virtual)
 		end
 	end)
 
-	function c:setRoundness(rx,ry,seg)
-		self.roundness = true
+	function c:setRoundness(rx, ry, seg, side)
+		self.roundness = side or true
 		self.__rx, self.__ry, self.__segments = rx or 5, ry or 5, seg or 30
 	end
 
@@ -830,7 +830,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 	c:respectHierarchy(true)
 	c.doSelection = false
 
-	c.OnReturn = multi:newConnection():fastMode()
+	c.OnReturn = multi:newConnection()
 
 	c.cur_pos = 0
 	c.selection = {0,0}
@@ -1236,11 +1236,11 @@ local drawtypes = {
 local draw_handler = function(child)
 	local bg = child.color
 	local bbg = child.borderColor
-	local type = child.type
+	local ctype = child.type
 	local vis = child.visibility
 	local x, y, w, h = child:getAbsolutes()
 	local roundness = child.roundness
-	local rx, ry, segments = child.__rx, child.__ry, child.__segments
+	local rx, ry, segments = child.__rx or 0, child.__ry or 0, child.__segments or 0
 	child.x = x
 	child.y = y
 	child.w = w
@@ -1261,20 +1261,58 @@ local draw_handler = function(child)
 	if child.__variables.clip[1] then
 		local clip = child.__variables.clip
 		love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
+	elseif type(roundness) == "string" then
+		love.graphics.setScissor(x - 1, y, w + 2, h + 3)
 	end
 
 	-- Set color
-	love.graphics.setColor(bg[1],bg[2],bg[3],vis)
-	love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
+	love.graphics.setLineStyle("smooth")
+	love.graphics.setLineWidth(3)
 	love.graphics.setColor(bbg[1],bbg[2],bbg[3],vis)
 	love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
+	love.graphics.setColor(bg[1],bg[2],bg[3],vis)
+	love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
+	if roundness == "top" then
+		love.graphics.rectangle("fill", x, y+ry/2, w, h-ry/2 + 1)
+		love.graphics.setLineStyle("rough")
+		
+		love.graphics.setColor(bbg[1],bbg[2],bbg[3],1)
+		love.graphics.setLineWidth(1)
+		love.graphics.line(	x, y + ry,
+							x, y + h +1,
+							x + 1 + w, y + h+1,
+							x + 1 + w, y + ry)
+		love.graphics.line(x, y + h,x + 1 + w, y + h)
+		love.graphics.setScissor()
+		love.graphics.setColor(bbg[1],bbg[2],bbg[3],.6)
+		love.graphics.line(x - 1, y + ry/2 + 2, x - 1, y + h + 2)
+		love.graphics.line(x + w + 2, y + ry/2 + 2, x + w + 2, y + h + 2)
+	elseif roundness == "bottom" then
+		love.graphics.rectangle("fill", x, y, w, h-ry + 2)
+		love.graphics.setLineStyle("rough")
+		love.graphics.setColor(bbg[1],bbg[2],bbg[3],1)			
+		love.graphics.setLineWidth(2)
+		love.graphics.line(	x-1, y + ry + 1,
+							x-1, y - 1,
+							x + w + 1, y - 1,
+							x + w + 1, y + ry + 1)
+		love.graphics.setScissor()
+		love.graphics.line(x-1, y-1,x + w + 1, y-1)					
+		
+		love.graphics.setColor(bbg[1],bbg[2],bbg[3],.6)
+		love.graphics.setLineWidth(2)
+		love.graphics.line(x - 1, y + 2, x - 1, y + h - 4 - ry/2)
+		love.graphics.line(x + w + 1, y + 2, x + w + 1, y + h - 4 - ry/2)
+	end
 
 	-- Start object specific stuff
-	drawtypes[band(type,video)](child,x,y,w,h)
-	drawtypes[band(type,image)](child,x,y,w,h)
-	drawtypes[band(type,text)](child,x,y,w,h)
-	drawtypes[band(type,box)](child,x,y,w,h)
-	
+	drawtypes[band(ctype,video)](child,x,y,w,h)
+	drawtypes[band(ctype,image)](child,x,y,w,h)
+	drawtypes[band(ctype,text)](child,x,y,w,h)
+	drawtypes[band(ctype,box)](child,x,y,w,h)
+	if child.post then
+		child:post()
+	end
 	if child.__variables.clip[1] then
 		love.graphics.setScissor() -- Remove the scissor
 	end
