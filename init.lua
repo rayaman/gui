@@ -998,74 +998,63 @@ gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
 end)
 
 -- Images
+
+local load_image = THREAD:newFunction(function(path)
+    require("love.image")
+    return love.image.newImageData(path)
+end)
+
 function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
     c.color = color.white
     c.visibility = 0
     local IMAGE
+
     function c:getUniques()
         return gui.getUniques(c, {
             -- Recreating the image object using set image is the way to go
             DO = {[[setImage]], c.image or IMAGE}
         })
     end
-    function c:setImage(i, x, y, w, h)
+
+    c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-		IMAGE = i
-		if type(i) == "string" then i = image_cache[i] or i end
-		if i and x then
-			self.imageHeigth = h
-            self.imageWidth = w
-			if type(i) == "string" then
-				image_cache[i] = love.graphics.newImage(i)
-				i = image_cache[i]
-			end
-			self.image = i
-			self.image:setWrap("repeat","repeat")
-			self.imageColor = color.white
-			self.quad = love.graphics.newQuad(x, y, w, h, self.image:getWidth(), self.image:getHeight())
-			self.imageVisibility = 1
-			return
-		end
-        
-        if not first_loop then
-            -- Wait one cycle for things to load up
-            drawer:newThread(function()
-                thread.yield()
-                local img
-                if type(i) == "userdata" and i:type() == "Image" then
-                    img = i
-                elseif type(i) == "userdata" and i:type() == "ImageData" then
-                    img = love.graphics.newImage(i)
-                else
-                    img = love.graphics.newImage(i)
-                    image_cache[i] = love.image.newImageData(i)
+        load_image(i).OnReturn(function(img)
+            img = love.graphics.newImage(img)
+            IMAGE = i
+            if type(i) == "string" then i = image_cache[i] or i end
+
+            if i and x then
+                self.imageHeigth = h
+                self.imageWidth = w
+
+                if type(i) == "string" then
+                    image_cache[i] = img
+                    i = image_cache[i]
                 end
-                local x, y, w, h = self:getAbsolutes()
+
+                self.image = i
+                self.image:setWrap("repeat", "repeat")
                 self.imageColor = color.white
+                self.quad = love.graphics.newQuad(x, y, w, h, self.image:getWidth(), self.image:getHeight())
                 self.imageVisibility = 1
-                self.image = img
-                self.imageHeigth = img:getHeight()
-                self.imageWidth = img:getWidth()
-                self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth,
-                                                  self.imageHeigth)
-            end)
-            return
-        end
-        local img
-        if type(i) == "userdata" and i:type() == "Image" then
-            img = i
-        else
-            img = love.graphics.newImage(i)
-        end
-        local x, y, w, h = self:getAbsolutes()
-        self.imageColor = color.white
-        self.imageVisibility = 1
-        self.image = img
-        self.imageHeigth = img:getHeight()
-        self.imageWidth = img:getWidth()
-        self.quad = love.graphics.newQuad(0, 0, w, h, self.imageWidth,
-                                          self.imageHeigth)
+
+                return
+            end
+            
+            if type(i) == "userdata" and i:type() == "Image" then
+                img = i
+            end
+
+            local x, y, w, h = self:getAbsolutes()
+            self.imageColor = color.white
+            self.imageVisibility = 1
+            self.image = img
+            self.image:setWrap("repeat", "repeat")
+            self.imageHeigth = img:getHeight()
+            self.imageWidth = img:getWidth()
+            self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeigth, self.imageWidth, self.imageHeigth)
+        end)
     end
     return c
 end
