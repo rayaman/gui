@@ -1001,7 +1001,7 @@ end)
 function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
     c.color = color.white
-    -- c.visibility = 0
+    c.visibility = 0
     local IMAGE
     function c:getUniques()
         return gui.getUniques(c, {
