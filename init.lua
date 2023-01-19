@@ -897,17 +897,20 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     return c
 end
 
-updater:newThread("Textbox Handler", function()
-    while true do
-        -- Do nothing if we aren't dealing with a textbox
-        thread.hold(function() return object_focus:hasType(box) end)
-        local ref = object_focus
-        ref.bar_show = true
-        thread.sleep(.5)
-        ref.bar_show = false
-        thread.sleep(.5)
-    end
-end)
+local function textBoxThread()
+    updater:newThread("Textbox Handler", function()
+        while true do
+            -- Do nothing if we aren't dealing with a textbox
+            thread.hold(function() return object_focus:hasType(box) end)
+            local ref = object_focus
+            ref.bar_show = true
+            thread.sleep(.5)
+            ref.bar_show = false
+            thread.sleep(.5)
+        end
+    end).OnError(textBoxThread)
+end
+textBoxThread()
 
 local function insert(obj, n_text)
     if obj:HasSelection() then
@@ -1020,6 +1023,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
         load_image(i).OnReturn(function(img)
+            print("The image: ",img)
             img = love.graphics.newImage(img)
             IMAGE = i
             if type(i) == "string" then i = image_cache[i] or i end
@@ -1181,12 +1185,15 @@ local drawtypes = {
     end,
     [4] = function(child, x, y, w, h)
         if child.bar_show then
+            local lw = love.graphics.getLineWidth()
+            love.graphics.setLineWidth(1)
             local font = child.font
             local fh = font:getHeight()
             local fw = font:getWidth(child.text:sub(1, child.cur_pos))
             love.graphics.line(child.textOffsetX + child.adjust + x + fw, y + 4,
                                child.textOffsetX + child.adjust + x + fw,
                                y + fh - 2)
+            love.graphics.setLineWidth(lw)
         end
         if child:HasSelection() then
             local blue = color.highlighter_blue
