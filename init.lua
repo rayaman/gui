@@ -319,6 +319,17 @@ function gui:topStack()
     siblings[#siblings + 1] = self
 end
 
+function gui:bottomStack()
+    local siblings = self.parent.children
+    for i = 1, #siblings do
+        if siblings[i] == self then
+            table.remove(siblings, i)
+            break
+        end
+    end
+    table.insert(siblings, 1, self)
+end
+
 local mainupdater = updater:newLoop().OnLoop
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -736,8 +747,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         local Font, text = self.Font, self.text
         local s = 3
         Font = font(s)
-        while height < max and Font:getHeight() < height and Font:getWidth(text) <
-            width do
+        while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
             s = s + 1
             Font = font(s)
         end
@@ -745,13 +755,19 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         Font:setFilter("linear", "nearest", 4)
         self.font = Font
         self.textOffsetY = 0
-        -- if isdefault then return font(s - (4+(n or 0))) end
         local top, bottom = self:calculateFontOffset(Font, 0)
-        local fh = Font:getHeight()
-        self.textOffsetY = floor(((height - bottom) - top) / 2) -- (height-(bottom - top))/2
+        self.textOffsetY = floor(((height - bottom) - top) / 2)
         self.OnFontUpdated:Fire(self)
         return s - (4 + (n or 0))
     end
+
+    function c:centerFont()
+        local x, y, width, height = self:getAbsolutes()
+        local top, bottom = self:calculateFontOffset(self.font, 0)
+        self.textOffsetY = floor(((height - bottom) - top) / 2)
+        self.OnFontUpdated:Fire(self)
+    end
+
     function c:getUniques()
         return gui.getUniques(c, {
             text = c.text,
@@ -1022,8 +1038,8 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
+        local img = load_image(i)
         load_image(i).OnReturn(function(img)
-            print("The image: ",img)
             img = love.graphics.newImage(img)
             IMAGE = i
             if type(i) == "string" then i = image_cache[i] or i end
