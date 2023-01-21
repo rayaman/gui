@@ -1023,6 +1023,31 @@ local load_image = THREAD:newFunction(function(path)
     return love.image.newImageData(path)
 end)
 
+local load_images = THREAD:newFunction(function(paths)
+    require("love.image")
+    local images = #paths
+    for i = 1, #paths do
+        sThread.pushStatus(i, images, love.image.newImageData(paths[i]))
+    end
+end)
+
+-- Loads a resource and adds it to the cache
+gui.cacheImage = thread:newFunction(function(self, path_or_paths)
+    if type(path_or_paths) == "string" then
+        -- runs thread to load image then cache it for faster loading
+        load_image(path_or_paths).OnReturn(function(img)
+            image_cache[path_or_paths] = img
+        end)
+    -- table of paths
+    elseif type(path_or_paths) == "table" then
+        local handler = load_images(path_or_paths)
+        handler.OnStatus(function(part, whole, img)
+            image_cache[path_or_paths[part]] = img
+            thread.pushStatus(part, whole)
+        end)
+    end
+end)
+
 function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
     c.color = color.white
