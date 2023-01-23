@@ -1043,7 +1043,7 @@ gui.cacheImage = thread:newFunction(function(self, path_or_paths)
         local handler = load_images(path_or_paths)
         handler.OnStatus(function(part, whole, img)
             image_cache[path_or_paths[part]] = img
-            thread.pushStatus(part, whole)
+            thread.pushStatus(part, whole, image_cache[path_or_paths[part]])
         end)
     end
 end)
@@ -1390,11 +1390,49 @@ gui.dualDim.offset.size.y = h
 gui.w = w
 gui.h = h
 
+local g_width, g_height
+local function GetSizeAdjustedToAspectRatio(dWidth, dHeight)
+    local isLandscape = g_width > g_height
+
+    local newHeight = 0
+    local newWidth = 0
+
+    if g_width / g_height > dWidth / dHeight then
+        newHeight = dWidth * g_height / g_width
+        newWidth = dWidth
+    else
+        newWidth = dHeight * g_width  / g_height
+        newHeight = dHeight
+    end
+
+    return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
+end
+
+function gui:setAspectSize(w, h)
+    if w and h then
+        g_width, g_height = w, h
+        gui.aspect_ratio = true
+    else
+        gui.aspect_ratio = false
+    end
+end
+
 gui.Events.OnResized(function(w, h)
-    gui.dualDim.offset.size.x = w
-    gui.dualDim.offset.size.y = h
-    gui.w = w
-    gui.h = h
+    if gui.aspect_ratio then
+        local nw, nh, xt, yt = GetSizeAdjustedToAspectRatio(w, h)
+        print(nw, nh, xt, yt)
+        gui.x = xt
+        gui.y = yt
+        gui.dualDim.offset.size.x = nw
+        gui.dualDim.offset.size.y = nh
+        gui.w = nw
+        gui.h = nh
+    else
+        gui.dualDim.offset.size.x = w
+        gui.dualDim.offset.size.y = h
+        gui.w = w
+        gui.h = h
+    end
 end)
 
 return gui
