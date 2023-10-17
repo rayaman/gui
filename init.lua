@@ -83,7 +83,7 @@ local function Hook(funcname, func)
 end
 
 -- This will run the hooks after everything has loaded
-updater:newTask(function()
+updater:newLoop(function(loop)
     Hook("quit", gui.Events.OnQuit.Fire)
     Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
     Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
@@ -103,6 +103,7 @@ updater:newTask(function()
     Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
     Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
     Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
+    loop:Destroy()
 end)
 
 -- Hotkeys
@@ -470,6 +471,14 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return true
     end
 
+    local function defaultCheck(...)
+        if not c:isActive() then return end
+        local x, y = love.mouse.getPosition()
+        if c:canPress(x, y) then
+            return c, ...
+        end
+    end
+
     setmetatable(c, gui)
     c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.active = true
@@ -496,6 +505,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.OnExit = multi:newConnection()
 
     c.OnMoved = testHierarchy .. multi:newConnection()
+    c.OnWheelMoved = defaultCheck / gui.Events.OnWheelMoved
 
     local dragging = false
     local entered = false
