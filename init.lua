@@ -82,29 +82,25 @@ local function Hook(funcname, func)
     end
 end
 
--- This will run the hooks after everything has loaded
-updater:newLoop(function(loop)
-    Hook("quit", gui.Events.OnQuit.Fire)
-    Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
-    Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
-    Hook("filedropped", gui.Events.OnFilesDropped.Fire)
-    Hook("focus", gui.Events.OnFocus.Fire)
-    Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
-    Hook("resize", gui.Events.OnResized.Fire)
-    Hook("visible", gui.Events.OnVisible.Fire)
-    Hook("keypressed", gui.Events.OnKeyPressed.Fire)
-    Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
-    Hook("textedited", gui.Events.OnTextEdited.Fire)
-    Hook("textinput", gui.Events.OnTextInputed.Fire)
-    Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
-    Hook("mousepressed", gui.Events.OnMousePressed.Fire)
-    Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
-    Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
-    Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
-    Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
-    Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
-    loop:Destroy()
-end)
+Hook("quit", gui.Events.OnQuit.Fire)
+Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
+Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
+Hook("filedropped", gui.Events.OnFilesDropped.Fire)
+Hook("focus", gui.Events.OnFocus.Fire)
+Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
+Hook("resize", gui.Events.OnResized.Fire)
+Hook("visible", gui.Events.OnVisible.Fire)
+Hook("keypressed", gui.Events.OnKeyPressed.Fire)
+Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
+Hook("textedited", gui.Events.OnTextEdited.Fire)
+Hook("textinput", gui.Events.OnTextInputed.Fire)
+Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
+Hook("mousepressed", gui.Events.OnMousePressed.Fire)
+Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
+Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
+Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
+Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
+Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
 
 -- Hotkeys
 
@@ -264,8 +260,7 @@ function gui:getAllChildren(vis)
 end
 
 function gui:newThread(func)
-    return updater:newThread("ThreadHandler<" .. self.type .. ">", func, self,
-                             thread)
+    return updater:newThread("ThreadHandler<" .. self.type .. ">", func, self, thread)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
@@ -472,11 +467,12 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end
 
     local function defaultCheck(...)
-        if not c:isActive() then return end
+        if not c:isActive() then return false end
         local x, y = love.mouse.getPosition()
         if c:canPress(x, y) then
             return c, ...
         end
+        return false
     end
 
     setmetatable(c, gui)
@@ -1388,6 +1384,7 @@ gui.virtual.w = w
 gui.virtual.h = h
 
 -- Root gui
+gui.parent = gui
 gui.type = frame
 gui.children = {}
 gui.dualDim = gui:newDualDim()
