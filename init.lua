@@ -25,7 +25,7 @@ gui.TYPE_VIDEO = video
 gui.TYPE_BUTTON = button
 gui.TYPE_ANIM = anim
 
---
+-- Variables
 
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
@@ -264,26 +264,21 @@ function gui:newThread(func)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
-    self.dualDim.offset = {
-        pos = {
-            x = x or self.dualDim.offset.pos.x,
-            y = y or self.dualDim.offset.pos.y
-        },
-        size = {
-            x = w or self.dualDim.offset.size.x,
-            y = h or self.dualDim.offset.size.y
-        }
-    }
-    self.dualDim.scale = {
-        pos = {
-            x = sx or self.dualDim.scale.pos.x,
-            y = sy or self.dualDim.scale.pos.y
-        },
-        size = {
-            x = sw or self.dualDim.scale.size.x,
-            y = sh or self.dualDim.scale.size.y
-        }
-    }
+    --[[
+    dd.offset.pos = {x = x or 0, y = y or 0}
+    self.dualDim.offset.size = {x = w or 0, y = h or 0}
+    self.dualDim.scale.pos = {x = sx or 0, y = sy or 0}
+    self.dualDim.scale.size = {x = sw or 0, y = sh or 0}
+    ]]
+    self.dualDim = self:newDualDim(
+        x or self.dualDim.offset.pos.x, 
+        y or self.dualDim.offset.pos.y, 
+        w or self.dualDim.offset.size.x, 
+        h or self.dualDim.offset.size.y, 
+        sx or self.dualDim.scale.pos.x, 
+        sy or self.dualDim.scale.pos.y, 
+        sw or self.dualDim.scale.size.x, 
+        sh or self.dualDim.scale.size.y)
 end
 
 local image_cache = {}
@@ -487,6 +482,8 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.borderColor = color.black
     c.rotation = 0
 
+    c.OnLoad = multi:newConnection()
+
     c.OnPressed = testHierarchy .. multi:newConnection()
     c.OnPressedOuter = multi:newConnection()
     c.OnReleased = testHierarchy .. multi:newConnection()
@@ -623,6 +620,10 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         centerthread()
     end
 
+    function c:fullFrame()
+        self:setDualDim(0,0,0,0,0,0,1,1)
+    end
+
     -- Add to the parents children table
     if virtual then
         c.parent = gui.virtual
@@ -631,6 +632,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         c.parent = self
         table.insert(self.children, c)
     end
+    local a = 0
     return c
 end
 
@@ -722,7 +724,9 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     end
 
     function c:setFont(font, size)
-        if type(font) == "string" then
+        if type(font) == "number" then
+            self.font = love.graphics.newFont(font)
+        elseif type(font) == "string" then
             self.fontFile = font
             self.font = love.graphics.newFont(font, size)
         else
@@ -1054,6 +1058,42 @@ gui.cacheImage = thread:newFunction(function(self, path_or_paths)
     end
 end)
 
+function gui:applyGradient(direction, ...)
+    local colors = {...}
+    if direction == "horizontal" then
+        direction = true
+    elseif direction == "vertical" then
+        direction = false
+    else
+        error("Invalid direction '" .. tostring(direction) .. "' for gradient.  Horizontal or vertical expected.")
+    end
+    local result = love.image.newImageData(direction and 1 or #colors, direction and #colors or 1)
+    for i, color in ipairs(colors) do
+        local x, y
+        if direction then
+            x, y = 0, i - 1
+        else
+            x, y = i - 1, 0
+        end
+        result:setPixel(x, y, color[1], color[2], color[3], color[4] or 255)
+    end
+
+    local img = love.graphics.newImage(result)
+    img:setFilter('linear', 'linear')
+    local x, y, w, h = self:getAbsolutes()
+    self.imageColor = color.white
+    self.imageVisibility = 1
+    self.image = img
+    self.image:setWrap("repeat", "repeat")
+    self.imageHeigth = img:getHeight()
+    self.imageWidth = img:getWidth()
+    self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeigth, self.imageWidth, self.imageHeigth)
+    
+    if not (band(self.type, image) == image) then
+        self.type = self.type + image
+    end
+end
+
 function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
     c.color = color.white
@@ -1069,43 +1109,41 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-        local img = load_image(i)
-        load_image(i).OnReturn(function(img)
-            img = love.graphics.newImage(img)
-            IMAGE = i
-            if type(i) == "string" then i = image_cache[i] or i end
+        img = love.image.newImageData(i)
+        img = love.graphics.newImage(img)
+        IMAGE = i
+        if type(i) == "string" then i = image_cache[i] or i end
 
-            if i and x then
-                self.imageHeigth = h
-                self.imageWidth = w
+        if i and x then
+            c.imageHeigth = h
+            c.imageWidth = w
 
-                if type(i) == "string" then
-                    image_cache[i] = img
-                    i = image_cache[i]
-                end
-
-                self.image = i
-                self.image:setWrap("repeat", "repeat")
-                self.imageColor = color.white
-                self.quad = love.graphics.newQuad(x, y, w, h, self.image:getWidth(), self.image:getHeight())
-                self.imageVisibility = 1
-
-                return
-            end
-            
-            if type(i) == "userdata" and i:type() == "Image" then
-                img = i
+            if type(i) == "string" then
+                image_cache[i] = img
+                i = image_cache[i]
             end
 
-            local x, y, w, h = self:getAbsolutes()
-            self.imageColor = color.white
-            self.imageVisibility = 1
-            self.image = img
-            self.image:setWrap("repeat", "repeat")
-            self.imageHeigth = img:getHeight()
-            self.imageWidth = img:getWidth()
-            self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeigth, self.imageWidth, self.imageHeigth)
-        end)
+            c.image = i
+            c.image:setWrap("repeat", "repeat")
+            c.imageColor = color.white
+            c.quad = love.graphics.newQuad(x, y, w, h, c.image:getWidth(), c.image:getHeight())
+            c.imageVisibility = 1
+
+            return
+        end
+        
+        if type(i) == "userdata" and i:type() == "Image" then
+            img = i
+        end
+
+        local x, y, w, h = c:getAbsolutes()
+        c.imageColor = color.white
+        c.imageVisibility = 1
+        c.image = img
+        c.image:setWrap("repeat", "repeat")
+        c.imageHeigth = img:getHeight()
+        c.imageWidth = img:getWidth()
+        c.quad = love.graphics.newQuad(0, 0, c.imageWidth, c.imageHeigth, c.imageWidth, c.imageHeigth)
     end
     return c
 end
@@ -1312,6 +1350,7 @@ local draw_handler = function(child)
     love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
     love.graphics.setColor(bg[1], bg[2], bg[3], vis)
     love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
+
     if roundness == "top" then
         love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
         love.graphics.setLineStyle("rough")
@@ -1346,7 +1385,9 @@ local draw_handler = function(child)
     drawtypes[band(ctype, image)](child, x, y, w, h)
     drawtypes[band(ctype, text)](child, x, y, w, h)
     drawtypes[band(ctype, box)](child, x, y, w, h)
+
     if child.post then child:post() end
+
     if child.__variables.clip[1] then
         love.graphics.setScissor() -- Remove the scissor
     end
@@ -1382,6 +1423,7 @@ gui.virtual.dualDim.offset.size.x = w
 gui.virtual.dualDim.offset.size.y = h
 gui.virtual.w = w
 gui.virtual.h = h
+gui.virtual.parent = gui.virtual
 
 -- Root gui
 gui.parent = gui
@@ -1427,7 +1469,6 @@ end
 gui.Events.OnResized(function(w, h)
     if gui.aspect_ratio then
         local nw, nh, xt, yt = GetSizeAdjustedToAspectRatio(w, h)
-        print(nw, nh, xt, yt)
         gui.x = xt
         gui.y = yt
         gui.dualDim.offset.size.x = nw
