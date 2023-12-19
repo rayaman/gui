@@ -4,7 +4,9 @@ local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.core.color")
 local gui = {}
 local updater = multi:newProcessor("UpdateManager", true)
+
 local drawer = multi:newProcessor("DrawManager", true)
+
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
 local cursor_hand = love.mouse.getSystemCursor("hand")
@@ -175,6 +177,10 @@ gui.HotKeys.OnRedo =		gui:setHotKey({"lctrl", "y"}) +
 							gui:setHotKey({"rctrl", "rshift", "z"})
 
 -- Utils
+
+gui.newFunction = updater.newFunction
+
+function gui:getProcessor() return updater end
 
 function gui:getObjectFocus() return object_focus end
 
@@ -376,8 +382,7 @@ function gui:clone(opt)
 			connections: Do we copy connections? (true/false)
 		}
 	]]
-    -- DO = {[[setImage]], c.image or IMAGE}
-    -- Connections are used greatly throughout do we copy those
+
     local temp
     local u = self:getUniques()
     if self.type == frame then
@@ -389,9 +394,9 @@ function gui:clone(opt)
     elseif self.type == text then
         temp = gui:newTextLabel(self.text, self:getDualDim())
     elseif self.type == image + button then
-        temp = gui:newImageButton(u.DO[2], self:getDualDim())
+        temp = gui:newImageButton(u.Do[2], self:getDualDim())
     elseif self.type == image then
-        temp = gui:newImageLabel(u.DO[2], self:getDualDim())
+        temp = gui:newImageLabel(u.Do[2], self:getDualDim())
     else -- We are dealing with a complex object
         temp = processDo(u)
     end
@@ -404,7 +409,7 @@ function gui:clone(opt)
         if opt.connections then
             conn = true
             for i, v in pairs(self) do
-                if v.Type == "connector" then
+                if type(v) == "table" and v.Type == "connector" then
                     -- We want to copy the connection functions from the original object and bind them to the new one
                     if not temp[i] then
                         -- Incase we are dealing with a custom object, create a connection if the custom objects unique declearation didn't
@@ -436,6 +441,7 @@ function gui:getUniques(tab)
         visibility = self.visibility,
         color = self.color,
         borderColor = self.borderColor,
+        drawBorder = self.drawborder,
         rotation = self.rotation
     }
 
@@ -480,6 +486,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.visibility = 1
     c.color = {.6, .6, .6}
     c.borderColor = color.black
+    c.drawBorder = true
     c.rotation = 0
 
     c.OnLoad = multi:newConnection()
@@ -1170,7 +1177,7 @@ end
 
 -- Video
 function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
-    local c = self:newImageBase(video, x, y, w, h, sx, sy, sw, sh)
+    local c = self:newImageBase(video, x,  y, w, h, sx, sy, sw, sh)
     c.OnVideoFinished = multi:newConnection()
     c.playing = false
 
@@ -1310,7 +1317,7 @@ local drawtypes = {
     end
 }
 
-local draw_handler = function(child)
+local draw_handler = function(child, no_draw)
     local bg = child.color
     local bbg = child.borderColor
     local ctype = child.type
@@ -1323,6 +1330,8 @@ local draw_handler = function(child)
     child.y = y
     child.w = w
     child.h = h
+
+    if no_draw then return end
 
     if child.clipDescendants then
         local children = child:getAllChildren()
@@ -1342,42 +1351,46 @@ local draw_handler = function(child)
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
     end
-
+    local drawB = child.drawBorder
     -- Set color
     love.graphics.setLineStyle("smooth")
     love.graphics.setLineWidth(3)
-    love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
-    love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
+    if drawB then
+        love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
+        love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
+    end
     love.graphics.setColor(bg[1], bg[2], bg[3], vis)
     love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
+    
+    if drawB then
+        if roundness == "top" then
+            love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
+            love.graphics.setLineStyle("rough")
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
+            love.graphics.setLineWidth(1)
+            love.graphics.line(x, y + ry, x, y + h + 1, x + 1 + w, y + h + 1,
+                            x + 1 + w, y + ry)
+            love.graphics.line(x, y + h, x + 1 + w, y + h)
+        
+            love.graphics.setScissor()
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
+            love.graphics.line(x - 1, y + ry / 2 + 2, x - 1, y + h + 2)
+            love.graphics.line(x + w + 2, y + ry / 2 + 2, x + w + 2, y + h + 2)
+        elseif roundness == "bottom" then
+            love.graphics.rectangle("fill", x, y, w, h - ry + 2)
+            love.graphics.setLineStyle("rough")
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(x - 1, y + ry + 1, x - 1, y - 1, x + w + 1, y - 1,
+                            x + w + 1, y + ry + 1)
+            love.graphics.setScissor()
+            love.graphics.line(x - 1, y - 1, x + w + 1, y - 1)
 
-    if roundness == "top" then
-        love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
-        love.graphics.setLineStyle("rough")
-
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
-        love.graphics.setLineWidth(1)
-        love.graphics.line(x, y + ry, x, y + h + 1, x + 1 + w, y + h + 1,
-                           x + 1 + w, y + ry)
-        love.graphics.line(x, y + h, x + 1 + w, y + h)
-        love.graphics.setScissor()
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
-        love.graphics.line(x - 1, y + ry / 2 + 2, x - 1, y + h + 2)
-        love.graphics.line(x + w + 2, y + ry / 2 + 2, x + w + 2, y + h + 2)
-    elseif roundness == "bottom" then
-        love.graphics.rectangle("fill", x, y, w, h - ry + 2)
-        love.graphics.setLineStyle("rough")
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
-        love.graphics.setLineWidth(2)
-        love.graphics.line(x - 1, y + ry + 1, x - 1, y - 1, x + w + 1, y - 1,
-                           x + w + 1, y + ry + 1)
-        love.graphics.setScissor()
-        love.graphics.line(x - 1, y - 1, x + w + 1, y - 1)
-
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
-        love.graphics.setLineWidth(2)
-        love.graphics.line(x - 1, y + 2, x - 1, y + h - 4 - ry / 2)
-        love.graphics.line(x + w + 1, y + 2, x + w + 1, y + h - 4 - ry / 2)
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(x - 1, y + 2, x - 1, y + h - 4 - ry / 2)
+            love.graphics.line(x + w + 1, y + 2, x + w + 1, y + h - 4 - ry / 2)
+        end
     end
 
     -- Start object specific stuff
@@ -1406,9 +1419,39 @@ drawer:newLoop(function()
     first_loop = true
 end)
 
+drawer:newThread(function()
+    while true do
+        thread.sleep(.01)
+        local children = gui.virtual:getAllChildren()
+        for i = 1, #children do
+            local child = children[i]
+            if child.effect then
+                child.effect(function() draw_handler(child, true) end)
+            else
+                draw_handler(child, true)
+            end
+        end
+        first_loop = true
+    end
+end)
+
+local processors = {
+    updater.run
+}
+
 -- Drawing and Updating
 gui.draw = drawer.run
-gui.update = updater.run
+gui.update = function()
+    for i = 1, #processors do
+        processors[i]()
+    end
+end
+
+function gui:newProcessor(name)
+    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(8), true)
+    table.insert(processors, proc.run)
+    return proc
+end
 
 -- Virtual gui
 gui.virtual.type = frame
@@ -1475,11 +1518,23 @@ gui.Events.OnResized(function(w, h)
         gui.dualDim.offset.size.y = nh
         gui.w = nw
         gui.h = nh
+
+        gui.virtual.x = xt
+        gui.virtual.y = yt
+        gui.virtual.dualDim.offset.size.x = nw
+        gui.virtual.dualDim.offset.size.y = nh
+        gui.virtual.w = nw
+        gui.virtual.h = nh
     else
         gui.dualDim.offset.size.x = w
         gui.dualDim.offset.size.y = h
         gui.w = w
         gui.h = h
+
+        gui.virtual.dualDim.offset.size.x = w
+        gui.virtual.dualDim.offset.size.y = h
+        gui.virtual.w = w
+        gui.virtual.h = h
     end
 end)
 
