@@ -433,6 +433,11 @@ function gui:isActive()
     return self.active and not (self:isDescendantOf(gui.virtual))
 end
 
+function gui:isOnScreen()
+    
+    return 
+end
+
 -- Base get uniques
 function gui:getUniques(tab)
     local base = {
@@ -742,10 +747,8 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         self.OnFontUpdated:Fire(self)
     end
 
-    function c:fitFont(n, max)
-        local max = max or math.huge
+    function c:fitFont(min_size, max_size)
         local font
-        local isdefault = false
         if self.fontFile then
             if self.fontFile:match("ttf") then
                 font = function(n)
@@ -757,26 +760,66 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
                 end
             end
         else
-            isdefault = true
             font = function(n) return love.graphics.setNewFont(n) end
         end
-        local x, y, width, height = self:getAbsolutes()
-        local Font, text = self.Font, self.text
-        local s = 3
-        Font = font(s)
-        while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
-            s = s + 1
-            Font = font(s)
+        local text = self.text
+        local x, y, max_width, max_height = self:getAbsolutes()
+        local min_size = min_size or 1
+        local max_size = max_size or 100 -- You can adjust the maximum font size as needed
+        local tolerance = 0.1
+        local f
+        while max_size - min_size > tolerance do
+            local size = (min_size + max_size) / 2
+    
+            f = font(size)
+            local text_width = f:getWidth(text)
+            local text_height = f:getHeight()
+    
+            if text_width > max_width or text_height > max_height then
+                max_size = size
+            else
+                min_size = size
+            end
         end
-        Font = font(s - (4 + (n or 0)))
-        Font:setFilter("linear", "nearest", 4)
-        self.font = Font
-        self.textOffsetY = 0
-        local top, bottom = self:calculateFontOffset(Font, 0)
-        self.textOffsetY = floor(((height - bottom) - top) / 2)
-        self.OnFontUpdated:Fire(self)
-        return s - (4 + (n or 0))
+        self:setFont(f)
+        return min_size
     end
+
+    -- function c:fitFont(n, max)
+    --     local max = max or math.huge
+    --     local font
+    --     local isdefault = false
+    --     if self.fontFile then
+    --         if self.fontFile:match("ttf") then
+    --             font = function(n)
+    --                 return love.graphics.newFont(self.fontFile, n, "normal")
+    --             end
+    --         else
+    --             font = function(n)
+    --                 return love.graphics.newFont(self.fontFile, n)
+    --             end
+    --         end
+    --     else
+    --         isdefault = true
+    --         font = function(n) return love.graphics.setNewFont(n) end
+    --     end
+    --     local x, y, width, height = self:getAbsolutes()
+    --     local Font, text = self.Font, self.text
+    --     local s = 3
+    --     Font = font(s)
+    --     while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
+    --         s = s + 1
+    --         Font = font(s)
+    --     end
+    --     Font = font(s - (4 + (n or 0)))
+    --     Font:setFilter("linear", "nearest", 4)
+    --     self.font = Font
+    --     self.textOffsetY = 0
+    --     local top, bottom = self:calculateFontOffset(Font, 0)
+    --     self.textOffsetY = floor(((height - bottom) - top) / 2)
+    --     self.OnFontUpdated:Fire(self)
+    --     return s - (4 + (n or 0))
+    -- end
 
     function c:centerFont()
         local x, y, width, height = self:getAbsolutes()
@@ -1406,6 +1449,8 @@ local draw_handler = function(child, no_draw)
     end
 end
 
+gui.draw_handler = draw_handler
+
 drawer:newLoop(function()
     local children = gui:getAllChildren()
     for i = 1, #children do
@@ -1443,6 +1488,7 @@ local processors = {
 gui.draw = drawer.run
 gui.update = function()
     for i = 1, #processors do
+        print(i)
         processors[i]()
     end
 end
@@ -1499,6 +1545,8 @@ local function GetSizeAdjustedToAspectRatio(dWidth, dHeight)
 
     return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
 end
+
+gui.GetSizeAdjustedToAspectRatio = GetSizeAdjustedToAspectRatio
 
 function gui:setAspectSize(w, h)
     if w and h then
