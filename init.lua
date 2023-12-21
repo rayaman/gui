@@ -327,6 +327,11 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
+function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
+    if type(self) == "function" then func = self end
+    mainupdater(function() func(c) end)
+end
+
 local mainupdater = updater:newLoop().OnLoop
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -480,8 +485,8 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
         return false
     end
-
-    setmetatable(c, gui)
+    setmetatable(c, self)
+    c.__index = self.__index
     c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.active = true
     c.type = typ
@@ -585,11 +590,6 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end
 
     function c:respectHierarchy(bool) hierarchy = bool end
-
-    function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-        if type(self) == "function" then func = self end
-        mainupdater(function() func(c) end)
-    end
 
     local function centerthread()
         local centerfunc = function()
@@ -1488,7 +1488,6 @@ local processors = {
 gui.draw = drawer.run
 gui.update = function()
     for i = 1, #processors do
-        print(i)
         processors[i]()
     end
 end

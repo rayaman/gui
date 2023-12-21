@@ -15,7 +15,7 @@ transition.__call = function(t, start, stop, time, ...)
     local args = {...}
     return function()
         if not start or not stop then return multi.error("start and stop must be supplied") end
-        if start == stop then return multi.error("start and stop cannot be the same!") end
+        if start == stop then multi.print("start and stop cannot be the same!") return {OnStep = function() end, OnStop = function() end} end
         local handle = t.func(t, start, stop, time or 1, unpack(args))
         return {
             OnStep = handle.OnStatus,
