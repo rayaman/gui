@@ -15,7 +15,16 @@ transition.__call = function(t, start, stop, time, ...)
     local args = {...}
     return function()
         if not start or not stop then return multi.error("start and stop must be supplied") end
-        if start == stop then multi.print("start and stop cannot be the same!") return {OnStep = function() end, OnStop = function() end} end
+        if start == stop then 
+            local temp = {
+                OnStep = function() end, 
+                OnStop = multi:newConnection()
+            }
+            proc:newTask(function()
+                temp.OnStop:Fire()
+            end)
+            return temp
+        end
         local handle = t.func(t, start, stop, time or 1, unpack(args))
         return {
             OnStep = handle.OnStatus,

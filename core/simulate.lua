@@ -15,16 +15,6 @@ end
 proc = gui:getProcessor()
 
 local simulate = {}
-local cursor = false
-local smooth = false
-
-function simulate:moveCursor(bool)
-    cursor = bool
-end
-
-function simulate:smoothMovement(bool)
-    smooth = bool
-end
 
 function simulate:Press(button, x, y, istouch)
     if self then
@@ -32,9 +22,7 @@ function simulate:Press(button, x, y, istouch)
     elseif x == nil or y == nil then
         x, y = love.mouse.getPosition()
     end
-    if cursor then
-        love.mouse.setPosition(x, y)
-    end
+    love.mouse.setPosition(x, y)
     gui.Events.OnMousePressed:Fire(x, y, button or gui.MOUSE_PRIMARY, istouch or false)
 end
 
@@ -44,9 +32,7 @@ function simulate:Release(button, x, y, istouch)
     elseif x == nil or y == nil then
         x, y = love.mouse.getPosition()
     end
-    if cursor then
-        love.mouse.setPosition(x, y)
-    end
+    love.mouse.setPosition(x, y)
     gui.Events.OnMouseReleased:Fire(x, y, button or gui.MOUSE_PRIMARY, istouch or false)
 end
 
@@ -56,9 +42,7 @@ simulate.Click = proc:newFunction(function(self, button, x, y, istouch)
     elseif x == nil or y == nil then
         x, y = love.mouse.getPosition()
     end
-    if cursor then
-        love.mouse.setPosition(x, y)
-    end
+    love.mouse.setPosition(x, y)
     gui.Events.OnMousePressed:Fire(x, y, button or gui.MOUSE_PRIMARY, istouch or false)
     thread.skip(1)
     gui.Events.OnMouseReleased:Fire(x, y, button or gui.MOUSE_PRIMARY, istouch or false)
@@ -72,37 +56,37 @@ simulate.Move = proc:newFunction(function(self, dx, dy, x, y, istouch)
     elseif x == nil or y == nil then
         x, y = love.mouse.getPosition()
     end
+
+    if dx == 0 and dy == 0 then
+        _x, _y = love.mouse.getPosition()
+        if x == _x and y == _y then
+            return
+        end
+        local dx, dy = 0, 0
+        dx = x - _x
+        dy = y - _y
+        return simulate.Move(nil, dx, dy)
+    end
     gui.Events.OnMouseMoved:Fire(x, y, 0, 0, istouch or false)
     thread.skip(1)
-    if smooth then
-        local gx = transition.glide(0, dx, .25)
-        local gy = transition.glide(0, dy, .25)
-        local xx = gx()
-        xx.OnStep(function(p)
-            _x, _y = love.mouse.getPosition()
-            if cursor then
-                love.mouse.setPosition(x + p, _y)
-            else
-                gui.Events.OnMouseMoved:Fire(x + p, _y, 0, 0, istouch or false)
-            end
-        end)
-        local yy = gy()
-        yy.OnStep(function(p)
-            _x, _y = love.mouse.getPosition()
-            if cursor then
-                love.mouse.setPosition(_x, y + p)
-            else
-                gui.Events.OnMouseMoved:Fire(_x, y + p, 0, 0, istouch or false)
-            end
-        end)
+    local gx = transition.glide(0, dx, .25)
+    local gy = transition.glide(0, dy, .25)
+    local xx = gx()
+    xx.OnStep(function(p)
+        _x, _y = love.mouse.getPosition()
+        love.mouse.setPosition(x + p, _y)
+    end)
+    local yy = gy()
+    yy.OnStep(function(p)
+        _x, _y = love.mouse.getPosition()
+        love.mouse.setPosition(_x, y + p)
+    end)
+    if not(dx==0 and dy == 0) then
+        print("Holding...")
         thread.hold(xx.OnStop * yy.OnStop)
-        gui.Events.OnMouseMoved:Fire(x + dx, y + dy, 0, 0, istouch or false)
-    else
-        if cursor then
-            love.mouse.setPosition(x + dx, y + dy)
-        end
-        gui.Events.OnMouseMoved:Fire(x + dx, y + dy, 0, 0, istouch or false)
     end
+    print("Done")
+    gui.Events.OnMouseMoved:Fire(x + dx, y + dy, 0, 0, istouch or false)
 end, true)
 
 return simulate
