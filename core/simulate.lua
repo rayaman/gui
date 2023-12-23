@@ -82,10 +82,8 @@ simulate.Move = proc:newFunction(function(self, dx, dy, x, y, istouch)
         love.mouse.setPosition(_x, y + p)
     end)
     if not(dx==0 and dy == 0) then
-        print("Holding...")
         thread.hold(xx.OnStop * yy.OnStop)
     end
-    print("Done")
     gui.Events.OnMouseMoved:Fire(x + dx, y + dy, 0, 0, istouch or false)
 end, true)
 

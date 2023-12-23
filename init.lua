@@ -189,6 +189,7 @@ function gui:hasType(t) return band(self.type, t) == t end
 function gui:move(x, y)
     self.dualDim.offset.pos.x = self.dualDim.offset.pos.x + x
     self.dualDim.offset.pos.y = self.dualDim.offset.pos.y + y
+    self.OnPositionChanged:Fire(self, x, y)
 end
 
 function gui:moveInBounds(dx, dy)
@@ -276,6 +277,19 @@ function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
     self.dualDim.scale.pos = {x = sx or 0, y = sy or 0}
     self.dualDim.scale.size = {x = sw or 0, y = sh or 0}
     ]]
+    self.dualDim = self:newDualDim(
+        x or self.dualDim.offset.pos.x, 
+        y or self.dualDim.offset.pos.y, 
+        w or self.dualDim.offset.size.x, 
+        h or self.dualDim.offset.size.y, 
+        sx or self.dualDim.scale.pos.x, 
+        sy or self.dualDim.scale.pos.y, 
+        sw or self.dualDim.scale.size.x, 
+        sh or self.dualDim.scale.size.y)
+    self.OnSizeChanged:Fire(self, x, y, w, h, sx, sy, sw, sh)
+end
+
+function gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
     self.dualDim = self:newDualDim(
         x or self.dualDim.offset.pos.x, 
         y or self.dualDim.offset.pos.y, 
@@ -517,6 +531,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.OnMoved = testHierarchy .. multi:newConnection()
     c.OnWheelMoved = defaultCheck / gui.Events.OnWheelMoved
 
+    c.OnSizeChanged = multi:newConnection()
+    c.OnPositionChanged = multi:newConnection()
+
     local dragging = false
     local entered = false
     local moved = false
@@ -592,21 +609,15 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     function c:respectHierarchy(bool) hierarchy = bool end
 
     local function centerthread()
-        local centerfunc = function()
-            return centerX or centerY -- If the condition is true it acts like a yield
-        end
-        c:newThread(function()
-            while true do
-                thread.hold(centerfunc)
-                local x, y, w, h = c:getAbsolutes()
-                if centerX then
-                    c:setDualDim(-w / 2, nil, nil, nil, .5)
-                end
-                if centerY then
-                    c:setDualDim(nil, -h / 2, nil, nil, nil, .5)
-                end
+        if centerX or centerY then
+            local x, y, w, h = c:getAbsolutes()
+            if centerX then
+                c:rawSetDualDim(-w / 2, nil, nil, nil, .5)
             end
-        end)
+            if centerY then
+                c:rawSetDualDim(nil, -h / 2, nil, nil, nil, .5)
+            end
+        end
     end
 
     function c:enableDragging(but)
@@ -622,14 +633,18 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         centerX = bool
         if centering then return end
         centering = true
-        centerthread()
+        self.OnSizeChanged(centerthread)
+        self.OnPositionChanged(centerthread)
+        updater:newLoop(centerthread)
     end
 
     function c:centerY(bool)
         centerY = bool
         if centering then return end
         centering = true
-        centerthread()
+        self.OnSizeChanged(centerthread)
+        self.OnPositionChanged(centerthread)
+        updater:newLoop(centerthread)
     end
 
     function c:fullFrame()
@@ -1135,9 +1150,9 @@ function gui:applyGradient(direction, ...)
     self.imageVisibility = 1
     self.image = img
     self.image:setWrap("repeat", "repeat")
-    self.imageHeigth = img:getHeight()
+    self.imageHeight = img:getHeight()
     self.imageWidth = img:getWidth()
-    self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeigth, self.imageWidth, self.imageHeigth)
+    self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeight, self.imageWidth, self.imageHeight)
     
     if not (band(self.type, image) == image) then
         self.type = self.type + image
@@ -1148,6 +1163,8 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
     c.color = color.white
     c.visibility = 0
+    c.scaleX = 1
+    c.scaleY = 1
     local IMAGE
 
     function c:getUniques()
@@ -1155,6 +1172,14 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
             -- Recreating the image object using set image is the way to go
             DO = {[[setImage]], c.image or IMAGE}
         })
+    end
+
+    function c:flip(vert)
+        if vert then
+            c.scaleY = c.scaleY * -1
+        else
+            c.scaleX = c.scaleX * -1
+        end
     end
 
     c.setImage = function(self, i, x, y, w, h)
@@ -1165,7 +1190,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         if type(i) == "string" then i = image_cache[i] or i end
 
         if i and x then
-            c.imageHeigth = h
+            c.imageHeight = h
             c.imageWidth = w
 
             if type(i) == "string" then
@@ -1191,9 +1216,9 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         c.imageVisibility = 1
         c.image = img
         c.image:setWrap("repeat", "repeat")
-        c.imageHeigth = img:getHeight()
+        c.imageHeight = img:getHeight()
         c.imageWidth = img:getWidth()
-        c.quad = love.graphics.newQuad(0, 0, c.imageWidth, c.imageHeigth, c.imageWidth, c.imageHeigth)
+        c.quad = love.graphics.newQuad(0, 0, c.imageWidth, c.imageHeight, c.imageWidth, c.imageHeight)
     end
     return c
 end
@@ -1294,9 +1319,24 @@ local drawtypes = {
     [0] = function(child, x, y, w, h) end,
     [1] = function(child, x, y, w, h)
         if child.image then
-            love.graphics.setColor(child.imageColor[1], child.imageColor[2],
-                                   child.imageColor[3], child.imageVisibility)
-			love.graphics.draw(child.image, child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeigth)
+            if child.scaleX < 0 or child.scaleY < 0 then
+                local sx, sy = child.scaleX, child.scaleY
+                local adjustX, adjustY = child.scaleX * w, child.scaleY * h
+                love.graphics.setColor(child.imageColor[1], child.imageColor[2],
+                                    child.imageColor[3], child.imageVisibility)
+                if sx < 0 and sy < 0 then
+                    love.graphics.draw(child.image, child.quad, x - adjustX, y - adjustY, rad(child.rotation), (w / child.imageWidth) * child.scaleX, (h / child.imageHeight) * child.scaleY)
+                elseif sx < 0 then
+                    love.graphics.draw(child.image, child.quad, x - adjustX, y, rad(child.rotation), (w / child.imageWidth) * child.scaleX, h / child.imageHeight)
+                else
+                    love.graphics.draw(child.image, child.quad, x, y - adjustY, rad(child.rotation), w / child.imageWidth, (h / child.imageHeight) * child.scaleY)
+                end
+            else
+                love.graphics.setColor(child.imageColor[1], child.imageColor[2],
+                                    child.imageColor[3], child.imageVisibility)
+                
+                love.graphics.draw(child.image, child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeight)
+            end
         end
     end,
     [2] = function(child, x, y, w, h)
@@ -1345,7 +1385,7 @@ local drawtypes = {
         if child.video and child.playing then
             love.graphics.setColor(child.videoColor[1], child.videoColor[2],
                                    child.videoColor[3], child.videoVisibility)
-            if w ~= child.imageWidth and h ~= child.imageHeigth then
+            if w ~= child.imageWidth and h ~= child.imageHeight then
                 love.graphics.draw(child.video, x, y, rad(child.rotation),
                                    w / child.videoWidth, h / child.videoHeigth)
             else
