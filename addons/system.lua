@@ -1,4 +1,5 @@
 local gui = require("gui")
+local theme = require("gui.core.theme")
 local default_theme = theme:new("64342e", "b2989e", "909b9a")
 
 function gui:newWindow(x, y, w, h, text, draggable)

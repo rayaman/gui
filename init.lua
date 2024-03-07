@@ -4,7 +4,9 @@ local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.core.color")
 local gui = {}
 local updater = multi:newProcessor("UpdateManager", true)
+
 local drawer = multi:newProcessor("DrawManager", true)
+
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
 local cursor_hand = love.mouse.getSystemCursor("hand")
@@ -25,7 +27,7 @@ gui.TYPE_VIDEO = video
 gui.TYPE_BUTTON = button
 gui.TYPE_ANIM = anim
 
---
+-- Variables
 
 gui.__index = gui
 gui.MOUSE_PRIMARY = 1
@@ -82,28 +84,25 @@ local function Hook(funcname, func)
     end
 end
 
--- This will run the hooks after everything has loaded
-updater:newTask(function()
-    Hook("quit", gui.Events.OnQuit.Fire)
-    Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
-    Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
-    Hook("filedropped", gui.Events.OnFilesDropped.Fire)
-    Hook("focus", gui.Events.OnFocus.Fire)
-    Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
-    Hook("resize", gui.Events.OnResized.Fire)
-    Hook("visible", gui.Events.OnVisible.Fire)
-    Hook("keypressed", gui.Events.OnKeyPressed.Fire)
-    Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
-    Hook("textedited", gui.Events.OnTextEdited.Fire)
-    Hook("textinput", gui.Events.OnTextInputed.Fire)
-    Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
-    Hook("mousepressed", gui.Events.OnMousePressed.Fire)
-    Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
-    Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
-    Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
-    Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
-    Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
-end)
+Hook("quit", gui.Events.OnQuit.Fire)
+Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
+Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
+Hook("filedropped", gui.Events.OnFilesDropped.Fire)
+Hook("focus", gui.Events.OnFocus.Fire)
+Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
+Hook("resize", gui.Events.OnResized.Fire)
+Hook("visible", gui.Events.OnVisible.Fire)
+Hook("keypressed", gui.Events.OnKeyPressed.Fire)
+Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
+Hook("textedited", gui.Events.OnTextEdited.Fire)
+Hook("textinput", gui.Events.OnTextInputed.Fire)
+Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
+Hook("mousepressed", gui.Events.OnMousePressed.Fire)
+Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
+Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
+Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
+Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
+Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
 
 -- Hotkeys
 
@@ -179,6 +178,10 @@ gui.HotKeys.OnRedo =		gui:setHotKey({"lctrl", "y"}) +
 
 -- Utils
 
+gui.newFunction = updater.newFunction
+
+function gui:getProcessor() return updater end
+
 function gui:getObjectFocus() return object_focus end
 
 function gui:hasType(t) return band(self.type, t) == t end
@@ -186,6 +189,7 @@ function gui:hasType(t) return band(self.type, t) == t end
 function gui:move(x, y)
     self.dualDim.offset.pos.x = self.dualDim.offset.pos.x + x
     self.dualDim.offset.pos.y = self.dualDim.offset.pos.y + y
+    self.OnPositionChanged:Fire(self, x, y)
 end
 
 function gui:moveInBounds(dx, dy)
@@ -286,31 +290,38 @@ function gui:getAllChildren(vis)
 end
 
 function gui:newThread(func)
-    return updater:newThread("ThreadHandler<" .. self.type .. ">", func, self,
-                             thread)
+    return updater:newThread("ThreadHandler<" .. self.type .. ">", func, self, thread)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
-    self.dualDim.offset = {
-        pos = {
-            x = x or self.dualDim.offset.pos.x,
-            y = y or self.dualDim.offset.pos.y
-        },
-        size = {
-            x = w or self.dualDim.offset.size.x,
-            y = h or self.dualDim.offset.size.y
-        }
-    }
-    self.dualDim.scale = {
-        pos = {
-            x = sx or self.dualDim.scale.pos.x,
-            y = sy or self.dualDim.scale.pos.y
-        },
-        size = {
-            x = sw or self.dualDim.scale.size.x,
-            y = sh or self.dualDim.scale.size.y
-        }
-    }
+    --[[
+    dd.offset.pos = {x = x or 0, y = y or 0}
+    self.dualDim.offset.size = {x = w or 0, y = h or 0}
+    self.dualDim.scale.pos = {x = sx or 0, y = sy or 0}
+    self.dualDim.scale.size = {x = sw or 0, y = sh or 0}
+    ]]
+    self.dualDim = self:newDualDim(
+        x or self.dualDim.offset.pos.x, 
+        y or self.dualDim.offset.pos.y, 
+        w or self.dualDim.offset.size.x, 
+        h or self.dualDim.offset.size.y, 
+        sx or self.dualDim.scale.pos.x, 
+        sy or self.dualDim.scale.pos.y, 
+        sw or self.dualDim.scale.size.x, 
+        sh or self.dualDim.scale.size.y)
+    self.OnSizeChanged:Fire(self, x, y, w, h, sx, sy, sw, sh)
+end
+
+function gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
+    self.dualDim = self:newDualDim(
+        x or self.dualDim.offset.pos.x, 
+        y or self.dualDim.offset.pos.y, 
+        w or self.dualDim.offset.size.x, 
+        h or self.dualDim.offset.size.y, 
+        sx or self.dualDim.scale.pos.x, 
+        sy or self.dualDim.scale.pos.y, 
+        sw or self.dualDim.scale.size.x, 
+        sh or self.dualDim.scale.size.y)
 end
 
 local image_cache = {}
@@ -351,6 +362,11 @@ function gui:bottomStack()
         end
     end
     table.insert(siblings, 1, self)
+end
+
+function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
+    if type(self) == "function" then func = self end
+    mainupdater(function() func(c) end)
 end
 
 local mainupdater = updater:newLoop().OnLoop
@@ -408,8 +424,7 @@ function gui:clone(opt)
 			connections: Do we copy connections? (true/false)
 		}
 	]]
-    -- DO = {[[setImage]], c.image or IMAGE}
-    -- Connections are used greatly throughout do we copy those
+
     local temp
     local u = self:getUniques()
     if self.type == frame then
@@ -421,9 +436,9 @@ function gui:clone(opt)
     elseif self.type == text then
         temp = gui:newTextLabel(self.text, self:getDualDim())
     elseif self.type == image + button then
-        temp = gui:newImageButton(u.DO[2], self:getDualDim())
+        temp = gui:newImageButton(u.Do[2], self:getDualDim())
     elseif self.type == image then
-        temp = gui:newImageLabel(u.DO[2], self:getDualDim())
+        temp = gui:newImageLabel(u.Do[2], self:getDualDim())
     else -- We are dealing with a complex object
         temp = processDo(u)
     end
@@ -436,7 +451,7 @@ function gui:clone(opt)
         if opt.connections then
             conn = true
             for i, v in pairs(self) do
-                if v.Type == "connector" then
+                if type(v) == "table" and v.Type == "connector" then
                     -- We want to copy the connection functions from the original object and bind them to the new one
                     if not temp[i] then
                         -- Incase we are dealing with a custom object, create a connection if the custom objects unique declearation didn't
@@ -460,6 +475,11 @@ function gui:isActive()
     return self.active and not (self:isDescendantOf(gui.virtual))
 end
 
+function gui:isOnScreen()
+    
+    return 
+end
+
 -- Base get uniques
 function gui:getUniques(tab)
     local base = {
@@ -468,6 +488,7 @@ function gui:getUniques(tab)
         visibility = self.visibility,
         color = self.color,
         borderColor = self.borderColor,
+        drawBorder = self.drawborder,
         rotation = self.rotation
     }
 
@@ -493,7 +514,16 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return true
     end
 
-    setmetatable(c, gui)
+    local function defaultCheck(...)
+        if not c:isActive() then return false end
+        local x, y = love.mouse.getPosition()
+        if c:canPress(x, y) then
+            return c, ...
+        end
+        return false
+    end
+    setmetatable(c, self)
+    c.__index = self.__index
     c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.active = true
     c.type = typ
@@ -503,7 +533,10 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.visibility = 1
     c.color = {.6, .6, .6}
     c.borderColor = color.black
+    c.drawBorder = true
     c.rotation = 0
+
+    c.OnLoad = multi:newConnection()
 
     c.OnPressed = testHierarchy .. multi:newConnection()
     c.OnPressedOuter = multi:newConnection()
@@ -519,6 +552,10 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.OnExit = multi:newConnection()
 
     c.OnMoved = testHierarchy .. multi:newConnection()
+    c.OnWheelMoved = defaultCheck / gui.Events.OnWheelMoved
+
+    c.OnSizeChanged = multi:newConnection()
+    c.OnPositionChanged = multi:newConnection()
 
     local dragging = false
     local entered = false
@@ -594,27 +631,16 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     function c:respectHierarchy(bool) hierarchy = bool end
 
-    function c:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-        if type(self) == "function" then func = self end
-        mainupdater(function() func(c) end)
-    end
-
     local function centerthread()
-        local centerfunc = function()
-            return centerX or centerY -- If the condition is true it acts like a yield
-        end
-        c:newThread(function()
-            while true do
-                thread.hold(centerfunc)
-                local x, y, w, h = c:getAbsolutes()
-                if centerX then
-                    c:setDualDim(-w / 2, nil, nil, nil, .5)
-                end
-                if centerY then
-                    c:setDualDim(nil, -h / 2, nil, nil, nil, .5)
-                end
+        if centerX or centerY then
+            local x, y, w, h = c:getAbsolutes()
+            if centerX then
+                c:rawSetDualDim(-w / 2, nil, nil, nil, .5)
             end
-        end)
+            if centerY then
+                c:rawSetDualDim(nil, -h / 2, nil, nil, nil, .5)
+            end
+        end
     end
 
     function c:enableDragging(but)
@@ -630,14 +656,22 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         centerX = bool
         if centering then return end
         centering = true
-        centerthread()
+        self.OnSizeChanged(centerthread)
+        self.OnPositionChanged(centerthread)
+        updater:newLoop(centerthread)
     end
 
     function c:centerY(bool)
         centerY = bool
         if centering then return end
         centering = true
-        centerthread()
+        self.OnSizeChanged(centerthread)
+        self.OnPositionChanged(centerthread)
+        updater:newLoop(centerthread)
+    end
+
+    function c:fullFrame()
+        self:setDualDim(0,0,0,0,0,0,1,1)
     end
 
     -- Add to the parents children table
@@ -648,6 +682,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         c.parent = self
         table.insert(self.children, c)
     end
+    local a = 0
     return c
 end
 
@@ -739,7 +774,9 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     end
 
     function c:setFont(font, size)
-        if type(font) == "string" then
+        if type(font) == "number" then
+            self.font = love.graphics.newFont(font)
+        elseif type(font) == "string" then
             self.fontFile = font
             self.font = love.graphics.newFont(font, size)
         else
@@ -748,10 +785,8 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         self.OnFontUpdated:Fire(self)
     end
 
-    function c:fitFont(n, max)
-        local max = max or math.huge
+    function c:fitFont(min_size, max_size)
         local font
-        local isdefault = false
         if self.fontFile then
             if self.fontFile:match("ttf") then
                 font = function(n)
@@ -763,26 +798,66 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
                 end
             end
         else
-            isdefault = true
             font = function(n) return love.graphics.setNewFont(n) end
         end
-        local x, y, width, height = self:getAbsolutes()
-        local Font, text = self.Font, self.text
-        local s = 3
-        Font = font(s)
-        while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
-            s = s + 1
-            Font = font(s)
+        local text = self.text
+        local x, y, max_width, max_height = self:getAbsolutes()
+        local min_size = min_size or 1
+        local max_size = max_size or 100 -- You can adjust the maximum font size as needed
+        local tolerance = 0.1
+        local f
+        while max_size - min_size > tolerance do
+            local size = (min_size + max_size) / 2
+    
+            f = font(size)
+            local text_width = f:getWidth(text)
+            local text_height = f:getHeight()
+    
+            if text_width > max_width or text_height > max_height then
+                max_size = size
+            else
+                min_size = size
+            end
         end
-        Font = font(s - (4 + (n or 0)))
-        Font:setFilter("linear", "nearest", 4)
-        self.font = Font
-        self.textOffsetY = 0
-        local top, bottom = self:calculateFontOffset(Font, 0)
-        self.textOffsetY = floor(((height - bottom) - top) / 2)
-        self.OnFontUpdated:Fire(self)
-        return s - (4 + (n or 0))
+        self:setFont(f)
+        return min_size
     end
+
+    -- function c:fitFont(n, max)
+    --     local max = max or math.huge
+    --     local font
+    --     local isdefault = false
+    --     if self.fontFile then
+    --         if self.fontFile:match("ttf") then
+    --             font = function(n)
+    --                 return love.graphics.newFont(self.fontFile, n, "normal")
+    --             end
+    --         else
+    --             font = function(n)
+    --                 return love.graphics.newFont(self.fontFile, n)
+    --             end
+    --         end
+    --     else
+    --         isdefault = true
+    --         font = function(n) return love.graphics.setNewFont(n) end
+    --     end
+    --     local x, y, width, height = self:getAbsolutes()
+    --     local Font, text = self.Font, self.text
+    --     local s = 3
+    --     Font = font(s)
+    --     while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
+    --         s = s + 1
+    --         Font = font(s)
+    --     end
+    --     Font = font(s - (4 + (n or 0)))
+    --     Font:setFilter("linear", "nearest", 4)
+    --     self.font = Font
+    --     self.textOffsetY = 0
+    --     local top, bottom = self:calculateFontOffset(Font, 0)
+    --     self.textOffsetY = floor(((height - bottom) - top) / 2)
+    --     self.OnFontUpdated:Fire(self)
+    --     return s - (4 + (n or 0))
+    -- end
 
     function c:centerFont()
         local x, y, width, height = self:getAbsolutes()
@@ -1071,10 +1146,48 @@ gui.cacheImage = thread:newFunction(function(self, path_or_paths)
     end
 end)
 
+function gui:applyGradient(direction, ...)
+    local colors = {...}
+    if direction == "horizontal" then
+        direction = true
+    elseif direction == "vertical" then
+        direction = false
+    else
+        error("Invalid direction '" .. tostring(direction) .. "' for gradient.  Horizontal or vertical expected.")
+    end
+    local result = love.image.newImageData(direction and 1 or #colors, direction and #colors or 1)
+    for i, color in ipairs(colors) do
+        local x, y
+        if direction then
+            x, y = 0, i - 1
+        else
+            x, y = i - 1, 0
+        end
+        result:setPixel(x, y, color[1], color[2], color[3], color[4] or 255)
+    end
+
+    local img = love.graphics.newImage(result)
+    img:setFilter('linear', 'linear')
+    local x, y, w, h = self:getAbsolutes()
+    self.imageColor = color.white
+    self.imageVisibility = 1
+    self.image = img
+    self.image:setWrap("repeat", "repeat")
+    self.imageHeight = img:getHeight()
+    self.imageWidth = img:getWidth()
+    self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeight, self.imageWidth, self.imageHeight)
+    
+    if not (band(self.type, image) == image) then
+        self.type = self.type + image
+    end
+end
+
 function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
     c.color = color.white
     c.visibility = 0
+    c.scaleX = 1
+    c.scaleY = 1
     local IMAGE
 
     function c:getUniques()
@@ -1084,45 +1197,51 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         })
     end
 
+    function c:flip(vert)
+        if vert then
+            c.scaleY = c.scaleY * -1
+        else
+            c.scaleX = c.scaleX * -1
+        end
+    end
+
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-        local img = load_image(i)
-        load_image(i).OnReturn(function(img)
-            img = love.graphics.newImage(img)
-            IMAGE = i
-            if type(i) == "string" then i = image_cache[i] or i end
+        img = love.image.newImageData(i)
+        img = love.graphics.newImage(img)
+        IMAGE = i
+        if type(i) == "string" then i = image_cache[i] or i end
 
-            if i and x then
-                self.imageHeigth = h
-                self.imageWidth = w
+        if i and x then
+            c.imageHeight = h
+            c.imageWidth = w
 
-                if type(i) == "string" then
-                    image_cache[i] = img
-                    i = image_cache[i]
-                end
-
-                self.image = i
-                self.image:setWrap("repeat", "repeat")
-                self.imageColor = color.white
-                self.quad = love.graphics.newQuad(x, y, w, h, self.image:getWidth(), self.image:getHeight())
-                self.imageVisibility = 1
-
-                return
-            end
-            
-            if type(i) == "userdata" and i:type() == "Image" then
-                img = i
+            if type(i) == "string" then
+                image_cache[i] = img
+                i = image_cache[i]
             end
 
-            local x, y, w, h = self:getAbsolutes()
-            self.imageColor = color.white
-            self.imageVisibility = 1
-            self.image = img
-            self.image:setWrap("repeat", "repeat")
-            self.imageHeigth = img:getHeight()
-            self.imageWidth = img:getWidth()
-            self.quad = love.graphics.newQuad(0, 0, self.imageWidth, self.imageHeigth, self.imageWidth, self.imageHeigth)
-        end)
+            c.image = i
+            c.image:setWrap("repeat", "repeat")
+            c.imageColor = color.white
+            c.quad = love.graphics.newQuad(x, y, w, h, c.image:getWidth(), c.image:getHeight())
+            c.imageVisibility = 1
+
+            return
+        end
+        
+        if type(i) == "userdata" and i:type() == "Image" then
+            img = i
+        end
+
+        local x, y, w, h = c:getAbsolutes()
+        c.imageColor = color.white
+        c.imageVisibility = 1
+        c.image = img
+        c.image:setWrap("repeat", "repeat")
+        c.imageHeight = img:getHeight()
+        c.imageWidth = img:getWidth()
+        c.quad = love.graphics.newQuad(0, 0, c.imageWidth, c.imageHeight, c.imageWidth, c.imageHeight)
     end
     return c
 end
@@ -1149,7 +1268,7 @@ end
 
 -- Video
 function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
-    local c = self:newImageBase(video, x, y, w, h, sx, sy, sw, sh)
+    local c = self:newImageBase(video, x,  y, w, h, sx, sy, sw, sh)
     c.OnVideoFinished = multi:newConnection()
     c.playing = false
 
@@ -1223,9 +1342,24 @@ local drawtypes = {
     [0] = function(child, x, y, w, h) end,
     [1] = function(child, x, y, w, h)
         if child.image then
-            love.graphics.setColor(child.imageColor[1], child.imageColor[2],
-                                   child.imageColor[3], child.imageVisibility)
-			love.graphics.draw(child.image, child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeigth)
+            if child.scaleX < 0 or child.scaleY < 0 then
+                local sx, sy = child.scaleX, child.scaleY
+                local adjustX, adjustY = child.scaleX * w, child.scaleY * h
+                love.graphics.setColor(child.imageColor[1], child.imageColor[2],
+                                    child.imageColor[3], child.imageVisibility)
+                if sx < 0 and sy < 0 then
+                    love.graphics.draw(child.image, child.quad, x - adjustX, y - adjustY, rad(child.rotation), (w / child.imageWidth) * child.scaleX, (h / child.imageHeight) * child.scaleY)
+                elseif sx < 0 then
+                    love.graphics.draw(child.image, child.quad, x - adjustX, y, rad(child.rotation), (w / child.imageWidth) * child.scaleX, h / child.imageHeight)
+                else
+                    love.graphics.draw(child.image, child.quad, x, y - adjustY, rad(child.rotation), w / child.imageWidth, (h / child.imageHeight) * child.scaleY)
+                end
+            else
+                love.graphics.setColor(child.imageColor[1], child.imageColor[2],
+                                    child.imageColor[3], child.imageVisibility)
+                
+                love.graphics.draw(child.image, child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeight)
+            end
         end
     end,
     [2] = function(child, x, y, w, h)
@@ -1274,7 +1408,7 @@ local drawtypes = {
         if child.video and child.playing then
             love.graphics.setColor(child.videoColor[1], child.videoColor[2],
                                    child.videoColor[3], child.videoVisibility)
-            if w ~= child.imageWidth and h ~= child.imageHeigth then
+            if w ~= child.imageWidth and h ~= child.imageHeight then
                 love.graphics.draw(child.video, x, y, rad(child.rotation),
                                    w / child.videoWidth, h / child.videoHeigth)
             else
@@ -1289,7 +1423,7 @@ local drawtypes = {
     end
 }
 
-local draw_handler = function(child)
+local draw_handler = function(child, no_draw)
     local bg = child.color
     local bbg = child.borderColor
     local ctype = child.type
@@ -1302,6 +1436,8 @@ local draw_handler = function(child)
     child.y = y
     child.w = w
     child.h = h
+
+    if no_draw then return end
 
     if child.clipDescendants then
         local children = child:getAllChildren()
@@ -1321,41 +1457,46 @@ local draw_handler = function(child)
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
     end
-
+    local drawB = child.drawBorder
     -- Set color
     love.graphics.setLineStyle("smooth")
     love.graphics.setLineWidth(3)
-    love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
-    love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
+    if drawB then
+        love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
+        love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
+    end
     love.graphics.setColor(bg[1], bg[2], bg[3], vis)
     love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
-    if roundness == "top" then
-        love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
-        love.graphics.setLineStyle("rough")
+    
+    if drawB then
+        if roundness == "top" then
+            love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
+            love.graphics.setLineStyle("rough")
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
+            love.graphics.setLineWidth(1)
+            love.graphics.line(x, y + ry, x, y + h + 1, x + 1 + w, y + h + 1,
+                            x + 1 + w, y + ry)
+            love.graphics.line(x, y + h, x + 1 + w, y + h)
+        
+            love.graphics.setScissor()
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
+            love.graphics.line(x - 1, y + ry / 2 + 2, x - 1, y + h + 2)
+            love.graphics.line(x + w + 2, y + ry / 2 + 2, x + w + 2, y + h + 2)
+        elseif roundness == "bottom" then
+            love.graphics.rectangle("fill", x, y, w, h - ry + 2)
+            love.graphics.setLineStyle("rough")
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(x - 1, y + ry + 1, x - 1, y - 1, x + w + 1, y - 1,
+                            x + w + 1, y + ry + 1)
+            love.graphics.setScissor()
+            love.graphics.line(x - 1, y - 1, x + w + 1, y - 1)
 
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
-        love.graphics.setLineWidth(1)
-        love.graphics.line(x, y + ry, x, y + h + 1, x + 1 + w, y + h + 1,
-                           x + 1 + w, y + ry)
-        love.graphics.line(x, y + h, x + 1 + w, y + h)
-        love.graphics.setScissor()
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
-        love.graphics.line(x - 1, y + ry / 2 + 2, x - 1, y + h + 2)
-        love.graphics.line(x + w + 2, y + ry / 2 + 2, x + w + 2, y + h + 2)
-    elseif roundness == "bottom" then
-        love.graphics.rectangle("fill", x, y, w, h - ry + 2)
-        love.graphics.setLineStyle("rough")
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
-        love.graphics.setLineWidth(2)
-        love.graphics.line(x - 1, y + ry + 1, x - 1, y - 1, x + w + 1, y - 1,
-                           x + w + 1, y + ry + 1)
-        love.graphics.setScissor()
-        love.graphics.line(x - 1, y - 1, x + w + 1, y - 1)
-
-        love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
-        love.graphics.setLineWidth(2)
-        love.graphics.line(x - 1, y + 2, x - 1, y + h - 4 - ry / 2)
-        love.graphics.line(x + w + 1, y + 2, x + w + 1, y + h - 4 - ry / 2)
+            love.graphics.setColor(bbg[1], bbg[2], bbg[3], .6)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(x - 1, y + 2, x - 1, y + h - 4 - ry / 2)
+            love.graphics.line(x + w + 1, y + 2, x + w + 1, y + h - 4 - ry / 2)
+        end
     end
 
     -- Start object specific stuff
@@ -1363,11 +1504,15 @@ local draw_handler = function(child)
     drawtypes[band(ctype, image)](child, x, y, w, h)
     drawtypes[band(ctype, text)](child, x, y, w, h)
     drawtypes[band(ctype, box)](child, x, y, w, h)
+
     if child.post then child:post() end
+
     if child.__variables.clip[1] then
         love.graphics.setScissor() -- Remove the scissor
     end
 end
+
+gui.draw_handler = draw_handler
 
 drawer:newLoop(function()
     local children = gui:getAllChildren()
@@ -1382,9 +1527,39 @@ drawer:newLoop(function()
     first_loop = true
 end)
 
+drawer:newThread(function()
+    while true do
+        thread.sleep(.01)
+        local children = gui.virtual:getAllChildren()
+        for i = 1, #children do
+            local child = children[i]
+            if child.effect then
+                child.effect(function() draw_handler(child, true) end)
+            else
+                draw_handler(child, true)
+            end
+        end
+        first_loop = true
+    end
+end)
+
+local processors = {
+    updater.run
+}
+
 -- Drawing and Updating
 gui.draw = drawer.run
-gui.update = updater.run
+gui.update = function()
+    for i = 1, #processors do
+        processors[i]()
+    end
+end
+
+function gui:newProcessor(name)
+    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(8), true)
+    table.insert(processors, proc.run)
+    return proc
+end
 
 -- Virtual gui
 gui.virtual.type = frame
@@ -1399,8 +1574,10 @@ gui.virtual.dualDim.offset.size.x = w
 gui.virtual.dualDim.offset.size.y = h
 gui.virtual.w = w
 gui.virtual.h = h
+gui.virtual.parent = gui.virtual
 
 -- Root gui
+gui.parent = gui
 gui.type = frame
 gui.children = {}
 gui.dualDim = gui:newDualDim()
@@ -1429,6 +1606,8 @@ function gui:GetSizeAdjustedToAspectRatio(dWidth, dHeight)
     return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
 end
 
+gui.GetSizeAdjustedToAspectRatio = GetSizeAdjustedToAspectRatio
+
 function gui:setAspectSize(w, h)
     if w and h then
         self.g_width, self.g_height = w, h
@@ -1438,19 +1617,31 @@ function gui:setAspectSize(w, h)
 end
 
 gui.Events.OnResized(function(w, h)
-    if gui.g_width then
-        local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
+    if gui.aspect_ratio then
+        local nw, nh, xt, yt = GetSizeAdjustedToAspectRatio(w, h)
         gui.x = xt
         gui.y = yt
         gui.dualDim.offset.size.x = nw
         gui.dualDim.offset.size.y = nh
         gui.w = nw
         gui.h = nh
+
+        gui.virtual.x = xt
+        gui.virtual.y = yt
+        gui.virtual.dualDim.offset.size.x = nw
+        gui.virtual.dualDim.offset.size.y = nh
+        gui.virtual.w = nw
+        gui.virtual.h = nh
     else
         gui.dualDim.offset.size.x = w
         gui.dualDim.offset.size.y = h
         gui.w = w
         gui.h = h
+
+        gui.virtual.dualDim.offset.size.x = w
+        gui.virtual.dualDim.offset.size.y = h
+        gui.virtual.w = w
+        gui.virtual.h = h
     end
 end)
 

@@ -47,7 +47,7 @@ function color.hsl(h, s, l)
 	elseif h < 4 then r,b,g = 0,x,c
 	elseif h < 5 then r,b,g = x,0,c
 	else              r,b,g = c,0,x
-	end return (r+m)*255, (g+m)*255, (b+m)*255
+	end return (r+m)*255, (g+m)*255, (b+m)*255, 255
 end
 
 min = math.min
@@ -60,7 +60,7 @@ function color.hsv(h, s, v)
     local r = min (max (3*abs (((h      )/180)%2-1)-1, 0), 1)
     local g = min (max (3*abs (((h  -120)/180)%2-1)-1, 0), 1)
     local b = min (max (3*abs (((h  +120)/180)%2-1)-1, 0), 1)
-    return k1 + k2 * r, k1 + k2 * g, k1 + k2 * b
+    return k1 + k2 * r, k1 + k2 * g, k1 + k2 * b, 1
 end
 
 function color.isLight(r, g, b)
@@ -102,9 +102,10 @@ function color.new(r, g, b, fmt)
 	end
 	local temp
 	if fmt then
-		temp = {r,b,g}
+		temp = {r, b, g, 1}
 	else
 		temp = {love.math.colorFromBytes(r, g, b)}
+		temp[4] = 1
 	end
 	setmetatable(temp, mt)
 	return temp
