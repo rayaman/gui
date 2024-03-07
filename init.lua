@@ -364,12 +364,12 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
+local mainupdater = updater:newLoop().OnLoop
+
 function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
     if type(self) == "function" then func = self end
     mainupdater(function() func(c) end)
 end
-
-local mainupdater = updater:newLoop().OnLoop
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
     local x, y, w, h
