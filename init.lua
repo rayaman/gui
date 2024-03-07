@@ -237,14 +237,37 @@ end
 
 function gui:getChildren() return self.children end
 
-function gui:getAbsolutes() -- returns x, y, w, h
-    return (self.parent.w * self.dualDim.scale.pos.x) +
+function gui:offsetToScale()
+    local children = self:getAllChildren()
+    for i = 1, #children do
+        local child = children[i]
+        local x, y = child:getAbsolutes()
+        local _, __, w, h = child.parent:getAbsolutes()
+        print(x / w, y / h)
+        local _, __, w, h = child:getAbsolutes()
+        local _, __, pw, ph = child.parent:getAbsolutes()
+        print(w / pw, h / ph)
+    end
+end
+
+function gui:getAbsolutes(transform) -- returns x, y, w, h
+    if transform then
+        return transform((self.parent.w * self.dualDim.scale.pos.x) +
+               self.dualDim.offset.pos.x + self.parent.x),
+               transform((self.parent.h * self.dualDim.scale.pos.y) +
+               self.dualDim.offset.pos.y + self.parent.y), transform((self.parent.w *
+               self.dualDim.scale.size.x) + self.dualDim.offset.size.x),
+               transform((self.parent.h * self.dualDim.scale.size.y) +
+               self.dualDim.offset.size.y)
+    else
+        return (self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x,
            (self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y, (self.parent.w *
                self.dualDim.scale.size.x) + self.dualDim.offset.size.x,
            (self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y
+    end
 end
 
 function gui:getAllChildren(vis)
@@ -1390,18 +1413,16 @@ gui.dualDim.offset.size.y = h
 gui.w = w
 gui.h = h
 
-local g_width, g_height
-local function GetSizeAdjustedToAspectRatio(dWidth, dHeight)
-    local isLandscape = g_width > g_height
+function gui:GetSizeAdjustedToAspectRatio(dWidth, dHeight)
 
     local newHeight = 0
     local newWidth = 0
 
-    if g_width / g_height > dWidth / dHeight then
-        newHeight = dWidth * g_height / g_width
+    if self.g_width / self.g_height > dWidth / dHeight then
+        newHeight = dWidth * self.g_height / self.g_width
         newWidth = dWidth
     else
-        newWidth = dHeight * g_width  / g_height
+        newWidth = dHeight * self.g_width  / self.g_height
         newHeight = dHeight
     end
 
@@ -1410,17 +1431,15 @@ end
 
 function gui:setAspectSize(w, h)
     if w and h then
-        g_width, g_height = w, h
-        gui.aspect_ratio = true
+        self.g_width, self.g_height = w, h
     else
-        gui.aspect_ratio = false
+        self.g_width, self.g_height = 0, 0
     end
 end
 
 gui.Events.OnResized(function(w, h)
-    if gui.aspect_ratio then
-        local nw, nh, xt, yt = GetSizeAdjustedToAspectRatio(w, h)
-        print(nw, nh, xt, yt)
+    if gui.g_width then
+        local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
         gui.x = xt
         gui.y = yt
         gui.dualDim.offset.size.x = nw
