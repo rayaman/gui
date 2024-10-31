@@ -41,7 +41,6 @@ function gui:newMenu(title, sx, position, trans, callback, t,t2)
     function menu:Open(show)
         if show then
             if not menu.lock then
-                menu.visible = true
                 menu.lock = true 
                 local t = to()
                 t.OnStop(function()
@@ -89,7 +88,6 @@ function gui:newMenu(title, sx, position, trans, callback, t,t2)
             end
         end
     end
-
     menu.OnCreate = processor:newConnection()
     local items = {}
     function menu:addItem(text)

@@ -95,7 +95,6 @@ local function Hook(funcname, func)
         love[funcname] = function(...) func({}, ...) end
     end
 end
-
 -- Incase you define one of these methods, we need to process this after that
 updater:newTask(function()
     -- System
@@ -577,7 +576,6 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
         return false
     end
-
     setmetatable(c, self)
     c.__index = self.__index
     c.__variables = {clip = {false, 0, 0, 0, 0}}
@@ -613,7 +611,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     c.OnSizeChanged = testVisual .. multi:newConnection()
     c.OnPositionChanged = testVisual .. multi:newConnection()
-
+ 
     c.OnLeftStickUp = testVisual .. multi:newConnection()
     c.OnLeftStickDown = testVisual .. multi:newConnection()
     c.OnLeftStickLeft = testVisual .. multi:newConnection()
@@ -1282,7 +1280,6 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
             c.scaleX = c.scaleX * -1
         end
     end
-
     function c:getSource()
         return IMAGE
     end
