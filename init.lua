@@ -18,6 +18,8 @@ local global_drag
 local object_focus = gui
 local first_loop = false
 
+gui.Version = "0.1.0"
+
 -- Types
 gui.TYPE_FRAME = frame
 gui.TYPE_IMAGE = image
@@ -60,6 +62,16 @@ gui.Events.OnTouchMoved = multi:newConnection()
 gui.Events.OnTouchPressed = multi:newConnection()
 gui.Events.OnTouchReleased = multi:newConnection()
 
+-- Joysticks and gamepads
+gui.Events.OnGamepadPressed = multi:newConnection()
+gui.Events.OnGamepadReleased = multi:newConnection()
+gui.Events.OnGamepadAxis = multi:newConnection()
+gui.Events.OnJoystickAdded = multi:newConnection()
+gui.Events.OnJoystickHat = multi:newConnection()
+gui.Events.OnJoystickPressed = multi:newConnection()
+gui.Events.OnJoystickReleased = multi:newConnection()
+gui.Events.OnJoystickRemoved = multi:newConnection()
+
 -- Non Love Events
 
 gui.Events.OnThemeChanged = multi:newConnection()
@@ -83,26 +95,45 @@ local function Hook(funcname, func)
         love[funcname] = function(...) func({}, ...) end
     end
 end
+-- Incase you define one of these methods, we need to process this after that
+updater:newTask(function()
+    -- System
+    Hook("quit", gui.Events.OnQuit.Fire)
+    Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
+    Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
+    Hook("filedropped", gui.Events.OnFilesDropped.Fire)
+    Hook("focus", gui.Events.OnFocus.Fire)
+    Hook("resize", gui.Events.OnResized.Fire)
+    Hook("visible", gui.Events.OnVisible.Fire)
 
-Hook("quit", gui.Events.OnQuit.Fire)
-Hook("directorydropped", gui.Events.OnDirectoryDropped.Fire)
-Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
-Hook("filedropped", gui.Events.OnFilesDropped.Fire)
-Hook("focus", gui.Events.OnFocus.Fire)
-Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
-Hook("resize", gui.Events.OnResized.Fire)
-Hook("visible", gui.Events.OnVisible.Fire)
-Hook("keypressed", gui.Events.OnKeyPressed.Fire)
-Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
-Hook("textedited", gui.Events.OnTextEdited.Fire)
-Hook("textinput", gui.Events.OnTextInputed.Fire)
-Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
-Hook("mousepressed", gui.Events.OnMousePressed.Fire)
-Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
-Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
-Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
-Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
-Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
+    -- Mouse
+    Hook("mousefocus", gui.Events.OnMouseFocus.Fire)
+    Hook("keypressed", gui.Events.OnKeyPressed.Fire)
+    Hook("keyreleased", gui.Events.OnKeyReleased.Fire)
+    Hook("mousemoved", gui.Events.OnMouseMoved.Fire)
+    Hook("mousepressed", gui.Events.OnMousePressed.Fire)
+    Hook("mousereleased", gui.Events.OnMouseReleased.Fire)
+    Hook("wheelmoved", gui.Events.OnWheelMoved.Fire)
+
+    -- Keyboard
+    Hook("textedited", gui.Events.OnTextEdited.Fire)
+    Hook("textinput", gui.Events.OnTextInputed.Fire)
+
+    -- Touchscreen
+    Hook("touchmoved", gui.Events.OnTouchMoved.Fire)
+    Hook("touchpressed", gui.Events.OnTouchPressed.Fire)
+    Hook("touchreleased", gui.Events.OnTouchReleased.Fire)
+
+    -- Joystick/Gamepad
+    Hook("gamepadpressed", gui.Events.OnGamepadPressed.Fire)
+    Hook("gamepadaxis", gui.Events.OnGamepadAxis.Fire)
+    Hook("gamepadreleased", gui.Events.OnGamepadReleased.Fire)
+    Hook("joystickpressed", gui.Events.OnJoystickPressed.Fire)
+    Hook("joystickreleased", gui.Events.OnJoystickReleased.Fire)
+    Hook("joystickhat", gui.Events.OnJoystickHat.Fire)
+    Hook("joystickremoved", gui.Events.OnJoystickRemoved.Fire)
+    Hook("joystickadded", gui.Events.OnJoystickAdded.Fire)
+end)
 
 -- Hotkeys
 
@@ -368,7 +399,7 @@ local mainupdater = updater:newLoop().OnLoop
 
 function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
     if type(self) == "function" then func = self end
-    mainupdater(function() func(c) end)
+    mainupdater(function() func(self) end)
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -496,9 +527,32 @@ function gui:getUniques(tab)
     return base
 end
 
+function gui:setTag(tag)
+    self.tags[tag] = true
+end
+
+function gui:hasTag(tag)
+    return self.tags[tag]
+end
+
+function gui:parentHasTag(tag)
+    local parent = self.parent
+    while parent do
+        if parent.tags and parent.tags[tag] then return true end
+        parent = parent.parent
+        if parent == gui.virtual or parent == gui then return false end
+    end
+    return false
+end
+
+local function testVisual(c, x, y, button, istouch, presses)
+    return not(c:hasTag("visual") or c:parentHasTag("visual")) 
+end
+
 -- Base Library
 function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local c = {}
+    c.tags = {}
     local buildBackBetter
     local centerX = false
     local centerY = false
@@ -525,6 +579,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     setmetatable(c, self)
     c.__index = self.__index
     c.__variables = {clip = {false, 0, 0, 0, 0}}
+    c.focus = false
     c.active = true
     c.type = typ
     c.dualDim = self:newDualDim(x, y, w, h, sx, sy, sw, sh)
@@ -538,24 +593,33 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     c.OnLoad = multi:newConnection()
 
-    c.OnPressed = testHierarchy .. multi:newConnection()
-    c.OnPressedOuter = multi:newConnection()
-    c.OnReleased = testHierarchy .. multi:newConnection()
-    c.OnReleasedOuter = multi:newConnection()
-    c.OnReleasedOther = multi:newConnection()
+    c.OnPressed = testVisual .. (testHierarchy .. multi:newConnection())
+    c.OnPressedOuter = testVisual .. multi:newConnection()
+    c.OnReleased = testVisual .. (testHierarchy .. multi:newConnection())
+    c.OnReleasedOuter = testVisual .. multi:newConnection()
+    c.OnReleasedOther = testVisual .. multi:newConnection()
 
-    c.OnDragStart = multi:newConnection()
-    c.OnDragging = multi:newConnection()
-    c.OnDragEnd = multi:newConnection()
+    c.OnDragStart = testVisual .. multi:newConnection()
+    c.OnDragging = testVisual .. multi:newConnection()
+    c.OnDragEnd = testVisual .. multi:newConnection()
 
-    c.OnEnter = testHierarchy .. multi:newConnection()
-    c.OnExit = multi:newConnection()
+    c.OnEnter = (testHierarchy .. multi:newConnection())
+    c.OnExit = testVisual .. multi:newConnection()
 
-    c.OnMoved = testHierarchy .. multi:newConnection()
-    c.OnWheelMoved = defaultCheck / gui.Events.OnWheelMoved
+    c.OnMoved = testVisual .. (testHierarchy .. multi:newConnection())
+    c.OnWheelMoved = testVisual .. (defaultCheck / gui.Events.OnWheelMoved)
 
-    c.OnSizeChanged = multi:newConnection()
-    c.OnPositionChanged = multi:newConnection()
+    c.OnSizeChanged = testVisual .. multi:newConnection()
+    c.OnPositionChanged = testVisual .. multi:newConnection()
+ 
+    c.OnLeftStickUp = testVisual .. multi:newConnection()
+    c.OnLeftStickDown = testVisual .. multi:newConnection()
+    c.OnLeftStickLeft = testVisual .. multi:newConnection()
+    c.OnLeftStickRight = testVisual .. multi:newConnection()
+    c.OnRightStickUp = testVisual .. multi:newConnection()
+    c.OnRightStickDown = testVisual .. multi:newConnection()
+    c.OnRightStickLeft = testVisual .. multi:newConnection()
+    c.OnRightStickRight = testVisual .. multi:newConnection()
 
     local dragging = false
     local entered = false
@@ -582,7 +646,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
         if c:canPress(x, y) then
-            c.OnReleased:Fire(c, x, y, dx, dy, istouch, presses)
+            c.OnReleased:Fire(c, x, y, button, istouch, presses)
         elseif pressed then
             c.OnReleasedOuter:Fire(c, x, y, button, istouch, presses)
         else
@@ -618,6 +682,11 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
             c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
         end
     end)
+
+    function c:isOffScreen()
+        local x, y, w, h = self:getAbsolutes()
+        return  y + h < 0 or y > gui.h or x + w < 0 or x > gui.w
+    end
 
     function c:setRoundness(rx, ry, seg, side)
         self.roundness = side or true
@@ -711,6 +780,13 @@ end
 function gui:newVirtualFrame(x, y, w, h, sx, sy, sw, sh)
     return self:newBase(frame, x, y, w, h, sx, sy, sw, sh, true)
 end
+
+function gui:newVisualFrame(x, y, w, h, sx, sy, sw, sh)
+    local visual = self:newBase(frame, x, y, w, h, sx, sy, sw, sh)
+    visual:setTag("visual")
+    return visual
+end
+
 local testIMG
 -- Texts
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
@@ -727,7 +803,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     c.textVisibility = 1
     c.font = love.graphics.newFont(12)
     c.textColor = color.black
-    c.OnFontUpdated = multi:newConnection()
+    c.OnFontUpdated = testVisual .. multi:newConnection()
 
     function c:calculateFontOffset(font, adjust)
         local adjust = adjust or 20
@@ -940,7 +1016,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c.doSelection = false
 
-    c.OnReturn = multi:newConnection()
+    c.OnReturn = testVisual .. multi:newConnection()
 
     c.cur_pos = 0
     c.selection = {0, 0}
@@ -1125,12 +1201,12 @@ local load_images = THREAD:newFunction(function(paths)
     require("love.image")
     local images = #paths
     for i = 1, #paths do
-        sThread.pushStatus(i, images, love.image.newImageData(paths[i]))
+        _G.THREAD.pushStatus(i, images, love.image.newImageData(paths[i]))
     end
 end)
 
 -- Loads a resource and adds it to the cache
-gui.cacheImage = thread:newFunction(function(self, path_or_paths)
+gui.cacheImage = updater:newFunction(function(self, path_or_paths)
     if type(path_or_paths) == "string" then
         -- runs thread to load image then cache it for faster loading
         load_image(path_or_paths).OnReturn(function(img)
@@ -1203,6 +1279,9 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         else
             c.scaleX = c.scaleX * -1
         end
+    end
+    function c:getSource()
+        return IMAGE
     end
 
     c.setImage = function(self, i, x, y, w, h)
@@ -1451,6 +1530,10 @@ local draw_handler = function(child, no_draw)
         end
     end
 
+    if child.shader and band(ctype, image) == 2 then
+        love.graphics.setShader(child.shader)
+    end
+
     if child.__variables.clip[1] then
         local clip = child.__variables.clip
         love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
@@ -1509,6 +1592,10 @@ local draw_handler = function(child, no_draw)
 
     if child.__variables.clip[1] then
         love.graphics.setScissor() -- Remove the scissor
+    end
+
+    if child.shader then
+        love.graphics.setShader()
     end
 end
 
@@ -1606,7 +1693,7 @@ function gui:GetSizeAdjustedToAspectRatio(dWidth, dHeight)
     return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
 end
 
-gui.GetSizeAdjustedToAspectRatio = GetSizeAdjustedToAspectRatio
+--gui.GetSizeAdjustedToAspectRatio = GetSizeAdjustedToAspectRatio
 
 function gui:setAspectSize(w, h)
     if w and h then
@@ -1618,7 +1705,7 @@ end
 
 gui.Events.OnResized(function(w, h)
     if gui.aspect_ratio then
-        local nw, nh, xt, yt = GetSizeAdjustedToAspectRatio(w, h)
+        local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
         gui.x = xt
         gui.y = yt
         gui.dualDim.offset.size.x = nw
