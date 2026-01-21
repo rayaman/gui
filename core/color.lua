@@ -96,6 +96,9 @@ function color.rgbToHex(r, g, b)
 
 function color.new(r, g, b, fmt)
 	if type(r) == "string" then
+		if r:sub(1,1) == "#" then
+			r = r:sub(2,-1) 
+		end
 		r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 	elseif type(r) == "table" then
 		return r
@@ -117,6 +120,9 @@ end
 
 function color.indexColor(name,r, g, b)
 	if type(r)=="string" then
+		if r:sub(1,1) == "#" then
+			r = r:sub(2,-1) 
+		end
 		r, g, b=tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 	end
 	-- Other ways to index a color

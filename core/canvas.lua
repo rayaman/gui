@@ -1,8 +1,13 @@
 local gui = require("gui")
 
-function newCanvas()
-    local c = gui:newVirtualFrame(0,0,0,0,0,0,1,1)
-    
+function newCanvas(domain)
+    local c
+    if domain == "visual" then
+        c = gui:newVisualFrame()
+    else
+        c = gui:newVirtualFrame()
+    end
+    c:fullFrame()
     function c:swap(c1, c2)
         local temp = c1.children
         c1.children = c2.children
