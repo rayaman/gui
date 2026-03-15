@@ -47,6 +47,7 @@ function theme:random(seed, lightness, rand)
         end
     end
     
+
     t.seed = seed
     return t
 end

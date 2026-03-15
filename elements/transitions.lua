@@ -13,8 +13,8 @@ end
 transition.__index = transition
 transition.__call = function(t, start, stop, time, ...)
     local args = {...}
-    return function()
-        if not start or not stop then return multi.error("start and stop must be supplied") end
+    return function(st, sp, ti) -- allow these values to be overridden
+        if not (st or start) or not (sp or stop) then return multi.error("start and stop must be supplied") end
         if start == stop then 
             local temp = {
                 OnStep = function() end, 
@@ -25,7 +25,7 @@ transition.__call = function(t, start, stop, time, ...)
             end)
             return temp
         end
-        local handle = t.func(t, start, stop, time or 1, unpack(args))
+        local handle = t.func(t, start, stop, (ti or time) or 1, unpack(args))
         return {
             OnStep = handle.OnStatus,
             OnStop = handle.OnReturn + handle.OnError
@@ -58,7 +58,7 @@ transition.glide = transition:newTransition(function(t, start, stop, time, ...)
     local split = stop-start
     for i = 0, steps do
         thread.sleep(piece)
-        thread.pushStatus(start + i*(split/steps))
+        thread.pushStatus(start + i*(split/steps),piece*i)
     end
 end)
 
