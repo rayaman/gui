@@ -2,6 +2,7 @@ local utf8 = require("utf8")
 local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.core.color")
+local gif   = require("gui.addons.gifloader")
 local gui = {}
 local updater = multi:newProcessor("UpdateManager", true)
 
@@ -213,6 +214,35 @@ gui.HotKeys.OnRedo =		gui:setHotKey({"lctrl", "y"}) +
 
 -- Utils
 
+function gui:tag(tag)
+    self.__tag = tag
+    return self
+end
+
+function gui:getTag()
+    return self.__tag
+end
+
+--[[
+C_ prefix = connect function to a connection
+I_ prefix = invoke function args should be wrapped in a table
+]]
+function gui.apply(apply, ...)
+    for field, value in pairs(apply) do
+        for _, object in pairs({...}) do
+            local cmd = field:sub(1,2)
+            local handle = field:sub(3,-1)
+            if cmd == "C_" then
+                object[handle](value)
+            elseif cmd == "I_" then
+                object[handle](object,unpack(value))
+            else
+                object[field] = value
+            end
+        end
+    end
+end
+
 gui.newFunction = updater.newFunction
 
 function gui:getProcessor() return updater end
@@ -225,6 +255,12 @@ function gui:move(x, y)
     self.dualDim.offset.pos.x = self.dualDim.offset.pos.x + x
     self.dualDim.offset.pos.y = self.dualDim.offset.pos.y + y
     self.OnPositionChanged:Fire(self, x, y)
+end
+
+function gui:size(x,y)
+    self.dualDim.offset.size.x = self.dualDim.offset.size.x + x
+    self.dualDim.offset.size.y = self.dualDim.offset.size.y + y
+    self.OnSizeChanged:Fire(self, x, y)
 end
 
 function gui:moveInBounds(dx, dy)
@@ -282,10 +318,8 @@ function gui:offsetToScale()
         local child = children[i]
         local x, y = child:getAbsolutes()
         local _, __, w, h = child.parent:getAbsolutes()
-        print(x / w, y / h)
         local _, __, w, h = child:getAbsolutes()
         local _, __, pw, ph = child.parent:getAbsolutes()
-        print(w / pw, h / ph)
     end
 end
 
@@ -403,7 +437,7 @@ local mainupdater = updater:newLoop().OnLoop
 
 function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
     if type(self) == "function" then func = self end
-    mainupdater(function() func(self) end)
+    mainupdater(function(self,_,dt) func(self, dt) end)
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -627,6 +661,8 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.OnRightStickLeft = testVisual .. multi:newConnection()
     c.OnRightStickRight = testVisual .. multi:newConnection()
 
+    c.OnDestroy = multi:newConnection()
+
     local dragging = false
     local entered = false
     local moved = false
@@ -634,7 +670,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
         if not c:isActive() then return end
-        if c:canPress(x, y) then
+        if c:canPress(x, y) or dragging then
             c.OnMoved:Fire(c, x, y, dx, dy, istouch)
             if entered == false then
                 c.OnEnter:Fire(c, x, y)
@@ -668,7 +704,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
-        if c:canPress(x, y) then
+        if c:canPress(x, y) or dragging then
             c.OnPressed:Fire(c, x, y, dx, dy, istouch)
             pressed = true
 
@@ -768,9 +804,13 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         self:setDualDim(0,0,0,0,0,0,1,1)
     end
 
-    function c:delete()
+    function c:destroy()
         for i,v in pairs(self.parent:getChildren()) do
             if v == c then
+                for _, children in pairs(v) do
+                    children:destroy()
+                end
+                v.OnDestroy:Fire(v)
                 table.remove(self.parent.children,i)
                 break
             end
@@ -819,6 +859,18 @@ function gui:newVisualFrame(x, y, w, h, sx, sy, sw, sh)
     local visual = self:newBase(frame, x, y, w, h, sx, sy, sw, sh)
     visual:setTag("visual")
     return visual
+end
+
+local function anyToString(value)
+    local t = type(value)
+    if t == "table" then
+        local parts = {}
+        for k, v in pairs(value) do
+            parts[#parts + 1] = tostring(k) .. "=" .. tostring(v)
+        end
+        return "{" .. table.concat(parts, ", ") .. "}"
+    end
+    return tostring(value)
 end
 
 local testIMG
@@ -894,8 +946,17 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         end
         self.OnFontUpdated:Fire(self)
     end
+
     local cache = {}
     function c:fitFont(minSize, maxSize, opt)
+        local _,_,w,h = self:getAbsolutes()
+        if opt == nil then
+            opt = {scale=1}
+        end
+        local index=string.format("%d-%d-%d-%d-%d",minSize or 0, maxSize or 0, opt.scale or 0, w, h)
+        if cache[index] then
+            return unpack(cache[index])
+        end
         local font
         local x, y, boxWidth, boxHeight = self:getAbsolutes()
 
@@ -943,6 +1004,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
             bestFont = font(mid*opt.scale)
         end
         self:setFont(bestFont)
+        cache[index] = {bestFont, bestSize}
         return bestFont, bestSize
     end
 
@@ -1311,6 +1373,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     c.visibility = 0
     c.scaleX = 1
     c.scaleY = 1
+
     local IMAGE
 
     function c:getUniques()
@@ -1332,24 +1395,41 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         return IMAGE
     end
 
+    local img
+
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-        img = love.image.newImageData(i)
-        img = love.graphics.newImage(img)
-        IMAGE = i
+        if i:match(".gif") then
+            img = gif.load(i)
+
+            gif.Updater(img, drawer)
+            c.OnDestroy(function()
+                img.kill = true -- trigger the gif thread to terminate
+            end)
+
+            IMAGE = i
+            c.__isGif = true
+        else
+            img = love.image.newImageData(i)
+            img = love.graphics.newImage(img)
+            IMAGE = i
+        end
+        
         if type(i) == "string" then i = image_cache[i] or i end
 
         if i and x then
             c.imageHeight = h
             c.imageWidth = w
 
-            if type(i) == "string" then
+            if type(i) == "string" and not c.__isGif then
                 image_cache[i] = img
                 i = image_cache[i]
             end
 
             c.image = i
-            c.image:setWrap("repeat", "repeat")
+            if not c.__isGif then
+                c.image:setWrap("repeat", "repeat")
+            end
             c.imageColor = color.white
             c.quad = love.graphics.newQuad(x, y, w, h, c.image:getWidth(), c.image:getHeight())
             c.imageVisibility = 1
@@ -1365,7 +1445,9 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         c.imageColor = color.white
         c.imageVisibility = 1
         c.image = img
-        c.image:setWrap("repeat", "repeat")
+        if not self.__isGif then 
+            c.image:setWrap("repeat", "repeat")
+        end
         c.imageHeight = img:getHeight()
         c.imageWidth = img:getWidth()
         c.quad = love.graphics.newQuad(0, 0, c.imageWidth, c.imageHeight, c.imageWidth, c.imageHeight)
@@ -1469,23 +1551,37 @@ local drawtypes = {
     [0] = function(child, x, y, w, h) end,
     [1] = function(child, x, y, w, h)
         if child.image then
-            if child.scaleX < 0 or child.scaleY < 0 then
-                local sx, sy = child.scaleX, child.scaleY
-                local adjustX, adjustY = child.scaleX * w, child.scaleY * h
-                love.graphics.setColor(child.imageColor[1], child.imageColor[2],
-                                    child.imageColor[3], child.imageVisibility)
-                if sx < 0 and sy < 0 then
-                    love.graphics.draw(child.image, child.quad, x - adjustX, y - adjustY, rad(child.rotation), (w / child.imageWidth) * child.scaleX, (h / child.imageHeight) * child.scaleY)
-                elseif sx < 0 then
-                    love.graphics.draw(child.image, child.quad, x - adjustX, y, rad(child.rotation), (w / child.imageWidth) * child.scaleX, h / child.imageHeight)
+            love.graphics.setColor(child.imageColor[1], child.imageColor[2], child.imageColor[3], child.imageVisibility)
+            if child.__isGif then
+                if child.scaleX < 0 or child.scaleY < 0 then
+                    local sx, sy = child.scaleX, child.scaleY
+                    local adjustX, adjustY = child.scaleX * w, child.scaleY * h
+                    if sx < 0 and sy < 0 then
+                        love.graphics.draw(child.image.frames[child.image.currentFrame], child.quad, x - adjustX, y - adjustY, rad(child.rotation), (w / child.imageWidth) * child.scaleX, (h / child.imageHeight) * child.scaleY)
+                    elseif sx < 0 then
+                        love.graphics.draw(child.image.frames[child.image.currentFrame], child.quad, x - adjustX, y, rad(child.rotation), (w / child.imageWidth) * child.scaleX, h / child.imageHeight)
+                    else
+                        love.graphics.draw(child.image.frames[child.image.currentFrame], child.quad, x, y - adjustY, rad(child.rotation), w / child.imageWidth, (h / child.imageHeight) * child.scaleY)
+                    end
                 else
-                    love.graphics.draw(child.image, child.quad, x, y - adjustY, rad(child.rotation), w / child.imageWidth, (h / child.imageHeight) * child.scaleY)
+                    if child.image.frames[child.image.currentFrame] then
+                        love.graphics.draw(child.image.frames[child.image.currentFrame], child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeight)
+                    end
                 end
             else
-                love.graphics.setColor(child.imageColor[1], child.imageColor[2],
-                                    child.imageColor[3], child.imageVisibility)
-                
-                love.graphics.draw(child.image, child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeight)
+                if child.scaleX < 0 or child.scaleY < 0 then
+                    local sx, sy = child.scaleX, child.scaleY
+                    local adjustX, adjustY = child.scaleX * w, child.scaleY * h
+                    if sx < 0 and sy < 0 then
+                        love.graphics.draw(child.image, child.quad, x - adjustX, y - adjustY, rad(child.rotation), (w / child.imageWidth) * child.scaleX, (h / child.imageHeight) * child.scaleY)
+                    elseif sx < 0 then
+                        love.graphics.draw(child.image, child.quad, x - adjustX, y, rad(child.rotation), (w / child.imageWidth) * child.scaleX, h / child.imageHeight)
+                    else
+                        love.graphics.draw(child.image, child.quad, x, y - adjustY, rad(child.rotation), w / child.imageWidth, (h / child.imageHeight) * child.scaleY)
+                    end
+                else
+                    love.graphics.draw(child.image, child.quad, x, y, rad(child.rotation), w / child.imageWidth, h / child.imageHeight)
+                end
             end
         end
     end,
@@ -1566,7 +1662,7 @@ local draw_factor = function(child, mode, x, y, w, h, rx, ry, as, ae, seg)
     end
 end
 
-local draw_handler = function(child, no_draw)
+local draw_handler = function(child, no_draw, dt)
     local bg = child.color
     local bbg = child.borderColor
     local ctype = child.type
@@ -1669,17 +1765,18 @@ end
 
 gui.draw_handler = draw_handler
 
-drawer:newLoop(function()
+drawer:newLoop(function(self, dt)
     local children = gui:getAllChildren()
     for i = 1, #children do
         local child = children[i]
         if child.effect then
-            child.effect(function() draw_handler(child) end)
+            child.effect(function() draw_handler(child, nil, dt) end)
         else
-            draw_handler(child)
+            draw_handler(child,nil,dt)
         end
     end
     first_loop = true
+    love.graphics.setColor(1, 1, 1, 1)
 end)
 
 drawer:newThread(function()
@@ -1689,9 +1786,9 @@ drawer:newThread(function()
         for i = 1, #children do
             local child = children[i]
             if child.effect then
-                child.effect(function() draw_handler(child, true) end)
+                child.effect(function() draw_handler(child, true, 0) end)
             else
-                draw_handler(child, true)
+                draw_handler(child, true, 0)
             end
         end
         first_loop = true
@@ -1704,9 +1801,9 @@ local processors = {
 
 -- Drawing and Updating
 gui.draw = drawer.run
-gui.update = function()
+gui.update = function(dt)
     for i = 1, #processors do
-        processors[i]()
+        processors[i](dt)
     end
 end
 
