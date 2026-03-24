@@ -13,6 +13,7 @@ Core Objects:
   - ~~Label~~ ✔️
   - ~~Button~~ ✔️
   - Animation
+  - GIF support ✔️
 - ~~Video~~ ✔️
 
 Events:
@@ -38,3 +39,4 @@ Events:
   - ~~OnUpdate~~ ✔️
   - ~~OnDraw~~ ✔️
 
+Currently touching up the code and debugging things
