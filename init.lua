@@ -76,15 +76,12 @@ gui.Events.OnJoystickPressed = multi:newConnection()
 gui.Events.OnJoystickReleased = multi:newConnection()
 gui.Events.OnJoystickRemoved = multi:newConnection()
 
--- Non Love Events
-
-gui.Events.OnThemeChanged = multi:newConnection()
+-- Internal Connections
+gui.Events.OnCreated = multi:newConnection()
+gui.Events.OnObjectFocusChanged = multi:newConnection()
 
 -- Virtual gui init
 gui.virtual = {}
-
--- Internal Connections
-gui.Events.OnObjectFocusChanged = multi:newConnection()
 
 -- Hooks
 
@@ -147,19 +144,21 @@ local hot_keys = {}
 
 -- Wait for keys to release to reset
 local unPress = updater:newFunction(function(keys)
-    thread.hold(function()
+    local check = function()
         for key = 1, #keys["Keys"] do
             if not love.keyboard.isDown(keys["Keys"][key]) then
                 keys.isBusy = false
                 return true
             end
         end
-    end)
+    end
+    thread.hold(check)
 end)
 
 updater:newThread("GUI Hotkey Manager", function()
+    local check = function() return has_hotkey end
     while true do
-        thread.hold(function() return has_hotkey end)
+        thread.hold(check)
         for i = 1, #hot_keys do
             local good = true
             for key = 1, #hot_keys[i]["Keys"] do
@@ -233,7 +232,11 @@ function gui.apply(apply, ...)
             local cmd = field:sub(1,2)
             local handle = field:sub(3,-1)
             if cmd == "C_" then
-                object[handle](value)
+                if handle == "OnUpdate" then
+                    object[handle](object,value)
+                else
+                    object[handle](value)
+                end
             elseif cmd == "I_" then
                 object[handle](object,unpack(value))
             else
@@ -433,11 +436,17 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
-local mainupdater = updater:newLoop().OnLoop
+local mainupdater = updater:newLoop()
+mainupdater:setName("GUI Update Handler")
 
 function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-    if type(self) == "function" then func = self end
-    mainupdater(function(self,_,dt) func(self, dt) end)
+    if type(self) == "function" then 
+        func = self 
+    end
+
+    mainupdater.OnLoop(function(_,_,dt) 
+        func(self, dt) 
+    end)
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -615,6 +624,10 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return false
     end
 
+    local function creationCheck(self)
+        return self:isDescendantOf(c)
+    end
+
     setmetatable(c, self)
     c.__index = self.__index
     c.__variables = {clip = {false, 0, 0, 0, 0}}
@@ -663,12 +676,14 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     c.OnDestroy = multi:newConnection()
 
+    c.OnCreated = creationCheck .. multi:newConnection()
+    local _forwardedRef = multi.forwardConnection(gui.Events.OnCreated,c.OnCreated)
     local dragging = false
     local entered = false
     local moved = false
     local pressed = false
 
-    gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+    local _mouseMoveRef = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
         if not c:isActive() then return end
         if c:canPress(x, y) or dragging then
             c.OnMoved:Fire(c, x, y, dx, dy, istouch)
@@ -685,7 +700,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
     end)
 
-    gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+    local _mouseRelRef = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
         if c:canPress(x, y) then
             c.OnReleased:Fire(c, x, y, button, istouch, presses)
@@ -702,7 +717,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
     end)
 
-    gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+    local _mousePressRef = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
         if c:canPress(x, y) or dragging then
             c.OnPressed:Fire(c, x, y, dx, dy, istouch)
@@ -805,16 +820,57 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end
 
     function c:destroy()
-        for i,v in pairs(self.parent:getChildren()) do
-            if v == c then
-                for _, children in pairs(v) do
-                    children:destroy()
-                end
-                v.OnDestroy:Fire(v)
-                table.remove(self.parent.children,i)
+        -- Find and remove self from parent's children list
+        local children = self.parent and self.parent.children
+        if not children then return end
+
+        local foundIdx
+        for i, v in ipairs(children) do
+            if v == self then
+                foundIdx = i
                 break
             end
         end
+        if not foundIdx then return end
+
+        -- Fire OnDestroy before teardown so listeners still work during the callback
+        self.OnDestroy:Fire(self)
+
+        -- Recursively destroy all children first
+        for _, child in pairs(self.children) do
+            if type(child.destroy) == "function" then
+                child:destroy()
+            end
+        end
+        self.children = {}
+
+        -- Disconnect the global connections
+        gui.Events.OnMouseMoved:Unconnect(_mouseMoveRef)
+        gui.Events.OnMouseReleased:Unconnect(_mouseRelRef)
+        gui.Events.OnMousePressed:Unconnect(_mousePressRef)
+        gui.Events.OnCreated:Unconnect(_forwardedRef)
+        self.OnWheelMoved:Destroy()
+
+        -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
+        for key, value in pairs(self) do
+            if type(value) == "table" and
+            value.Type == multi.registerType("connector", "connections") then
+                value:Destroy()
+            end
+        end
+
+        -- Remove from parent
+        table.remove(children, foundIdx)
+        self.parent = nil
+    end
+
+    function c:removeChildren()
+        for _, child in pairs(self.children) do
+            if type(child.destroy) == "function" then
+                child:destroy()  -- recursive, disconnects gui.Events listeners
+            end
+        end
+        self.children = {}
     end
 
     -- Add to the parents children table
@@ -826,6 +882,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         table.insert(self.children, c)
     end
     local a = 0
+    if typ == frame then
+        gui.Events.OnCreated:Fire(c) -- Trigger frame types instantly
+    end
     return c
 end
 
@@ -1078,12 +1137,14 @@ function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
-    return self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+    local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+    gui.Events.OnCreated:Fire(c)
+    return c
 end
 
 -- local val used when drawing
@@ -1192,15 +1253,16 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnPressedOuter(function() c.bar_show = false end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 local function textBoxThread()
     updater:newThread("Textbox Handler", function()
+        local check = function() return object_focus:hasType(box) end
         while true do
             -- Do nothing if we aren't dealing with a textbox
-            thread.hold(function() return object_focus:hasType(box) end)
+            thread.hold(check)
             local ref = object_focus
             ref.bar_show = true
             thread.sleep(.5)
@@ -1247,10 +1309,6 @@ local function delete(obj, cmd)
         end
     end
 end
-
-gui.Events.OnObjectFocusChanged(function(prev, new)
-    --
-end)
 
 gui.HotKeys.OnSelectAll(function()
     if object_focus:hasType(box) then
@@ -1458,6 +1516,7 @@ end
 function gui:newImageLabel(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
     c:setImage(source)
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1471,7 +1530,7 @@ function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1521,7 +1580,7 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     function c:tell() return c.video:tell() end
 
-    c:newThread(function(self)
+    c:newThread("Video Handler",function(self)
 
         local testCompletion = function() -- More intensive test
             if self.video:tell() == 0 then
@@ -1540,7 +1599,7 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     c.videoVisibility = 1
     c.videoColor = color.white
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1765,7 +1824,7 @@ end
 
 gui.draw_handler = draw_handler
 
-drawer:newLoop(function(self, dt)
+local draw_loop = drawer:newLoop(function(self, dt)
     local children = gui:getAllChildren()
     for i = 1, #children do
         local child = children[i]
@@ -1778,8 +1837,9 @@ drawer:newLoop(function(self, dt)
     first_loop = true
     love.graphics.setColor(1, 1, 1, 1)
 end)
+draw_loop:setName("GUI Draw Handler")
 
-drawer:newThread(function()
+drawer:newThread("Draw Handler",function()
     while true do
         thread.sleep(.01)
         local children = gui.virtual:getAllChildren()
@@ -1808,7 +1868,7 @@ gui.update = function(dt)
 end
 
 function gui:newProcessor(name)
-    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(8), true)
+    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(4), true)
     table.insert(processors, proc.run)
     return proc
 end

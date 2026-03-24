@@ -339,7 +339,7 @@ function GifLoader.Updater(gif, proc)
     local wait = function()
         return gif.playing or gif.kill
     end
-    proc:newThread(function()
+    proc:newThread("Gif Handler",function()
         while true do
             -- Only run if not paused
             if gif.kill then -- When we want to clean up

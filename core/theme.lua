@@ -56,14 +56,40 @@ function theme:dump()
     return '"' .. table.concat({color.rgbToHex(self.colorPrimary), color.rgbToHex(self.colorPrimaryText), color.rgbToHex(self.colorButtonText)},"\",\"") .. '"'
 end
 
-function theme:new(colorPrimary, primaryText, buttonText, primaryTextFont, buttonTextFont)
+local function newColor(c,default)
+    if not c then
+        return default
+    end
+    return color.new(c)
+end
+
+function theme:new(colorPrimary, primaryText, buttonText, buttonNormal, primaryTextFont, buttonTextFont)
     local c = {}
     setmetatable(c, theme)
+
+    if type(colorPrimary) == "table" then
+        local opts = colorPrimary
+        c.colorPrimary = newColor(opts.primary)
+        c.colorPrimaryDark = newColor(opts.primaryDark, color.darken(c.colorPrimary,.4))
+        c.colorPrimaryText = newColor(opts.primaryText)
+        c.colorButtonNormal = newColor(opts.buttonNormal, color.darken(c.colorPrimary,.2))
+        c.colorButtonHighlight = newColor(opts.buttonHighlight, color.lighten(c.colorPrimary,.2))
+        c.colorButtonText = newColor(opts.buttonText, c.colorPrimaryText)
+        c.fontPrimary = opts.textFont or defaultFont
+        c.fontButton = opts.buttonTextFont or defaultFont
+        for i,v in pairs(colorPrimary) do
+            if not c[i] then
+                c[i] = v -- only overwrite non managed fields
+            end
+        end
+        return c
+    end
+    
     c.colorPrimary = color.new(colorPrimary)
     c.colorPrimaryDark = color.darken(c.colorPrimary,.4)
     c.colorPrimaryText = color.new(primaryText)
-    c.colorButtonNormal = color.darken(c.colorPrimary,.2)
-    c.colorButtonHighlight = color.darken(c.colorButtonNormal,.2)
+    c.colorButtonNormal = newColor(buttonNormal) or color.darken(c.colorPrimary,.2)
+    c.colorButtonHighlight = color.lighten(c.colorButtonNormal,.2)
     c.colorButtonText = color.new(buttonText)
     c.fontPrimary = primaryTextFont or defaultFont
     c.fontButton = buttonTextFont or defaultFont
