@@ -226,19 +226,33 @@ end
 C_ prefix = connect function to a connection
 I_ prefix = invoke function args should be wrapped in a table
 ]]
+local function handleConnection(object,field,value)
+    if field == "OnUpdate" then
+        object[field](object,value)
+    else
+        object[field](value)
+    end
+end
+
+local function handleFunction(object,field,value)
+    if type(value) ~= "table" then return end
+    object[field](object,unpack(value))
+end
+
 function gui.apply(apply, ...)
     for field, value in pairs(apply) do
         for _, object in pairs({...}) do
             local cmd = field:sub(1,2)
             local handle = field:sub(3,-1)
+            local tp = type(object[field])
             if cmd == "C_" then
-                if handle == "OnUpdate" then
-                    object[handle](object,value)
-                else
-                    object[handle](value)
-                end
+                handleConnection(object,handle,value)
             elseif cmd == "I_" then
-                object[handle](object,unpack(value))
+                handleFunction(object,handle,value)
+            elseif tp == "table" and object[field].Type == multi.registerType("connector", "connections") then
+                handleConnection(object,field,value)
+            elseif tp == "function" then
+                handleFunction(object,field,value)
             else
                 object[field] = value
             end
@@ -327,8 +341,9 @@ function gui:offsetToScale()
 end
 
 function gui:getAbsolutes(transform) -- returns x, y, w, h
+    local x,y,w,h
     if transform then
-        return transform((self.parent.w * self.dualDim.scale.pos.x) +
+        x, y, w, h = transform((self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x),
                transform((self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y), transform((self.parent.w *
@@ -336,7 +351,7 @@ function gui:getAbsolutes(transform) -- returns x, y, w, h
                transform((self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y)
     else
-        return (self.parent.w * self.dualDim.scale.pos.x) +
+        x, y, w, h = (self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x,
            (self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y, (self.parent.w *
@@ -344,6 +359,12 @@ function gui:getAbsolutes(transform) -- returns x, y, w, h
            (self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y
     end
+    if self.square == "w" then
+        h = w
+    elseif self.square == "h" then
+        w = h
+    end
+    return x, y, w, h
 end
 
 function gui:getAllChildren(vis)
@@ -628,8 +649,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return self:isDescendantOf(c)
     end
 
-    setmetatable(c, self)
-    c.__index = self.__index
+    setmetatable(c, gui)
     c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.focus = false
     c.active = true
@@ -739,6 +759,13 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
             c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
         end
     end)
+
+    function c:setColor(key,col)
+        if col[4] then
+            self.visibility = col[4]
+        end
+        self[key] = col
+    end
 
     function c:isOffScreen()
         local x, y, w, h = self:getAbsolutes()
@@ -1009,12 +1036,14 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     local cache = {}
     function c:fitFont(minSize, maxSize, opt)
         local _,_,w,h = self:getAbsolutes()
+        local sw, sh = love.graphics.getDimensions()
+        local index = self.text .. tostring(w) .. tostring(h) .. tostring(sw) .. tostring(sh)
+        if cache[index] then
+            self:setFont(cache[index][1])
+            return unpack(cache[index])
+        end
         if opt == nil then
             opt = {scale=1}
-        end
-        local index=string.format("%d-%d-%d-%d-%d",minSize or 0, maxSize or 0, opt.scale or 0, w, h)
-        if cache[index] then
-            return unpack(cache[index])
         end
         local font
         local x, y, boxWidth, boxHeight = self:getAbsolutes()
@@ -1061,47 +1090,13 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         end
         if type(opt) == "table" and opt.scale ~= 0 then
             bestFont = font(mid*opt.scale)
+        else
+            bestFont = font(mid - 1)
         end
         self:setFont(bestFont)
         cache[index] = {bestFont, bestSize}
         return bestFont, bestSize
     end
-
-    -- function c:fitFont(n, max)
-    --     local max = max or math.huge
-    --     local font
-    --     local isdefault = false
-    --     if self.fontFile then
-    --         if self.fontFile:match("ttf") then
-    --             font = function(n)
-    --                 return love.graphics.newFont(self.fontFile, n, "normal")
-    --             end
-    --         else
-    --             font = function(n)
-    --                 return love.graphics.newFont(self.fontFile, n)
-    --             end
-    --         end
-    --     else
-    --         isdefault = true
-    --         font = function(n) return love.graphics.setNewFont(n) end
-    --     end
-    --     local x, y, width, height = self:getAbsolutes()
-    --     local Font, text = self.Font, self.text
-    --     local s = 3
-    --     Font = font(s)
-    --     while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
-    --         s = s + 1
-    --         Font = font(s)
-    --     end
-    --     Font = font(s - (4 + (n or 0)))
-    --     Font:setFilter("linear", "nearest", 4)
-    --     self.font = Font
-    --     self.textOffsetY = 0
-    --     local top, bottom = self:calculateFontOffset(Font, 0)
-    --     self.textOffsetY = floor(((height - bottom) - top) / 2)
-    --     self.OnFontUpdated:Fire(self)
-    --     return s - (4 + (n or 0))
-    -- end
 
     function c:centerFont(y_offset)
         local x, y, width, height = self:getAbsolutes()
@@ -1553,6 +1548,10 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
         c.quad = love.graphics.newQuad(0, 0, w, h, c.videoWidth, c.videoHeigth)
     end
 
+    function c:getDuration()
+        return c.audioLength
+    end
+
     function c:getVideo() return self.video end
 
     if type(source) == "string" then c:setVideo(source) end
@@ -1580,17 +1579,17 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     function c:tell() return c.video:tell() end
 
-    c:newThread("Video Handler",function(self)
+    updater:newThread("Video Handler",function()
 
         local testCompletion = function() -- More intensive test
-            if self.video:tell() == 0 then
-                self.OnVideoFinished:Fire(self)
+            if c.video:tell() == 0 then
+                c.OnVideoFinished:Fire(c)
                 return true
             end
         end
 
         local isplaying = function() -- Less intensive test
-            return self.video:isPlaying()
+            return c.video:isPlaying()
         end
 
         while true do thread.chain(isplaying, testCompletion) end
@@ -1759,6 +1758,7 @@ local draw_handler = function(child, no_draw, dt)
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
     end
+
     local drawB = child.drawBorder
     -- Set color
     love.graphics.setLineStyle("smooth")
@@ -1882,6 +1882,7 @@ gui.virtual.y = 0
 setmetatable(gui.virtual, gui)
 
 local w, h = love.graphics.getDimensions()
+
 gui.virtual.dualDim.offset.size.x = w
 gui.virtual.dualDim.offset.size.y = h
 gui.virtual.w = w

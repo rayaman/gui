@@ -28,7 +28,8 @@ transition.__call = function(t, start, stop, time, ...)
         local handle = t.func(t, start, stop, (ti or time) or 1, unpack(args))
         return {
             OnStep = handle.OnStatus,
-            OnStop = handle.OnReturn + handle.OnError
+            OnStop = handle.OnReturn + handle.OnError,
+            Kill = t.Kill
         }
     end
 end
@@ -40,6 +41,7 @@ function transition:newTransition(func)
     c.fps = fps
     c.func = processor:newFunction(func)
     c.OnStop = multi:newConnection()
+    c.kill = false
 
     function c:SetFPS(fps)
         self.fps = fps
@@ -49,6 +51,12 @@ function transition:newTransition(func)
         return self.fps
     end
 
+    function c:Kill()
+        if c.running then
+            c.kill = true
+        end
+    end
+
     return c
 end
 
@@ -56,10 +64,15 @@ transition.glide = transition:newTransition(function(t, start, stop, time, ...)
     local steps = t.fps*time
     local piece = time/steps
     local split = stop-start
+    t.running = true
     for i = 0, steps do
-        thread.sleep(piece)
-        thread.pushStatus(start + i*(split/steps),piece*i)
+        if not(t.kill) then
+            thread.sleep(piece)
+            thread.pushStatus(start + i*(split/steps),piece*i)
+        end
     end
+    t.running = false
+    t.kill = false
 end)
 
 return transition

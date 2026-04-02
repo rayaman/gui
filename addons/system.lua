@@ -9,6 +9,7 @@ local TM_THEME = theme:new({
     primaryText = "#AEC3B0"
 })
 
+local default_theme = TM_THEME
 -- ── layout constants ──────────────────────────────────────────────────────────
 -- Columns: Indent+Name, State, Status, Uptime, Priority, Pause, Kill
 --          Name shrunk so data columns have room to breathe
@@ -179,8 +180,9 @@ function gui:newWindow(x, y, w, h, text, draggable, theme)
     gui.apply({
         visibility = 0,
         I_enableDragging = {gui.MOUSE_PRIMARY},
-        C_OnUpdate = function(self) self:topStack() end,
-        C_OnDragging = function(self, dx, dy)
+        respectHierarchy = {false},
+        OnUpdate = function(self) self:topStack() end,
+        OnDragging = function(self, dx, dy)
             local ox, oy, ow, oh = header:getAbsolutes()
             local tag = self:getTag()
             if tag == "left" or tag == "bleft" then
@@ -200,8 +202,8 @@ function gui:newWindow(x, y, w, h, text, draggable, theme)
             local x, y, w, h = window:getAbsolutes()
             if h < 100 then window:setDualDim(nil, nil, nil, 100) end
         end,
-        C_OnDragEnd = function(self) love.mouse.setCursor(pointer) end,
-        C_OnEnter = function(self)
+        OnDragEnd = function(self) love.mouse.setCursor(pointer) end,
+        OnEnter = function(self)
             local tag = self:getTag()
             if tag == "left" or tag == "right" then
                 love.mouse.setCursor(sizewe)
@@ -213,7 +215,7 @@ function gui:newWindow(x, y, w, h, text, draggable, theme)
                 love.mouse.setCursor(sizens)
             end
         end,
-        C_OnExit = function(self) love.mouse.setCursor(pointer) end,
+        OnExit = function(self) love.mouse.setCursor(pointer) end,
     }, left, right, bottom, bottomleft, bottomright)
 
     local title = header:newTextLabel(text or "", 5, 0, w - 35, 35)
@@ -860,13 +862,11 @@ function gui:showTaskManager()
     hookProc(multi, "root")
     -- All processors currently registered
     for _, proc in ipairs(multi:getProcessors()) do
-        print("Hooking",proc:getName())
         hookProc(proc, proc:getName())
     end
     -- Any processors created after this point
     multi.OnObjectCreated(function(obj)
         if obj.Type == multi.registerType("process", "processes") then
-            print("Hooking",obj:getName())
             hookProc(obj, obj:getName())
         end
     end)
