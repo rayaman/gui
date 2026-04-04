@@ -76,15 +76,12 @@ gui.Events.OnJoystickPressed = multi:newConnection()
 gui.Events.OnJoystickReleased = multi:newConnection()
 gui.Events.OnJoystickRemoved = multi:newConnection()
 
--- Non Love Events
-
-gui.Events.OnThemeChanged = multi:newConnection()
+-- Internal Connections
+gui.Events.OnCreated = multi:newConnection()
+gui.Events.OnObjectFocusChanged = multi:newConnection()
 
 -- Virtual gui init
 gui.virtual = {}
-
--- Internal Connections
-gui.Events.OnObjectFocusChanged = multi:newConnection()
 
 -- Hooks
 
@@ -147,19 +144,21 @@ local hot_keys = {}
 
 -- Wait for keys to release to reset
 local unPress = updater:newFunction(function(keys)
-    thread.hold(function()
+    local check = function()
         for key = 1, #keys["Keys"] do
             if not love.keyboard.isDown(keys["Keys"][key]) then
                 keys.isBusy = false
                 return true
             end
         end
-    end)
+    end
+    thread.hold(check)
 end)
 
 updater:newThread("GUI Hotkey Manager", function()
+    local check = function() return has_hotkey end
     while true do
-        thread.hold(function() return has_hotkey end)
+        thread.hold(check)
         for i = 1, #hot_keys do
             local good = true
             for key = 1, #hot_keys[i]["Keys"] do
@@ -227,15 +226,33 @@ end
 C_ prefix = connect function to a connection
 I_ prefix = invoke function args should be wrapped in a table
 ]]
+local function handleConnection(object,field,value)
+    if field == "OnUpdate" then
+        object[field](object,value)
+    else
+        object[field](value)
+    end
+end
+
+local function handleFunction(object,field,value)
+    if type(value) ~= "table" then return end
+    object[field](object,unpack(value))
+end
+
 function gui.apply(apply, ...)
     for field, value in pairs(apply) do
         for _, object in pairs({...}) do
             local cmd = field:sub(1,2)
             local handle = field:sub(3,-1)
+            local tp = type(object[field])
             if cmd == "C_" then
-                object[handle](value)
+                handleConnection(object,handle,value)
             elseif cmd == "I_" then
-                object[handle](object,unpack(value))
+                handleFunction(object,handle,value)
+            elseif tp == "table" and object[field].Type == multi.registerType("connector", "connections") then
+                handleConnection(object,field,value)
+            elseif tp == "function" then
+                handleFunction(object,field,value)
             else
                 object[field] = value
             end
@@ -324,8 +341,9 @@ function gui:offsetToScale()
 end
 
 function gui:getAbsolutes(transform) -- returns x, y, w, h
+    local x,y,w,h
     if transform then
-        return transform((self.parent.w * self.dualDim.scale.pos.x) +
+        x, y, w, h = transform((self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x),
                transform((self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y), transform((self.parent.w *
@@ -333,7 +351,7 @@ function gui:getAbsolutes(transform) -- returns x, y, w, h
                transform((self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y)
     else
-        return (self.parent.w * self.dualDim.scale.pos.x) +
+        x, y, w, h = (self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x,
            (self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y, (self.parent.w *
@@ -341,6 +359,12 @@ function gui:getAbsolutes(transform) -- returns x, y, w, h
            (self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y
     end
+    if self.square == "w" then
+        h = w
+    elseif self.square == "h" then
+        w = h
+    end
+    return x, y, w, h
 end
 
 function gui:getAllChildren(vis)
@@ -433,11 +457,17 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
-local mainupdater = updater:newLoop().OnLoop
+local mainupdater = updater:newLoop()
+mainupdater:setName("GUI Update Handler")
 
 function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-    if type(self) == "function" then func = self end
-    mainupdater(function(self,_,dt) func(self, dt) end)
+    if type(self) == "function" then 
+        func = self 
+    end
+
+    mainupdater.OnLoop(function(_,_,dt) 
+        func(self, dt) 
+    end)
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -615,8 +645,11 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return false
     end
 
-    setmetatable(c, self)
-    c.__index = self.__index
+    local function creationCheck(self)
+        return self:isDescendantOf(c)
+    end
+
+    setmetatable(c, gui)
     c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.focus = false
     c.active = true
@@ -663,12 +696,14 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     c.OnDestroy = multi:newConnection()
 
+    c.OnCreated = creationCheck .. multi:newConnection()
+    local _forwardedRef = multi.forwardConnection(gui.Events.OnCreated,c.OnCreated)
     local dragging = false
     local entered = false
     local moved = false
     local pressed = false
 
-    gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+    local _mouseMoveRef = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
         if not c:isActive() then return end
         if c:canPress(x, y) or dragging then
             c.OnMoved:Fire(c, x, y, dx, dy, istouch)
@@ -685,7 +720,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
     end)
 
-    gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+    local _mouseRelRef = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
         if c:canPress(x, y) then
             c.OnReleased:Fire(c, x, y, button, istouch, presses)
@@ -702,7 +737,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
     end)
 
-    gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+    local _mousePressRef = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
         if c:canPress(x, y) or dragging then
             c.OnPressed:Fire(c, x, y, dx, dy, istouch)
@@ -724,6 +759,13 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
             c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
         end
     end)
+
+    function c:setColor(key,col)
+        if col[4] then
+            self.visibility = col[4]
+        end
+        self[key] = col
+    end
 
     function c:isOffScreen()
         local x, y, w, h = self:getAbsolutes()
@@ -805,16 +847,57 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end
 
     function c:destroy()
-        for i,v in pairs(self.parent:getChildren()) do
-            if v == c then
-                for _, children in pairs(v) do
-                    children:destroy()
-                end
-                v.OnDestroy:Fire(v)
-                table.remove(self.parent.children,i)
+        -- Find and remove self from parent's children list
+        local children = self.parent and self.parent.children
+        if not children then return end
+
+        local foundIdx
+        for i, v in ipairs(children) do
+            if v == self then
+                foundIdx = i
                 break
             end
         end
+        if not foundIdx then return end
+
+        -- Fire OnDestroy before teardown so listeners still work during the callback
+        self.OnDestroy:Fire(self)
+
+        -- Recursively destroy all children first
+        for _, child in pairs(self.children) do
+            if type(child.destroy) == "function" then
+                child:destroy()
+            end
+        end
+        self.children = {}
+
+        -- Disconnect the global connections
+        gui.Events.OnMouseMoved:Unconnect(_mouseMoveRef)
+        gui.Events.OnMouseReleased:Unconnect(_mouseRelRef)
+        gui.Events.OnMousePressed:Unconnect(_mousePressRef)
+        gui.Events.OnCreated:Unconnect(_forwardedRef)
+        self.OnWheelMoved:Destroy()
+
+        -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
+        for key, value in pairs(self) do
+            if type(value) == "table" and
+            value.Type == multi.registerType("connector", "connections") then
+                value:Destroy()
+            end
+        end
+
+        -- Remove from parent
+        table.remove(children, foundIdx)
+        self.parent = nil
+    end
+
+    function c:removeChildren()
+        for _, child in pairs(self.children) do
+            if type(child.destroy) == "function" then
+                child:destroy()  -- recursive, disconnects gui.Events listeners
+            end
+        end
+        self.children = {}
     end
 
     -- Add to the parents children table
@@ -826,6 +909,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         table.insert(self.children, c)
     end
     local a = 0
+    if typ == frame then
+        gui.Events.OnCreated:Fire(c) -- Trigger frame types instantly
+    end
     return c
 end
 
@@ -950,12 +1036,14 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     local cache = {}
     function c:fitFont(minSize, maxSize, opt)
         local _,_,w,h = self:getAbsolutes()
+        local sw, sh = love.graphics.getDimensions()
+        local index = self.text .. tostring(w) .. tostring(h) .. tostring(sw) .. tostring(sh)
+        if cache[index] then
+            self:setFont(cache[index][1])
+            return unpack(cache[index])
+        end
         if opt == nil then
             opt = {scale=1}
-        end
-        local index=string.format("%d-%d-%d-%d-%d",minSize or 0, maxSize or 0, opt.scale or 0, w, h)
-        if cache[index] then
-            return unpack(cache[index])
         end
         local font
         local x, y, boxWidth, boxHeight = self:getAbsolutes()
@@ -1002,47 +1090,13 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         end
         if type(opt) == "table" and opt.scale ~= 0 then
             bestFont = font(mid*opt.scale)
+        else
+            bestFont = font(mid - 1)
         end
         self:setFont(bestFont)
         cache[index] = {bestFont, bestSize}
         return bestFont, bestSize
     end
-
-    -- function c:fitFont(n, max)
-    --     local max = max or math.huge
-    --     local font
-    --     local isdefault = false
-    --     if self.fontFile then
-    --         if self.fontFile:match("ttf") then
-    --             font = function(n)
-    --                 return love.graphics.newFont(self.fontFile, n, "normal")
-    --             end
-    --         else
-    --             font = function(n)
-    --                 return love.graphics.newFont(self.fontFile, n)
-    --             end
-    --         end
-    --     else
-    --         isdefault = true
-    --         font = function(n) return love.graphics.setNewFont(n) end
-    --     end
-    --     local x, y, width, height = self:getAbsolutes()
-    --     local Font, text = self.Font, self.text
-    --     local s = 3
-    --     Font = font(s)
-    --     while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
-    --         s = s + 1
-    --         Font = font(s)
-    --     end
-    --     Font = font(s - (4 + (n or 0)))
-    --     Font:setFilter("linear", "nearest", 4)
-    --     self.font = Font
-    --     self.textOffsetY = 0
-    --     local top, bottom = self:calculateFontOffset(Font, 0)
-    --     self.textOffsetY = floor(((height - bottom) - top) / 2)
-    --     self.OnFontUpdated:Fire(self)
-    --     return s - (4 + (n or 0))
-    -- end
 
     function c:centerFont(y_offset)
         local x, y, width, height = self:getAbsolutes()
@@ -1078,12 +1132,14 @@ function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
-    return self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+    local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+    gui.Events.OnCreated:Fire(c)
+    return c
 end
 
 -- local val used when drawing
@@ -1192,15 +1248,16 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnPressedOuter(function() c.bar_show = false end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 local function textBoxThread()
     updater:newThread("Textbox Handler", function()
+        local check = function() return object_focus:hasType(box) end
         while true do
             -- Do nothing if we aren't dealing with a textbox
-            thread.hold(function() return object_focus:hasType(box) end)
+            thread.hold(check)
             local ref = object_focus
             ref.bar_show = true
             thread.sleep(.5)
@@ -1247,10 +1304,6 @@ local function delete(obj, cmd)
         end
     end
 end
-
-gui.Events.OnObjectFocusChanged(function(prev, new)
-    --
-end)
 
 gui.HotKeys.OnSelectAll(function()
     if object_focus:hasType(box) then
@@ -1399,7 +1452,8 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-        if i:match(".gif") then
+
+        if type(i) == "string" and i:match(".gif") then
             img = gif.load(i)
 
             gif.Updater(img, drawer)
@@ -1409,7 +1463,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
             IMAGE = i
             c.__isGif = true
-        else
+        elseif type(i) == "string" then
             img = love.image.newImageData(i)
             img = love.graphics.newImage(img)
             IMAGE = i
@@ -1458,6 +1512,7 @@ end
 function gui:newImageLabel(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
     c:setImage(source)
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1471,7 +1526,7 @@ function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1492,6 +1547,10 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
         c.videoHeigth = c.video:getHeight()
         c.videoWidth = c.video:getWidth()
         c.quad = love.graphics.newQuad(0, 0, w, h, c.videoWidth, c.videoHeigth)
+    end
+
+    function c:getDuration()
+        return c.audioLength
     end
 
     function c:getVideo() return self.video end
@@ -1521,17 +1580,17 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     function c:tell() return c.video:tell() end
 
-    c:newThread(function(self)
+    updater:newThread("Video Handler",function()
 
         local testCompletion = function() -- More intensive test
-            if self.video:tell() == 0 then
-                self.OnVideoFinished:Fire(self)
+            if c.video:tell() == 0 then
+                c.OnVideoFinished:Fire(c)
                 return true
             end
         end
 
         local isplaying = function() -- Less intensive test
-            return self.video:isPlaying()
+            return c.video:isPlaying()
         end
 
         while true do thread.chain(isplaying, testCompletion) end
@@ -1540,7 +1599,7 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     c.videoVisibility = 1
     c.videoColor = color.white
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1700,18 +1759,18 @@ local draw_handler = function(child, no_draw, dt)
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
     end
+
     local drawB = child.drawBorder
-    -- Set color
+
+    love.graphics.setColor(bg[1], bg[2], bg[3], vis)
+    draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
+
     love.graphics.setLineStyle("smooth")
-    love.graphics.setLineWidth(3)
+    love.graphics.setLineWidth(1)
     if drawB then
         love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
         draw_factor(child,"line", x, y, w, h, rx, ry, nil, nil, segments)
-        -- love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
     end
-    love.graphics.setColor(bg[1], bg[2], bg[3], vis)
-    draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
-    --love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
     
     if drawB then
         if roundness == "top" then
@@ -1765,7 +1824,7 @@ end
 
 gui.draw_handler = draw_handler
 
-drawer:newLoop(function(self, dt)
+local draw_loop = drawer:newLoop(function(self, dt)
     local children = gui:getAllChildren()
     for i = 1, #children do
         local child = children[i]
@@ -1778,8 +1837,9 @@ drawer:newLoop(function(self, dt)
     first_loop = true
     love.graphics.setColor(1, 1, 1, 1)
 end)
+draw_loop:setName("GUI Draw Handler")
 
-drawer:newThread(function()
+drawer:newThread("Draw Handler",function()
     while true do
         thread.sleep(.01)
         local children = gui.virtual:getAllChildren()
@@ -1808,7 +1868,7 @@ gui.update = function(dt)
 end
 
 function gui:newProcessor(name)
-    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(8), true)
+    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(4), true)
     table.insert(processors, proc.run)
     return proc
 end
@@ -1822,6 +1882,7 @@ gui.virtual.y = 0
 setmetatable(gui.virtual, gui)
 
 local w, h = love.graphics.getDimensions()
+
 gui.virtual.dualDim.offset.size.x = w
 gui.virtual.dualDim.offset.size.y = h
 gui.virtual.w = w
@@ -1854,7 +1915,6 @@ function gui:GetSizeAdjustedToAspectRatio(dWidth, dHeight)
         newWidth = dHeight * self.g_width  / self.g_height
         newHeight = dHeight
     end
-
     return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
 end
 
