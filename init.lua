@@ -1452,7 +1452,8 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-        if i:match(".gif") then
+
+        if type(i) == "string" and i:match(".gif") then
             img = gif.load(i)
 
             gif.Updater(img, drawer)
@@ -1462,7 +1463,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
             IMAGE = i
             c.__isGif = true
-        else
+        elseif type(i) == "string" then
             img = love.image.newImageData(i)
             img = love.graphics.newImage(img)
             IMAGE = i
@@ -1760,17 +1761,16 @@ local draw_handler = function(child, no_draw, dt)
     end
 
     local drawB = child.drawBorder
-    -- Set color
+
+    love.graphics.setColor(bg[1], bg[2], bg[3], vis)
+    draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
+
     love.graphics.setLineStyle("smooth")
-    love.graphics.setLineWidth(3)
+    love.graphics.setLineWidth(1)
     if drawB then
         love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
         draw_factor(child,"line", x, y, w, h, rx, ry, nil, nil, segments)
-        -- love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
     end
-    love.graphics.setColor(bg[1], bg[2], bg[3], vis)
-    draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
-    --love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
     
     if drawB then
         if roundness == "top" then
@@ -1915,7 +1915,6 @@ function gui:GetSizeAdjustedToAspectRatio(dWidth, dHeight)
         newWidth = dHeight * self.g_width  / self.g_height
         newHeight = dHeight
     end
-
     return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
 end
 
