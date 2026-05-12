@@ -1,22 +1,22 @@
 local color={}
 local mt = {
 	__add = function (c1,c2)
-		return color.new(c1[1]+c2[1],c1[2]+c2[2],c1[2]+c2[2])
+		return color.new(c1[1]+c2[1],c1[2]+c2[2],c1[3]+c2[3])
 	end,
 	__sub = function (c1,c2)
-		return color.new(c1[1]-c2[1],c1[2]-c2[2],c1[2]-c2[2])
+		return color.new(c1[1]-c2[1],c1[2]-c2[2],c1[3]-c2[3])
 	end,
 	__mul = function (c1,c2)
-		return color.new(c1[1]*c2[1],c1[2]*c2[2],c1[2]*c2[2])
+		return color.new(c1[1]*c2[1],c1[2]*c2[2],c1[3]*c2[3])
 	end,
 	__div = function (c1,c2)
-		return color.new(c1[1]/c2[1],c1[2]/c2[2],c1[2]/c2[2])
+		return color.new(c1[1]/c2[1],c1[2]/c2[2],c1[3]/c2[3])
 	end,
 	__mod = function (c1,c2)
-		return color.new(c1[1]%c2[1],c1[2]%c2[2],c1[2]%c2[2])
+		return color.new(c1[1]%c2[1],c1[2]%c2[2],c1[3]%c2[3])
 	end,
 	__pow = function (c1,c2)
-		return color.new(c1[1]^c2[1],c1[2]^c2[2],c1[2]^c2[2])
+		return color.new(c1[1]^c2[1],c1[2]^c2[2],c1[3]^c2[3])
 	end,
 	__unm = function (c1)
 		return color.new(-c1[1],-c1[2],-c1[2])
@@ -25,13 +25,13 @@ local mt = {
 		return "("..c[1]..","..c[2]..","..c[3]..",".. (c[4] or "1") ..")"
 	end,
 	__eq = function (c1,c2)
-		return (c1[1]==c2[1] and c1[2]==c2[2] and c1[2]==c2[2])
+		return (c1[1]==c2[1] and c1[2]==c2[2] and c1[3]==c2[3])
 	end,
 	__lt = function (c1,c2)
-		return (c1[1]<c2[1] and c1[2]<c2[2] and c1[2]<c2[2])
+		return (c1[1]<c2[1] and c1[2]<c2[2] and c1[3]<c2[3])
 	end,
 	__le = function (c1,c2)
-		return (c1[1]<=c2[1] and c1[2]<=c2[2] and c1[2]<=c2[2])
+		return (c1[1]<=c2[1] and c1[2]<=c2[2] and c1[3]<=c2[3])
 	end
 }
 

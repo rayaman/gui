@@ -139,6 +139,10 @@ end)
 
 -- Hotkeys
 
+local function noOf(sx,sy,sw,sh)
+    return nil,nil,nil,nil,sx,sy,sw,sh
+end
+
 local has_hotkey = false
 local hot_keys = {}
 
@@ -575,8 +579,7 @@ function gui:isActive()
 end
 
 function gui:isOnScreen()
-    
-    return 
+    return not self:isOffScreen()
 end
 
 -- Base get uniques
@@ -1123,6 +1126,302 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     return c
 end
 
+function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
+    -- Outer viewport (clips content)
+    local viewport = self:newFrame(x, y, w or 0, h or 0, sx, sy, sw, sh)
+    viewport.clipDescendants = true
+    viewport.color = color.new("#f9f9f9")
+    viewport:setRoundness(3, 3)
+
+    -- Inner content frame (scrolled by offsetting its y)
+    local content = viewport:newFrame(2, 2, -4, -4, 0, 0, 1, 0)
+    content.drawBorder = false
+    content.color      = {0, 0, 0, 0}
+    content.visibility = 0
+
+    -- Cursor line rendering happens via a separate frame
+    local cursorBar = viewport:newFrame(0, 0, 1, 0)
+    cursorBar.color      = color.new("#222222")
+    cursorBar.drawBorder = false
+    cursorBar.ignore     = true
+    cursorBar.visibility = 0
+
+    local lines    = {}
+    local lineObjs = {}   -- TextLabel per line
+    local LINE_H   = 18
+    local scrollY  = 0
+    local cursorLine = 1
+    local cursorCol  = 0
+    local blinkOn    = true
+    local blinkTimer = 0
+    local BLINK_RATE = 0.5
+    local focused    = false
+
+    viewport.OnChanged = multi:newConnection()
+    viewport.readOnly  = false
+
+    -- Split a string into lines
+    local function splitLines(s)
+        local result = {}
+        local pos = 1
+        while true do
+            local nl = s:find("\n", pos, true)
+            if nl then
+                result[#result + 1] = s:sub(pos, nl - 1)
+                pos = nl + 1
+            else
+                result[#result + 1] = s:sub(pos)
+                break
+            end
+        end
+        return result
+    end
+
+    -- Join lines back to a single string
+    local function joinLines()
+        return table.concat(lines, "\n")
+    end
+
+    -- Rebuild all line label objects
+    local function rebuildLabels()
+        for _, obj in ipairs(lineObjs) do
+            obj:destroy()
+        end
+        lineObjs = {}
+
+        for i, lineText in ipairs(lines) do
+            local lbl = content:newTextLabel(lineText, 0, (i-1)*LINE_H, 0, LINE_H, 0, 0, 1)
+            lbl.drawBorder = false
+            lbl.color      = {0, 0, 0, 0}
+            lbl.visibility = 0
+            lbl.textColor  = color.new("#222222")
+            lbl.align      = gui.ALIGN_LEFT
+            lbl.ignore     = true
+            lbl:setFont(13)
+            lineObjs[i] = lbl
+        end
+
+        -- Resize content frame to fit all lines
+        local totalH = #lines * LINE_H + 4
+        content:setDualDim(nil, nil, nil, totalH)
+    end
+
+    -- Apply vertical scroll so the cursor stays visible
+    local function applyScroll()
+        local _, _, _, vh = viewport:getAbsolutes()
+        local contentH = #lines * LINE_H + 4
+        local maxScroll = math.max(0, contentH - vh)
+        scrollY = math.max(0, math.min(scrollY, maxScroll))
+        content:rawSetDualDim(2, 2 - scrollY)
+    end
+
+    local function ensureCursorVisible()
+        local _, _, _, vh = viewport:getAbsolutes()
+        local cursorY = (cursorLine - 1) * LINE_H
+        if cursorY < scrollY then
+            scrollY = cursorY
+        elseif cursorY + LINE_H > scrollY + vh then
+            scrollY = cursorY + LINE_H - vh
+        end
+        applyScroll()
+    end
+
+    -- Update the cursor bar position
+    local function updateCursor()
+        if not focused then
+            cursorBar.visibility = 0
+            return
+        end
+        local ax, ay = viewport:getAbsolutes()
+        local lineText = lines[cursorLine] or ""
+        local font = love.graphics.newFont(13)
+        local cx = 2 + font:getWidth(lineText:sub(1, cursorCol))
+        local cy = 2 + (cursorLine - 1) * LINE_H - scrollY
+        cursorBar:rawSetDualDim(cx, cy, 1, LINE_H)
+        cursorBar.visibility = blinkOn and 1 or 0
+    end
+
+    local function setText(s)
+        lines = splitLines(s or "")
+        if #lines == 0 then lines = {""} end
+        rebuildLabels()
+        cursorLine = math.min(cursorLine, #lines)
+        cursorCol  = math.min(cursorCol, #lines[cursorLine])
+        applyScroll()
+        updateCursor()
+    end
+
+    function viewport:getText()
+        return joinLines()
+    end
+
+    function viewport:setText(s)
+        setText(s)
+        self.OnChanged:Fire(self, joinLines())
+    end
+
+    function viewport:appendLine(s)
+        lines[#lines + 1] = s
+        rebuildLabels()
+        applyScroll()
+    end
+
+    function viewport:scrollToBottom()
+        scrollY = math.huge
+        applyScroll()
+    end
+
+    -- Insert text at cursor
+    local function insertText(s)
+        if viewport.readOnly then return end
+        local line = lines[cursorLine] or ""
+        -- Handle newlines in inserted text
+        if s == "\n" then
+            local before = line:sub(1, cursorCol)
+            local after  = line:sub(cursorCol + 1)
+            lines[cursorLine] = before
+            table.insert(lines, cursorLine + 1, after)
+            cursorLine = cursorLine + 1
+            cursorCol  = 0
+        else
+            lines[cursorLine] = line:sub(1, cursorCol) .. s .. line:sub(cursorCol + 1)
+            cursorCol = cursorCol + #s
+        end
+        rebuildLabels()
+        ensureCursorVisible()
+        updateCursor()
+        viewport.OnChanged:Fire(viewport, joinLines())
+    end
+
+    local function deleteBack()
+        if viewport.readOnly then return end
+        if cursorCol > 0 then
+            local line = lines[cursorLine]
+            lines[cursorLine] = line:sub(1, cursorCol - 1) .. line:sub(cursorCol + 1)
+            cursorCol = cursorCol - 1
+        elseif cursorLine > 1 then
+            -- merge with previous line
+            local prevLine = lines[cursorLine - 1]
+            cursorCol = #prevLine
+            lines[cursorLine - 1] = prevLine .. lines[cursorLine]
+            table.remove(lines, cursorLine)
+            cursorLine = cursorLine - 1
+        end
+        rebuildLabels()
+        ensureCursorVisible()
+        updateCursor()
+        viewport.OnChanged:Fire(viewport, joinLines())
+    end
+
+    local function deleteForward()
+        if viewport.readOnly then return end
+        local line = lines[cursorLine]
+        if cursorCol < #line then
+            lines[cursorLine] = line:sub(1, cursorCol) .. line:sub(cursorCol + 2)
+        elseif cursorLine < #lines then
+            lines[cursorLine] = line .. lines[cursorLine + 1]
+            table.remove(lines, cursorLine + 1)
+        end
+        rebuildLabels()
+        updateCursor()
+        viewport.OnChanged:Fire(viewport, joinLines())
+    end
+
+    -- Mouse click to position cursor
+    viewport.OnPressed(function(self, mx, my)
+        focused = true
+        local _, vy = viewport:getAbsolutes()
+        local relY = my - vy + scrollY - 2
+        cursorLine = math.max(1, math.min(#lines, math.floor(relY / LINE_H) + 1))
+        local lineText = lines[cursorLine] or ""
+        local font     = love.graphics.newFont(13)
+        local _, vx    = viewport:getAbsolutes()
+        local relX     = mx - vx - 2
+        -- binary-search for cursor column
+        local col = 0
+        for i = 1, #lineText do
+            local w = font:getWidth(lineText:sub(1, i))
+            if w > relX then break end
+            col = i
+        end
+        cursorCol = col
+        updateCursor()
+    end)
+
+    viewport.OnPressedOuter(function()
+        focused = false
+        updateCursor()
+    end)
+
+    -- Keyboard input (only when focused)
+    gui.Events.OnTextInputed(function(t)
+        if not focused then return end
+        insertText(t)
+    end)
+
+    gui.Events.OnKeyPressed(function(key)
+        if not focused then return end
+        if key == "return" or key == "kpenter" then
+            insertText("\n")
+        elseif key == "backspace" then
+            deleteBack()
+        elseif key == "delete" then
+            deleteForward()
+        elseif key == "up" then
+            cursorLine = math.max(1, cursorLine - 1)
+            cursorCol  = math.min(cursorCol, #(lines[cursorLine] or ""))
+            ensureCursorVisible(); updateCursor()
+        elseif key == "down" then
+            cursorLine = math.min(#lines, cursorLine + 1)
+            cursorCol  = math.min(cursorCol, #(lines[cursorLine] or ""))
+            ensureCursorVisible(); updateCursor()
+        elseif key == "left" then
+            if cursorCol > 0 then
+                cursorCol = cursorCol - 1
+            elseif cursorLine > 1 then
+                cursorLine = cursorLine - 1
+                cursorCol  = #lines[cursorLine]
+            end
+            ensureCursorVisible(); updateCursor()
+        elseif key == "right" then
+            local lineLen = #(lines[cursorLine] or "")
+            if cursorCol < lineLen then
+                cursorCol = cursorCol + 1
+            elseif cursorLine < #lines then
+                cursorLine = cursorLine + 1
+                cursorCol  = 0
+            end
+            ensureCursorVisible(); updateCursor()
+        elseif key == "home" then
+            cursorCol = 0; updateCursor()
+        elseif key == "end" then
+            cursorCol = #(lines[cursorLine] or ""); updateCursor()
+        end
+    end)
+
+    -- Scroll wheel
+    viewport.OnWheelMoved(function(_, dy)
+        scrollY = scrollY - dy * 30
+        applyScroll()
+        updateCursor()
+    end)
+
+    -- Cursor blink
+    viewport:OnUpdate(function(self, dt)
+        blinkTimer = blinkTimer + dt
+        if blinkTimer >= BLINK_RATE then
+            blinkTimer = 0
+            blinkOn = not blinkOn
+            if focused then
+                cursorBar.visibility = blinkOn and 1 or 0
+            end
+        end
+    end)
+
+    setText(initialText or "")
+    return viewport
+end
+
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
     local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
@@ -1185,6 +1484,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 
     c.cur_pos = 0
     c.selection = {0, 0}
+    c.blink = true
 
     function c:getUniques()
         return gui.getUniques(c, {
@@ -1254,7 +1554,7 @@ end
 
 local function textBoxThread()
     updater:newThread("Textbox Handler", function()
-        local check = function() return object_focus:hasType(box) end
+        local check = function() return object_focus:hasType(box) and object_focus.blink end
         while true do
             -- Do nothing if we aren't dealing with a textbox
             thread.hold(check)
@@ -1603,6 +1903,128 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
     return c
 end
 
+-- Extras
+
+function gui:newCheckbox(label, x, y, size, sx, sy, checked)
+    local checkbox = self:newFrame(x, y, size, size, sx, sy)
+    checkbox.color = color.black
+    local border = checkbox:newVisualFrame(noOf(.1,.1,.8,.8))
+    border.color = color.white
+    local toggle = border:newFrame(noOf(.3,.3,.4,.4))
+    toggle.color = color.black
+    toggle.visible = false
+
+    checkbox:OnReleased(function()
+        checkbox:check(not toggle.visible)
+    end)
+    
+    if label ~= "" then
+        local text = checkbox:newTextLabel(label, noOf(1.25,0,15,1))
+        text:OnUpdate(function()
+            text:centerFont()
+        end)
+        text:setFont(size-2)
+        text.visibility = 0
+    end
+
+    function checkbox:check(value)
+        toggle.visible = value
+        self.OnChanged:Fire(value)
+    end
+
+    function checkbox:isChecked()
+        return toggle.visible
+    end
+
+    function checkbox:getLabel()
+        return label or ""
+    end
+
+    checkbox.OnChanged = multi:newConnection()
+
+    return checkbox
+end
+
+function gui:newRadioGroup(options, x, y, sx, sy, size)
+    local group = {}
+    local rg = self:newFrame()
+    local selected
+
+    rg.OnSelectionChanged = multi:newConnection()
+
+    for i,v in ipairs(options or {}) do
+        table.insert(group,self:newCheckbox(tostring(v),x,y+((i-1)*size+((options.padding or 0)*(i-1))),size,sx,sy))
+    end
+
+    gui.apply({
+        OnReleased=function(self)
+            gui.apply({check={false}},unpack(group))
+            self:check(true)
+            if selected ~= self then
+                rg.OnSelectionChanged:Fire(rg, self)
+            end
+            selected = self
+        end,
+    },unpack(group))
+
+    function rg:getSelectedOption()
+        return selected
+    end
+
+    return rg
+end
+
+function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
+    local value = value or 0
+    local progressbar = self:newFrame(x,y,w,h,sx,sy,sw,sh)
+    local fillframe = progressbar:newFrame(noOf(.025, .1, .95, .8))
+    local fill = fillframe:newFrame(noOf(0, 0, 1, 1))
+
+    fillframe.visibility = 0
+    progressbar.color = color.new("#000000")
+    fill.color = color.new("#ffffff")
+    progressbar.fillframe = fillframe
+    progressbar.fill = fill
+
+    function progressbar:update(value)
+        if value > count then value = count end
+        if value < 0 then value = 0 end
+        local percent = value/count
+        fill:setDualDim(noOf(nil,nil,percent))
+    end
+
+    function progressbar:add(n)
+        if value >= count then
+            return
+        end
+        value = value + n
+        self:update(value)
+    end
+
+    function progressbar:sub(n)
+        if value <= 0 then
+            return
+        end
+        value = value - n
+        self:update(value)
+    end
+
+    function progressbar:max()
+        value = count
+        self:update(value)
+    end
+
+    function progressbar:min()
+        value = 0
+        self:update(value)
+    end
+
+    progressbar:update(value)
+
+    -- to change colors and modify main components
+    return progressbar, fill, fillframe
+end
+
 -- Draw Function
 
 -- local label, image, text, button, box, video, animation (spritesheet)
@@ -1648,21 +2070,21 @@ local drawtypes = {
         love.graphics.setColor(child.textColor[1], child.textColor[2],
                                child.textColor[3], child.textVisibility)
         love.graphics.setFont(child.font)
-        if child.align == gui.ALIGN_LEFT then
-            child.adjust = 0
-        elseif child.align == gui.ALIGN_CENTER then
-            local fw = child.font:getWidth(child.text)
-            child.adjust = (w - fw) / 2
-        elseif child.align == gui.ALIGN_RIGHT then
-            local fw = child.font:getWidth(child.text)
-            child.adjust = w - fw - 4
-        end
+        -- if child.align == gui.ALIGN_LEFT then
+        --     child.adjust = 0
+        -- elseif child.align == gui.ALIGN_CENTER then
+        --     local fw = child.font:getWidth(child.text)
+        --     child.adjust = (w - fw) / 2
+        -- elseif child.align == gui.ALIGN_RIGHT then
+        --     local fw = child.font:getWidth(child.text)
+        --     child.adjust = w - fw - 4
+        -- end
         local mul = 1
         if (child.formFactor == gui.FORM_ARC) or (child.formFactor == gui.FORM_CIRCLE) then
             mul = 2
         end
         love.graphics.printf(child.text, child.adjust + x + child.textOffsetX,
-                             y + child.textOffsetY, w*mul, "left", child.rotation,
+                             y + child.textOffsetY, w*mul, ({[0]="center","left", "right", "justify"})[child.align], child.rotation,
                              child.textScaleX, child.textScaleY, 0, 0,
                              child.textShearingFactorX,
                              child.textShearingFactorY)
