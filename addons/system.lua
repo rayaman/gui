@@ -155,149 +155,6 @@ local function collectTasks()
     return rows
 end
 
--- ── window constructor (unchanged from original) ──────────────────────────────
-local windowCount = 0
-function gui:newWindow(x, y, w, h, text, draggable, theme)
-    local process = gui:newProcessor(text or "window_"..windowCount)
-    windowCount = windowCount + 1
-    local parent = self
-    local pointer = love.mouse.getCursor()
-    local sizewe   = love.mouse.getSystemCursor("sizewe")
-    local sizens   = love.mouse.getSystemCursor("sizens")
-    local sizenesw = love.mouse.getSystemCursor("sizenesw")
-    local sizenwse = love.mouse.getSystemCursor("sizenwse")
-    local theme = theme or default_theme
-
-    local header = self:newFrame(x, y, w, 35)
-    header:setRoundness(10, 10, nil, "top")
-    local window = header:newFrame(0, 35, 0, h - 35, 0, 0, 1)
-    window.clipDescendants = true
-    local left        = window:newFrame(0, -4, 4, 0, 0, 0, 0, 1):tag("left")
-    local right       = window:newFrame(-4, -4, 4, 0, 1, 0, 0, 1):tag("right")
-    local bottom      = window:newFrame(4, -4, -8, 4, 0, 1, 1):tag("bottom")
-    local bottomleft  = window:newFrame(0, -4, 4, 4, 0, 1):tag("bleft")
-    local bottomright = window:newFrame(-4, -4, 4, 4, 1, 1):tag("bright")
-    gui.apply({
-        visibility = 0,
-        I_enableDragging = {gui.MOUSE_PRIMARY},
-        respectHierarchy = {false},
-        OnUpdate = function(self) self:topStack() end,
-        OnDragging = function(self, dx, dy)
-            local ox, oy, ow, oh = header:getAbsolutes()
-            local tag = self:getTag()
-            if tag == "left" or tag == "bleft" then
-                window:size(0, dy)
-                header:move(dx, 0)
-                header:size(-dx, 0)
-            else
-                window:size(0, dy)
-                header:size(dx, 0)
-            end
-            local x, y, w, h = header:getAbsolutes()
-            if w < 200 and (tag == "left" or tag == "bleft") then
-                header:setDualDim(ox, nil, 200)
-            elseif w < 200 then
-                header:setDualDim(nil, nil, 200)
-            end
-            local x, y, w, h = window:getAbsolutes()
-            if h < 100 then window:setDualDim(nil, nil, nil, 100) end
-        end,
-        OnDragEnd = function(self) love.mouse.setCursor(pointer) end,
-        OnEnter = function(self)
-            local tag = self:getTag()
-            if tag == "left" or tag == "right" then
-                love.mouse.setCursor(sizewe)
-            elseif tag == "bleft" then
-                love.mouse.setCursor(sizenesw)
-            elseif tag == "bright" then
-                love.mouse.setCursor(sizenwse)
-            else
-                love.mouse.setCursor(sizens)
-            end
-        end,
-        OnExit = function(self) love.mouse.setCursor(pointer) end,
-    }, left, right, bottom, bottomleft, bottomright)
-
-    local title = header:newTextLabel(text or "", 5, 0, w - 35, 35)
-    title.clipDescendants = true
-    title.visibility = 0
-    title.ignore = true
-    title:setFont(theme.fontPrimary)
-    title:fitFont()
-
-    function window:setTitle(t) title.text = t end
-
-    local X = header:newTextButton("", -25, -25, 20, 20, 1, 1)
-    X:setRoundness(10, 10)
-    X.align = gui.ALIGN_CENTER
-    X.color = color.red
-    local darkenX = color.darken(color.red, .2)
-    X.OnEnter(function(self) self.color = darkenX end)
-    X.OnExit(function(self) self.color = color.red end)
-
-    if draggable then
-        header:enableDragging(gui.MOUSE_PRIMARY)
-        header:OnDragging(function(self, dx, dy) self:move(dx, dy) end)
-        header:OnDragEnd(function(self)
-            local x, y, w, h = self:getAbsolutes()
-            local width, height = love.graphics.getDimensions()
-            if x <= 0 then self:setDualDim(0) end
-            if y <= 0 then self:setDualDim(nil, 0) end
-            if x + w >= width  then self:setDualDim(width - w) end
-            if y + h >= height then self:setDualDim(nil, height - 35) end
-        end)
-    end
-
-    window.OnClose = function() return window end % X.OnPressed
-    window.OnClose(function()
-        header:setParent(gui.virtual)
-        love.mouse.setCursor(pointer)
-    end)
-    function window:close() window.OnClose:Fire(self) end
-    function window:open()  header:setParent(parent) end
-
-    function window:setTheme(th)
-        theme = th
-        title.textColor  = theme.colorPrimaryText
-        header.color     = theme.colorPrimaryDark
-        window.color     = theme.colorPrimary
-    end
-    function window:getTheme() return theme end
-
-    process:newThread(function() window:setTheme(theme) end)
-
-    window.OnSizeChanged(function() window:refresh() end)
-    function window:refresh() window:setTheme(theme) end
-
-    window.process = process
-    window.OnCreated(function(element)
-        if element:hasType(gui.TYPE_BUTTON) then
-            element:setFont(theme.fontButton)
-            element.color     = theme.colorButtonNormal
-            element.textColor = theme.colorButtonText
-            if not element.__registeredTheme then
-                element.OnEnter(function(self) self.color = theme.colorButtonHighlight end)
-                element.OnExit(function(self)  self.color = theme.colorButtonNormal end)
-            end
-            element:fitFont()
-            element.__registeredTheme = true
-        elseif element:hasType(gui.TYPE_TEXT) then
-            element.color     = theme.colorPrimary
-            element:setFont(theme.fontPrimary)
-            element.textColor = theme.colorPrimaryText
-            element:fitFont()
-        elseif element:hasType(gui.TYPE_FRAME) then
-            if element.__isHeader then
-                element.color = theme.colorPrimaryDark
-            else
-                element.color = theme.colorPrimary
-            end
-        end
-    end)
-    return window
-end
-
--- ── scroll frame (unchanged from original) ────────────────────────────────────
 function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
     local viewport = self:newFrame(x, y, w, h, sx, sy, sw, sh)
     viewport.clipDescendants = true
@@ -451,6 +308,148 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
 
     applyScroll()
     return content
+end
+
+-- ── window constructor (unchanged from original) ──────────────────────────────
+local windowCount = 0
+function gui:newWindow(x, y, w, h, text, draggable, theme)
+    local process = gui:newProcessor(text or "window_"..windowCount)
+    windowCount = windowCount + 1
+    local parent = self
+    local pointer = love.mouse.getCursor()
+    local sizewe   = love.mouse.getSystemCursor("sizewe")
+    local sizens   = love.mouse.getSystemCursor("sizens")
+    local sizenesw = love.mouse.getSystemCursor("sizenesw")
+    local sizenwse = love.mouse.getSystemCursor("sizenwse")
+    local theme = theme or default_theme
+
+    local header = self:newFrame(x, y, w, 35)
+    header:setRoundness(10, 10, nil, "top")
+    local window = header:newFrame(0, 35, 0, h - 35, 0, 0, 1)
+    window.clipDescendants = true
+    local left        = window:newFrame(0, -4, 4, 0, 0, 0, 0, 1):tag("left")
+    local right       = window:newFrame(-4, -4, 4, 0, 1, 0, 0, 1):tag("right")
+    local bottom      = window:newFrame(4, -4, -8, 4, 0, 1, 1):tag("bottom")
+    local bottomleft  = window:newFrame(0, -4, 4, 4, 0, 1):tag("bleft")
+    local bottomright = window:newFrame(-4, -4, 4, 4, 1, 1):tag("bright")
+    gui.apply({
+        visibility = 0,
+        I_enableDragging = {gui.MOUSE_PRIMARY},
+        respectHierarchy = {false},
+        OnUpdate = function(self) self:topStack() end,
+        OnDragging = function(self, dx, dy)
+            local ox, oy, ow, oh = header:getAbsolutes()
+            local tag = self:getTag()
+            if tag == "left" or tag == "bleft" then
+                window:size(0, dy)
+                header:move(dx, 0)
+                header:size(-dx, 0)
+            else
+                window:size(0, dy)
+                header:size(dx, 0)
+            end
+            local x, y, w, h = header:getAbsolutes()
+            if w < 200 and (tag == "left" or tag == "bleft") then
+                header:setDualDim(ox, nil, 200)
+            elseif w < 200 then
+                header:setDualDim(nil, nil, 200)
+            end
+            local x, y, w, h = window:getAbsolutes()
+            if h < 100 then window:setDualDim(nil, nil, nil, 100) end
+        end,
+        OnDragEnd = function(self) love.mouse.setCursor(pointer) end,
+        OnEnter = function(self)
+            local tag = self:getTag()
+            if tag == "left" or tag == "right" then
+                love.mouse.setCursor(sizewe)
+            elseif tag == "bleft" then
+                love.mouse.setCursor(sizenesw)
+            elseif tag == "bright" then
+                love.mouse.setCursor(sizenwse)
+            else
+                love.mouse.setCursor(sizens)
+            end
+        end,
+        OnExit = function(self) love.mouse.setCursor(pointer) end,
+    }, left, right, bottom, bottomleft, bottomright)
+
+    local title = header:newTextLabel(text or "", 5, 0, w - 35, 35)
+    title.clipDescendants = true
+    title.visibility = 0
+    title.ignore = true
+    title:setFont(theme.fontPrimary)
+    title:fitFont()
+
+    function window:setTitle(t) title.text = t end
+
+    local X = header:newTextButton("", -25, -25, 20, 20, 1, 1)
+    X:setRoundness(10, 10)
+    X.align = gui.ALIGN_CENTER
+    X.color = color.red
+    local darkenX = color.darken(color.red, .2)
+    X.OnEnter(function(self) self.color = darkenX end)
+    X.OnExit(function(self) self.color = color.red end)
+
+    if draggable then
+        header:enableDragging(gui.MOUSE_PRIMARY)
+        header:OnDragging(function(self, dx, dy) self:move(dx, dy) end)
+        header:OnDragEnd(function(self)
+            local x, y, w, h = self:getAbsolutes()
+            local width, height = love.graphics.getDimensions()
+            if x <= 0 then self:setDualDim(0) end
+            if y <= 0 then self:setDualDim(nil, 0) end
+            if x + w >= width  then self:setDualDim(width - w) end
+            if y + h >= height then self:setDualDim(nil, height - 35) end
+        end)
+    end
+
+    window.OnClose = function() return window end % X.OnPressed
+    window.OnClose(function()
+        header:setParent(gui.virtual)
+        love.mouse.setCursor(pointer)
+    end)
+    function window:close() window.OnClose:Fire(self) end
+    function window:open()  header:setParent(parent) end
+
+    function window:setTheme(th)
+        theme = th
+        title.textColor  = theme.colorPrimaryText
+        header.color     = theme.colorPrimaryDark
+        window.color     = theme.colorPrimary
+    end
+    function window:getTheme() return theme end
+
+    process:newThread(function() window:setTheme(theme) end)
+
+    window.OnSizeChanged(function() window:refresh() end)
+    function window:refresh() window:setTheme(theme) end
+
+    window.process = process
+    window.OnCreated(function(element)
+        if element:hasType(gui.TYPE_BUTTON) then
+            element:setFont(theme.fontButton)
+            element.color     = theme.colorButtonNormal
+            element.textColor = theme.colorButtonText
+            if not element.__registeredTheme then
+                element.OnEnter(function(self) self.color = theme.colorButtonHighlight end)
+                element.OnExit(function(self)  self.color = theme.colorButtonNormal end)
+            end
+            element:fitFont()
+            element.__registeredTheme = true
+        elseif element:hasType(gui.TYPE_TEXT) then
+            element.color     = theme.colorPrimary
+            element:setFont(theme.fontPrimary)
+            element.textColor = theme.colorPrimaryText
+            element:fitFont()
+        elseif element:hasType(gui.TYPE_FRAME) then
+            if element.__isHeader then
+                element.color = theme.colorPrimaryDark
+            else
+                element.color = theme.colorPrimary
+            end
+        end
+    end)
+    return window
 end
 
 -- ── row pool ──────────────────────────────────────────────────────────────────
@@ -896,7 +895,7 @@ function gui:showTaskManager()
 
     -- ── load probe ────────────────────────────────────────────────────────────
     -- Install once. getLoad() is now non-blocking — just reads the EMA state.
-    local schedulerProbe = require("gui.addons.probe")
+    local schedulerProbe = require("gui.core.probe")
     schedulerProbe:install(multi)
 
     -- ── main-thread update ────────────────────────────────────────────────────

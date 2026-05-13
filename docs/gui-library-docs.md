@@ -811,7 +811,7 @@ transition.glide:SetFPS(30)   -- lower for performance-sensitive animations
 
 ## 9. Add-on Widgets
 
-These widgets live in `gui/addons/` and extend the core library.
+These widgets live in `gui/addons` and extend the core library.
 
 ---
 
@@ -820,7 +820,7 @@ These widgets live in `gui/addons/` and extend the core library.
 A resizable, draggable floating window with a title bar and a close button.
 
 ```lua
-require("gui.addons.system")  -- loads the window addon
+require("gui.addons")  -- loads addons
 
 local win = gui:newWindow(x, y, width, height, "Window Title", draggable, theme)
 ```
@@ -852,7 +852,7 @@ end)
 A viewport with automatic vertical and horizontal scrollbars. Returns the **content frame** — add children to that.
 
 ```lua
-require("gui.addons.system")
+require("gui.addons")
 
 local content = gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
 -- Add children to `content`:
@@ -919,7 +919,7 @@ end)
 A pre-built media player widget with play/pause toggle and a seek bar.
 
 ```lua
-require("gui.addons.players")
+require("gui.addons")
 
 gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh)
 ```
@@ -990,7 +990,7 @@ simulate.Move(nil, 100, 0, startX, startY)  -- move 100px to the right
 Measures scheduler responsiveness using tick-slip detection. Gives a 0–100% load estimate without blocking.
 
 ```lua
-local probe = require("gui.addons.probe")
+local probe = require("gui.core.probe")
 probe:install(multi)
 ```
 
@@ -1024,7 +1024,7 @@ The probe is automatically installed when `gui:showTaskManager()` is called.
 A built-in debug overlay showing all active scheduler tasks, their state, uptime, and priority.
 
 ```lua
-require("gui.addons.system")
+require("gui.addons")
 gui:showTaskManager()
 ```
 

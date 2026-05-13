@@ -1,6 +1,6 @@
 local gui = require("gui")
 local multi, thread = require("multi"):init()
-local transition = require("gui.elements.transitions")
+local transition = require("gui.core.transitions")
 
 -- Triggers press then release
 local function getPosition(obj, x, y)
