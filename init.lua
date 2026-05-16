@@ -136,6 +136,7 @@ updater:newTask(function()
     Hook("joystickadded", gui.Events.OnJoystickAdded.Fire)
 end)
 
+
 -- Hotkeys
 
 local function noOf(sx,sy,sw,sh)
@@ -590,7 +591,8 @@ function gui:getUniques(tab)
         color = self.color,
         borderColor = self.borderColor,
         drawBorder = self.drawborder,
-        rotation = self.rotation
+        rotation = self.rotation,
+        shader = self.shader
     }
 
     if tab then for i, v in pairs(tab) do base[i] = tab[i] end end
@@ -617,6 +619,20 @@ end
 
 local function testVisual(c, x, y, button, istouch, presses)
     return not(c:hasTag("visual") or c:parentHasTag("visual")) 
+end
+
+local extensions = {}
+
+function gui.registerExtension(template)
+    table.insert(extensions, template)
+end
+
+function gui:extend(c)
+    for i,v in pairs(extensions) do
+        for key, value in pairs(v) do
+            c[key] = value
+        end
+    end
 end
 
 -- Base Library
@@ -916,6 +932,41 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     if typ == frame then
         gui.Events.OnCreated:Fire(c) -- Trigger frame types instantly
     end
+    -- shader stuff
+
+    function c:setShader(shader)
+        if type(shader) == "string" then
+            self.shader = love.graphics.newShader(shader)
+        else
+            self.shader = shader  -- already a compiled love Shader object
+        end
+        return self
+    end
+
+    function c:clearShader()
+        self.shader = nil
+    end
+
+    function c:setShaderUniform(name, ...)
+        if not self.shader then return end
+        if self.shader:hasUniform(name) then
+            self.shader:send(name, ...)
+        end
+    end
+
+    function c:enableShaderTime()
+        self.__shaderTime = 0
+        mainupdater.OnLoop(function(_, _, dt)
+            if not self.shader then return end
+            self.__shaderTime = self.__shaderTime + dt
+            if self.shader:hasUniform("time") then
+                self.shader:send("time", self.__shaderTime)
+            end
+        end)
+    end
+
+    gui:extend(c, typ)
+
     return c
 end
 
@@ -1124,6 +1175,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
             textColor = c.textColor
         })
     end
+
     return c
 end
 
@@ -2052,7 +2104,13 @@ local draw_handler = function(child, no_draw, dt)
         end
     end
 
-    if child.shader and band(ctype, image) == 2 then
+    if child.shader then
+        if child.shader:hasUniform("size") then
+            child.shader:send("size", {w, h})
+        end
+        if child.shader:hasUniform("position") then
+            child.shader:send("position", {x, y})
+        end
         love.graphics.setShader(child.shader)
     end
 
@@ -2127,14 +2185,114 @@ end
 
 gui.draw_handler = draw_handler
 
+local function has_blur_ancestor(child)
+    local parent = child.parent
+    while parent and parent ~= gui and parent ~= gui.virtual do
+        if parent.__blur then return parent end
+        parent = parent.parent
+    end
+    return nil
+end
+
+local function blur_draw(child, dt)
+    local x, y, w, h = child:getAbsolutes()
+    child.x = x
+    child.y = y
+    child.w = w
+    child.h = h
+
+    local b = child.__blur
+    local pw, ph = math.max(1, math.ceil(w)), math.max(1, math.ceil(h))
+
+    if not b.canvas1
+    or b.canvas1:getWidth()  ~= pw
+    or b.canvas1:getHeight() ~= ph then
+        b.canvas1 = love.graphics.newCanvas(pw, ph)
+        b.canvas2 = love.graphics.newCanvas(pw, ph)
+    end
+
+    local prevCanvas = love.graphics.getCanvas()
+    local prevShader = love.graphics.getShader()
+    local pr, pg, pb, pa = love.graphics.getColor()
+
+    -- -------------------------------------------------------
+    -- Pass 1: draw the object AND all its descendants onto canvas1
+    -- -------------------------------------------------------
+    love.graphics.setCanvas(b.canvas1)
+    love.graphics.setShader()
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setScissor()
+
+    -- Shift everything into canvas space by offsetting by -x, -y
+    love.graphics.push()
+    love.graphics.translate(-x, -y)
+
+    -- Draw the parent object itself
+    draw_handler(child, nil, dt)
+
+    -- Draw all descendants in order
+    local descendants = child:getAllChildren()
+    for i = 1, #descendants do
+        local desc = descendants[i]
+        -- Recalculate absolutes so positions are correct
+        local dx, dy, dw, dh = desc:getAbsolutes()
+        desc.x = dx
+        desc.y = dy
+        desc.w = dw
+        desc.h = dh
+        draw_handler(desc, nil, dt)
+    end
+
+    love.graphics.pop()
+
+    -- -------------------------------------------------------
+    -- Pass 2: horizontal blur canvas1 → canvas2
+    -- -------------------------------------------------------
+    b.shader_h:send("size",   {pw, ph})
+    b.shader_h:send("radius", b.radius)
+
+    love.graphics.setCanvas(b.canvas2)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setShader(b.shader_h)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(b.canvas1, 0, 0)
+
+    -- -------------------------------------------------------
+    -- Pass 3: vertical blur canvas2 → screen
+    -- -------------------------------------------------------
+    b.shader_v:send("size",   {pw, ph})
+    b.shader_v:send("radius", b.radius)
+
+    love.graphics.setCanvas(prevCanvas)
+    love.graphics.setShader(b.shader_v)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(b.canvas2, x, y)
+
+    -- Restore state
+    love.graphics.setShader(prevShader)
+    love.graphics.setColor(pr, pg, pb, pa)
+    love.graphics.setScissor()
+end
+
 local draw_loop = drawer:newLoop(function(self, dt)
     local children = gui:getAllChildren()
     for i = 1, #children do
         local child = children[i]
-        if child.effect then
+        -- Skip if this child belongs to a blur parent
+        -- (blur_draw handles drawing it during the canvas capture pass)
+        if has_blur_ancestor(child) then
+            -- update x/y/w/h so layout still works, but don't draw
+            local x, y, w, h = child:getAbsolutes()
+            child.x = x
+            child.y = y
+            child.w = w
+            child.h = h
+        elseif child.__blur then
+            blur_draw(child, dt)
+        elseif child.effect then
             child.effect(function() draw_handler(child, nil, dt) end)
         else
-            draw_handler(child,nil,dt)
+            draw_handler(child, nil, dt)
         end
     end
     first_loop = true
@@ -2259,5 +2417,11 @@ gui.Events.OnResized(function(w, h)
         gui.virtual.h = h
     end
 end)
+
+-- load shaders
+files = love.filesystem.getDirectoryItems("gui/shaders")
+for i,v in pairs(files) do
+    require("gui.shaders."..v:sub(1,-5)).init(gui)
+end
 
 return gui
