@@ -3,24 +3,34 @@ local theme = require("gui.core.theme")
 local color = require("gui.core.color")
 local multi, thread = require("multi"):init()
 local mediaProc = gui:newProcessor()
+local miscProc = gui:newProcessor()
 
 local function noOf(sx,sy,sw,sh)
     return nil,nil,nil,nil,sx,sy,sw,sh
 end
 
-function gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh)
-    local window = gui:newWindow(x, y, w, h, source, true, theme:new({
+function gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh, draggable, th)
+    local window = self:newWindow(x, y, w, h, sx, sy, sw, sh, "", draggable, th or theme:new({
         primary     = "#000000",
         primaryDark = "#10465c",
         primaryText = "#ffffff"
     }))
     local video = window:newVideo(source, 0, 0, 0, 0, 0, .05, 1, .75)
-    local play_pause = window:newImageButton("gui/assets/play.png",0,0,0,0,.45,.82,0,.175)
-    local seek = window:newFrame(0,0,0,0,0,.8,1,.015)
-    seek.color = color.new("#3c434c")
-    local seeker = seek:newFrame(0,0,0,0,0,.1,0,.8)
-    seeker.drawBorder = false
-    seeker.color = color.new("#0c278a")
+    local length = video:getDuration()
+    local play_pause = window:newImageButton("gui/assets/play.png",0,0,0,0,.45,.86,0,.14)
+    local seek = window:newProgressBar(0,0,0,0,0,.8,1,.05,length*100,0)
+    seek.OnProgressUpdated(function(self,_,value, drag)
+        if drag then
+            local status = video:isPlaying()
+            video:seek(value/100)
+            if status then
+                video:play()
+            else
+                video:stop()
+            end
+        end
+    end)
+    seek:isClickable(true)
     play_pause.square = "h"
     play_pause.isPaused = true
     play_pause:OnReleased(function(self)
@@ -34,16 +44,31 @@ function gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh)
         self.isPaused = not self.isPaused
     end)
     
-    local length = video:getDuration()
     mediaProc:newThread(function()
         while true do
-            thread.yield()
-            seeker:setDualDim(nil,nil,nil,nil,nil,nil,video:tell()/length)
+            thread.hold(function() return video:isPlaying() end)
+            local p = video:tell()
+            seek:update(p*100)
         end
     end)
 
-    -- print()
+    function window:seek(...)
+        video.video:seek(...)
+    end
 
+    function window:play()
+        video:play()
+    end
+
+    function window:stop()
+        video:stop()
+    end
+
+    window.OnClose(function()
+        video:pause()
+    end)
+
+    return window
 end
 
 function gui:newCheckbox(label, x, y, size, sx, sy, checked)
@@ -117,21 +142,68 @@ end
 
 function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
     local value = value or 0
+    local count = count or 100
     local progressbar = self:newFrame(x,y,w,h,sx,sy,sw,sh)
-    local fillframe = progressbar:newFrame(noOf(.025, .1, .95, .8))
+    local fillframe = progressbar:newFrame(2,2,-4,-4,0,0,1,1)
     local fill = fillframe:newFrame(noOf(0, 0, 1, 1))
-
+    local percentDisplay = fillframe:newTextLabel("",noOf(0,0,1,1))
+    percentDisplay.align = gui.ALIGN_CENTER
+    percentDisplay.textColor = color.new("#CC5500")
     fillframe.visibility = 0
     progressbar.color = color.new("#000000")
     fill.color = color.new("#ffffff")
     progressbar.fillframe = fillframe
     progressbar.fill = fill
+    progressbar.display = percentDisplay
+    progressbar.OnProgressUpdated = multi:newConnection()
+    percentDisplay.visibility = 0
+    local displayPercent = false
 
-    function progressbar:update(value)
-        if value > count then value = count end
-        if value < 0 then value = 0 end
+    function progressbar:showPercent(bool)
+        displayPercent = bool
+        if bool then
+            miscProc:newThread(function()
+                thread.skip(2)
+                _,_,_h = percentDisplay:getAbsolutes()
+                percentDisplay:setFont(math.floor(h/1.3))
+                self:update()
+            end)
+        end
+    end
+
+    function progressbar:isClickable(bool)
+        fillframe:respectHierarchy(not bool)
+        -- Makes the bar updatable by clicking on it
+        fillframe:enableDragging(bool and gui.MOUSE_PRIMARY)
+    end
+
+    local calcFunc = function(self, dx, dy, x, y, istouch)
+        local sx, sy, sw, sh = self:getAbsolutes()
+        if x >= sx and x <= sx + sw then
+            progressbar:update((((x - sx)/sw) * count), true)
+        end
+    end
+
+    fillframe:OnDragStart(calcFunc)
+    
+    fillframe.OnDragging(calcFunc)
+
+    fillframe.OnPressed(function(self, x, y, dx, dy, istouch)
+        calcFunc(self, dx, dy, x, y, istouch)
+    end)
+
+    function progressbar:update(v, drag)
+        v = v or value
+        if v > count then v = count end
+        if v < 0 then v = 0 end
         local percent = value/count
         fill:setDualDim(noOf(nil,nil,percent))
+        if displayPercent then
+            percentDisplay.text = math.floor((percent*100)+.5).. "%"
+            percentDisplay:centerFont()
+        end
+        value = v
+        self.OnProgressUpdated:Fire(self, percent, value, drag)
     end
 
     function progressbar:add(n)
@@ -151,17 +223,27 @@ function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
     end
 
     function progressbar:max()
-        value = count
-        self:update(value)
+        self:update(count)
     end
 
     function progressbar:min()
-        value = 0
-        self:update(value)
+        self:update(0)
+    end
+
+    function progressbar:half()
+        self:update(math.floor(count/2))
+    end
+
+    function progressbar:getPercent()
+        return math.floor(((value/count)*100)+.5)
+    end
+
+    function progressbar:getValue()
+        return value
     end
 
     progressbar:update(value)
 
     -- to change colors and modify main components
-    return progressbar, fill, fillframe
+    return progressbar, fill, percentDisplay, fillframe
 end

@@ -1,6 +1,6 @@
 local gui = require("gui")
 local multi, thread = require("multi"):init()
-local processor = gui:newProcessor("Transistion Processor")
+local processor = gui:newProcessor("Transition Processor")
 local transition = {}
 
 local width, height, flags = love.window.getMode()
@@ -13,23 +13,26 @@ end
 transition.__index = transition
 transition.__call = function(t, start, stop, time, ...)
     local args = {...}
-    return function(st, sp, ti) -- allow these values to be overridden
-        if not (st or start) or not (sp or stop) then return multi.error("start and stop must be supplied") end
-        if start == stop then 
+    return function(st, sp, ti)
+        local s = st or start
+        local e = sp or stop
+        local dur = ti or time or 1
+        if not s or not e then return multi.error("start and stop must be supplied") end
+        if s == e then
             local temp = {
-                OnStep = function() end, 
+                OnStep = function() end,
                 OnStop = multi:newConnection()
             }
-            proc:newTask(function()
+            processor:newTask(function()
                 temp.OnStop:Fire()
             end)
             return temp
         end
-        local handle = t.func(t, start, stop, (ti or time) or 1, unpack(args))
+        local handle = t.func(t, s, e, dur, unpack(args))
         return {
             OnStep = handle.OnStatus,
             OnStop = handle.OnReturn + handle.OnError,
-            Kill = t.Kill
+            Kill = function() t:Kill() end
         }
     end
 end
@@ -43,11 +46,11 @@ function transition:newTransition(func)
     c.OnStop = multi:newConnection()
     c.kill = false
 
-    function c:SetFPS(fps)
-        self.fps = fps
+    function c:SetFPS(f)
+        self.fps = f
     end
 
-    function c:GetFPS(fps)
+    function c:GetFPS()
         return self.fps
     end
 
@@ -60,17 +63,29 @@ function transition:newTransition(func)
     return c
 end
 
-transition.glide = transition:newTransition(function(t, start, stop, time, ...)
-    local steps = t.fps*time
-    local piece = time/steps
-    local split = stop-start
+transition.glide = transition:newTransition(function(t, start, stop, time)
+    local split = stop - start
+    local startTime = love.timer.getTime()
+    local endTime = startTime + time
+    local stepTime = 1 / t.fps
+
     t.running = true
-    for i = 0, steps do
-        if not(t.kill) then
-            thread.sleep(piece)
-            thread.pushStatus(start + i*(split/steps),piece*i)
+
+    while not t.kill do
+        thread.sleep(stepTime)
+
+        local now = love.timer.getTime()
+        local elapsed = now - startTime
+        local clamped = math.min(elapsed, time)
+        local value = start + (clamped / time) * split
+
+        thread.pushStatus(value, clamped)
+
+        if now >= endTime then
+            break
         end
     end
+
     t.running = false
     t.kill = false
 end)

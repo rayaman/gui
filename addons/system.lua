@@ -312,7 +312,7 @@ end
 
 -- ── window constructor (unchanged from original) ──────────────────────────────
 local windowCount = 0
-function gui:newWindow(x, y, w, h, text, draggable, theme)
+function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
     local process = gui:newProcessor(text or "window_"..windowCount)
     windowCount = windowCount + 1
     local parent = self
@@ -323,9 +323,9 @@ function gui:newWindow(x, y, w, h, text, draggable, theme)
     local sizenwse = love.mouse.getSystemCursor("sizenwse")
     local theme = theme or default_theme
 
-    local header = self:newFrame(x, y, w, 35)
+    local header = self:newFrame(x, y, w, 35, sx, sy, sw)
     header:setRoundness(10, 10, nil, "top")
-    local window = header:newFrame(0, 35, 0, h - 35, 0, 0, 1)
+    local window = header:newFrame(0, 35, 0, h, sx, sy, 1, sh)
     window.clipDescendants = true
     local left        = window:newFrame(0, -4, 4, 0, 0, 0, 0, 1):tag("left")
     local right       = window:newFrame(-4, -4, 4, 0, 1, 0, 0, 1):tag("right")
@@ -384,8 +384,11 @@ function gui:newWindow(x, y, w, h, text, draggable, theme)
 
     local X = header:newTextButton("", -25, -25, 20, 20, 1, 1)
     X:setRoundness(10, 10)
+    X:respectHierarchy(false)
     X.align = gui.ALIGN_CENTER
     X.color = color.red
+    window.XButton = X
+
     local darkenX = color.darken(color.red, .2)
     X.OnEnter(function(self) self.color = darkenX end)
     X.OnExit(function(self) self.color = color.red end)
@@ -403,7 +406,10 @@ function gui:newWindow(x, y, w, h, text, draggable, theme)
         end)
     end
 
-    window.OnClose = function() return window end % X.OnPressed
+    window.OnClose = multi:newConnection()
+    X.OnPressed(function(self, ...)
+        window.OnClose:Fire(window, ...)
+    end)
     window.OnClose(function()
         header:setParent(gui.virtual)
         love.mouse.setCursor(pointer)
@@ -758,7 +764,7 @@ function gui:showTaskManager()
     local WIN_W = TOTAL_W + 20
     local WIN_H = 620
 
-    taskManager = gui:newWindow(0, 0, WIN_W, WIN_H, "Task Manager", true, TM_THEME)
+    taskManager = gui:newWindow(0, 0, WIN_W, WIN_H, nil, nil, nil, nil, "Task Manager", true, TM_THEME)
     taskManager.clipDescendants = true
 
     -- ── tab bar ──────────────────────────────────────────────────────────────

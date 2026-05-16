@@ -485,13 +485,13 @@ function gui:canPress(mx, my) -- Get the intersection of the clip area and the s
     return not (mx > x + w or mx < x or my > y + h or my < y)
 end
 
-function gui:isBeingCovered(mx, my)
+function gui:isBeingCovered(mx, my, respect)
+    -- if not respect then return false end
     local children = gui:getAllChildren()
     for i = #children, 1, -1 do
-        if children[i] == self then
+        if children[i] == self or not respect then
             return false
-        elseif children[i]:canPress(mx, my) and not (children[i] == self) and
-            not (children[i].ignore) then
+        elseif children[i]:canPress(mx, my) and not (children[i] == self) and not (children[i].ignore) then
             return true
         end
     end
@@ -633,7 +633,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     local function testHierarchy(c, x, y, button, istouch, presses)
         if hierarchy then
-            return not (global_drag or c:isBeingCovered(x, y))
+            return not (global_drag or c:isBeingCovered(x, y, true))
         end
         return true
     end
@@ -723,6 +723,12 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end)
 
     local _mouseRelRef = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+        pressed = false -- we need to handle dragging stopped even if an element is not active
+        if dragging and button == dragbutton then
+            dragging = false
+            global_drag = false
+            c.OnDragEnd:Fire(c, dx, dy, x, y, istouch, presses)
+        end
         if not c:isActive() then return end
         if c:canPress(x, y) then
             c.OnReleased:Fire(c, x, y, button, istouch, presses)
@@ -730,12 +736,6 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
             c.OnReleasedOuter:Fire(c, x, y, button, istouch, presses)
         else
             c.OnReleasedOther:Fire(c, x, y, button, istouch, presses)
-        end
-        pressed = false
-        if dragging and button == dragbutton then
-            dragging = false
-            global_drag = false
-            c.OnDragEnd:Fire(c, dx, dy, x, y, istouch, presses)
         end
     end)
 
@@ -751,7 +751,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
                 object_focus = c
             end
 
-            if draggable and button == dragbutton and not c:isBeingCovered(x, y) and
+            if draggable and button == dragbutton and not c:isBeingCovered(x, y, hierarchy) and
                 not global_drag then
                 dragging = true
                 global_drag = true
@@ -803,7 +803,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return self
     end
 
-    function c:respectHierarchy(bool) hierarchy = bool end
+    function c:respectHierarchy(bool) 
+        hierarchy = bool 
+    end
 
     local function centerthread()
         if centerX or centerY then
@@ -1879,6 +1881,8 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     function c:tell() return c.video:tell() end
 
+    function c:isPlaying() return c.video:isPlaying() end
+
     updater:newThread("Video Handler",function()
 
         local testCompletion = function() -- More intensive test
@@ -2066,16 +2070,15 @@ local draw_handler = function(child, no_draw, dt)
 
     love.graphics.setLineStyle("smooth")
     love.graphics.setLineWidth(1)
+
     if drawB then
         love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
         draw_factor(child,"line", x, y, w, h, rx, ry, nil, nil, segments)
-    end
-    
-    if drawB then
         if roundness == "top" then
+            love.graphics.setColor(bg[1], bg[2], bg[3], vis)
             draw_factor(child,"fill", x, y + ry / 2, w, h - ry / 2 + 1)
             --love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
-            love.graphics.setLineStyle("rough")
+            love.graphics.setLineStyle("smooth")
             love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
             love.graphics.setLineWidth(1)
             love.graphics.line(x, y + ry, x, y + h + 1, x + 1 + w, y + h + 1,
@@ -2087,9 +2090,10 @@ local draw_handler = function(child, no_draw, dt)
             love.graphics.line(x - 1, y + ry / 2 + 2, x - 1, y + h + 2)
             love.graphics.line(x + w + 2, y + ry / 2 + 2, x + w + 2, y + h + 2)
         elseif roundness == "bottom" then
+            love.graphics.setColor(bg[1], bg[2], bg[3], vis)
             draw_factor(child,"fill", x, y, w, h - ry + 2)
             --love.graphics.rectangle("fill", x, y, w, h - ry + 2)
-            love.graphics.setLineStyle("rough")
+            love.graphics.setLineStyle("smooth")
             love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
             love.graphics.setLineWidth(2)
             love.graphics.line(x - 1, y + ry + 1, x - 1, y - 1, x + w + 1, y - 1,
