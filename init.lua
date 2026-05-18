@@ -937,6 +937,22 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     function c:setShader(shader)
         if type(shader) == "string" then
             self.shader = love.graphics.newShader(shader)
+        elseif type(shader) == "table" then
+            self.shader = shader.source
+            for i,v in pairs(shader or {}) do
+                if i ~= "source" and i ~= "usage" then
+                    if self[i] then
+                        if type(v) == "function" then
+                            local data = v(self)
+                            self.shader:send(i, data)
+                        else
+                            self.shader:send(i, self[i])
+                        end
+                    else
+                        error(i .. " is a required argument!\n\n".. shader.usage())
+                    end
+                end
+            end
         else
             self.shader = shader  -- already a compiled love Shader object
         end
