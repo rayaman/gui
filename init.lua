@@ -16,7 +16,6 @@ local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad,
 local frame, image, text, box, video, button, anim = 0, 1, 2, 4, 8, 16, 32
 local global_drag
 local object_focus = gui
-local first_loop = false
 
 -- Types
 gui.TYPE_FRAME      = frame
@@ -324,7 +323,7 @@ end
 
 function gui:isDescendantOf(obj)
     local parent = self.parent
-    while parent ~= gui do
+    while parent ~= gui and parent ~= nil do
         if parent == obj then return true end
         parent = parent.parent
     end
@@ -575,7 +574,7 @@ function gui:clone(opt)
 end
 
 function gui:isActive()
-    return self.active and not (self:isDescendantOf(gui.virtual))
+    return self.active and not self:isDescendantOf(gui.virtual)
 end
 
 function gui:isOnScreen()
@@ -934,7 +933,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end
     -- shader stuff
 
-    function c:setShader(shader)
+    function c:setShader(shader, env)
         if type(shader) == "string" then
             self.shader = love.graphics.newShader(shader)
         elseif type(shader) == "table" then
@@ -947,6 +946,13 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
                             self.shader:send(i, data)
                         else
                             self.shader:send(i, self[i])
+                        end
+                    elseif env[i] then
+                        if type(v) == "function" then
+                            local data = v(env)
+                            self.shader:send(i, data)
+                        else
+                            self.shader:send(i, env[i])
                         end
                     else
                         error(i .. " is a required argument!\n\n".. shader.usage())
@@ -969,10 +975,14 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
             self.shader:send(name, ...)
         end
     end
-
-    function c:enableShaderTime()
+    local st
+    function c:shaderTime(b)
+        if not b then
+            st:Unconnect()
+        end
+        if st then return end
         self.__shaderTime = 0
-        mainupdater.OnLoop(function(_, _, dt)
+        st = mainupdater.OnLoop(function(_, _, dt)
             if not self.shader then return end
             self.__shaderTime = self.__shaderTime + dt
             if self.shader:hasUniform("time") then
@@ -2311,24 +2321,18 @@ local draw_loop = drawer:newLoop(function(self, dt)
             draw_handler(child, nil, dt)
         end
     end
-    first_loop = true
     love.graphics.setColor(1, 1, 1, 1)
 end)
 draw_loop:setName("GUI Draw Handler")
 
 drawer:newThread("Draw Handler",function()
     while true do
-        thread.sleep(.01)
+        thread.sleep(.1)
         local children = gui.virtual:getAllChildren()
         for i = 1, #children do
             local child = children[i]
-            if child.effect then
-                child.effect(function() draw_handler(child, true, 0) end)
-            else
-                draw_handler(child, true, 0)
-            end
+            draw_handler(child, true, 0)
         end
-        first_loop = true
     end
 end)
 
