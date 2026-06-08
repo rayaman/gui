@@ -21,7 +21,7 @@ transition.__call = function(t, start, stop, time, ...)
         if s == e then
             local temp = {
                 OnStep = function() end,
-                OnStop = multi:newConnection()
+                OnStop = processor:newConnection()
             }
             processor:newTask(function()
                 temp.OnStop:Fire()
@@ -43,7 +43,7 @@ function transition:newTransition(func)
 
     c.fps = fps
     c.func = processor:newFunction(func)
-    c.OnStop = multi:newConnection()
+    c.OnStop = processor:newConnection()
     c.kill = false
 
     function c:SetFPS(f)

@@ -80,7 +80,7 @@ local function fmtUptime(secs)
     return math.floor(secs/3600).."h "..math.floor((secs%3600)/60).."m"
 end
 
-local function nowClock() return os.clock() end
+local nowClock = require("socket").gettime
 
 -- ── data collection ───────────────────────────────────────────────────────────
 -- Returns a flat list of rows with depth so the UI can indent names.
@@ -200,7 +200,6 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
     end
 
     local function updateScrollbars()
-        if applying then return end
         local vw, vh = getViewSize()
         local _, _, cw, ch = content:getAbsolutes()
 
@@ -209,7 +208,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
             vBar.visible = true
             local thumbH = math.max(20, vh * (vh / ch))
             local thumbY = (scrollY / maxScrollY) * (vh - thumbH)
-            vThumb:setDualDim(0, thumbY, SCROLL_BAR_W, thumbH)
+            vThumb:setDualDim(nil, thumbY, nil, thumbH)
         else
             vBar.visible = false
             scrollY = 0
@@ -220,7 +219,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
             hBar.visible = true
             local thumbW = math.max(20, vw * (vw / cw))
             local thumbX = (scrollX / maxScrollX) * (vw - thumbW)
-            hThumb:setDualDim(thumbX, 0, thumbW, SCROLL_BAR_W)
+            hThumb:setDualDim(thumbX, nil, thumbW, nil)
         else
             hBar.visible = false
             scrollX = 0
@@ -233,8 +232,8 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         scrollY = clamp(scrollY, 0, maxScrollY)
         scrollX = clamp(scrollX, 0, maxScrollX)
         content:setDualDim(-scrollX, -scrollY)
-        updateScrollbars()
-        applying = false
+        applying = false          -- release BEFORE updateScrollbars
+        updateScrollbars()        -- now applying=false, no guard needed
     end
 
     viewport.OnWheelMoved(function(x, y)
@@ -295,8 +294,12 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
     function content:getMaxScroll()   return maxScrollX, maxScrollY end
 
     local _baseSDD = content.setDualDim
-    function content:setContentSize(cw, ch)
-        _baseSDD(self, nil, nil, cw or select(3, self:getAbsolutes()), ch)
+    function content:setContentSize(cw, ch, full)
+        if full then
+            _baseSDD(self, nil, nil, nil, ch,nil,nil,1)
+        else
+            _baseSDD(self, nil, nil, cw or select(3, self:getAbsolutes()), ch)
+        end
         applyScroll()
     end
 
@@ -308,6 +311,129 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
 
     applyScroll()
     return content
+end
+
+-- ── gui:newMessageBox() ───────────────────────────────────────────────────────
+--
+-- Creates a modal-style draggable message box built on top of gui:newWindow().
+--
+-- SIGNATURE:
+--   gui:newMessageBox(options)
+--
+-- OPTIONS TABLE:
+--   title       (string)          Window/header title.           Default: "Message"
+--   message     (string|nil)      Body description text.         Default: nil (no body label)
+--   buttons     (table|nil)       List of button label strings.  Default: { "OK" }
+--   theme       (theme|nil)       gui theme object.              Default: TM_THEME (or default_theme)
+--   x, y        (number|nil)      Initial position.              Default: centered on screen
+--   width       (number|nil)      Box width.                     Default: 340
+--   onChoice    (function|nil)    Called as onChoice(label, index) when any button is pressed.
+--                                 Also accessible via returned connection object.
+--
+-- RETURNS: window object (same as gui:newWindow)
+--   window.OnChoice  — multi connection; fires with (label, index)
+--   window:close()   — hides the window (as usual)
+--   window:open()    — shows the window (as usual)
+--
+-- EXAMPLE:
+--   gui:newMessageBox({
+--       title   = "Confirm Action",
+--       message = "Are you sure you want to delete this task?",
+--       buttons = { "Yes", "No", "Cancel" },
+--       onChoice = function(label, idx)
+--           print("User chose:", label, "at index", idx)
+--       end,
+--   })
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+
+function gui:newMessageBox(options)
+    options = options or {}
+
+    -- ── defaults ──────────────────────────────────────────────────────────────
+    local title    = options.title   or "Message"
+    local message  = options.message or nil
+    local buttons  = options.buttons or { "OK" }
+    local msgTheme = options.theme   or default_theme
+
+    local BOX_W    = options.width  or 340
+
+    -- Layout constants
+    local PAD        = 14   -- horizontal padding inside window body
+    local MSG_PAD_T  = 12   -- top padding for message text
+    local MSG_PAD_B  = 10   -- gap between message and buttons
+    local BTN_H      = 30
+    local BTN_GAP    = 8    -- gap between buttons
+    local BTN_ROW_PB = 14   -- padding below button row
+
+    -- Calculate body height dynamically
+    -- We approximate: message gets ~3 lines max, then buttons below.
+    local MSG_H = 0
+    if message and message ~= "" then
+        -- Allow up to ~3 lines at ~18px each; wrapped by the label widget.
+        -- We give it a fixed height; if text overflows, the box still looks clean.
+        MSG_H = 60
+    end
+
+    local BTN_ROW_H = BTN_H + BTN_ROW_PB
+    local BOX_H     = MSG_PAD_T + MSG_H + (message and MSG_PAD_B or 0) + BTN_ROW_H
+
+    -- Center on screen by default
+    local sw, sh = love.graphics.getDimensions()
+    local wx = options.x or math.floor((sw - BOX_W) / 2)
+    local wy = options.y or math.floor((sh - (BOX_H + 35)) / 2)  -- 35 = header height
+
+    -- ── create window ─────────────────────────────────────────────────────────
+    local win = gui:newWindow(wx, wy, BOX_W, BOX_H,
+                              nil, nil, nil, nil,
+                              title, true, msgTheme)
+
+    -- ── OnChoice connection ───────────────────────────────────────────────────
+    win.OnChoice = multi:newConnection()
+    if options.onChoice then
+        win.OnChoice(options.onChoice)
+    end
+
+    -- ── message label ─────────────────────────────────────────────────────────
+    if message and message ~= "" then
+        local msgLbl = win:newTextLabel(
+            message,
+            PAD, MSG_PAD_T,
+            BOX_W - PAD * 2, MSG_H
+        )
+        msgLbl.align    = gui.ALIGN_CENTER
+        msgLbl.wordWrap = true          -- enable word-wrap if the GUI supports it
+        msgLbl.ignore   = true
+    end
+
+    -- ── button row ────────────────────────────────────────────────────────────
+    -- Buttons are evenly distributed across the box width.
+    local n        = #buttons
+    local totalGap = BTN_GAP * (n - 1)
+    local btnW     = math.floor((BOX_W - PAD * 2 - totalGap) / n)
+    local btnY     = MSG_PAD_T + MSG_H + (message and MSG_PAD_B or MSG_PAD_T * 0.5)
+
+    for i, label in ipairs(buttons) do
+        local btnX = PAD + (i - 1) * (btnW + BTN_GAP)
+        local btn  = win:newTextButton(label, btnX, btnY, btnW, BTN_H)
+        btn.align  = gui.ALIGN_CENTER
+
+        -- Capture loop vars
+        local capturedLabel = label
+        local capturedIdx   = i
+
+        btn.OnReleased(function()
+            win.OnChoice:Fire(capturedLabel, capturedIdx)
+            win:close()
+        end)
+    end
+
+    -- ── close button also fires OnChoice with nil ─────────────────────────────
+    win.XButton.OnPressed(function()
+        win.OnChoice:Fire(nil, nil)
+    end)
+
+    return win
 end
 
 -- ── window constructor (unchanged from original) ──────────────────────────────
@@ -796,6 +922,7 @@ function gui:showTaskManager()
     local loadLbl = loadStrip:newTextLabel("Load: …", 4, 0, TOTAL_W - 8, LOAD_H)
     loadLbl.align  = gui.ALIGN_LEFT
     loadLbl.ignore = true
+    loadLbl.visibility = 0
 
     local sortKey = nil
     local sortAsc = true
@@ -953,3 +1080,383 @@ end)
 
 ToggleTaskManager:Fire()
 taskManager:close()
+
+local PATH_SEP   = love.system.getOS() == "Windows" and "\\" or "/"
+local IS_WINDOWS = love.system.getOS() == "Windows"
+
+-- ── filesystem helpers (io.popen only) ───────────────────────────────────────
+
+local function pread(cmd)
+    local handle
+    if IS_WINDOWS then
+        handle = io.popen('cmd /c "' .. cmd .. '"')
+    else
+        handle = io.popen(cmd)
+    end
+    if not handle then return nil end
+    local out = handle:read("*a")
+    handle:close()
+    return out
+end
+
+-- POSIX single-quote escape for shell arguments.
+local function posixQuote(path)
+    return "'" .. path:gsub("'", "'\\''") .. "'"
+end
+
+-- Return true if `path` is a directory.
+local function isDir(path)
+    if IS_WINDOWS then
+        local p = path:gsub('"', '')
+        if p:sub(-1) ~= "\\" then p = p .. "\\" end
+        local out = pread('if exist "' .. p .. '*" (echo YES)')
+        return out ~= nil and out:match("YES") ~= nil
+    else
+        local out = pread('test -d ' .. posixQuote(path) .. ' && echo YES')
+        return out ~= nil and out:match("YES") ~= nil
+    end
+end
+
+-- Return sorted {dirs}, {files} inside `path`.
+local function listDir(path, showHidden)
+    local dirs, files = {}, {}
+
+    if IS_WINDOWS then
+        local p = path:gsub('"', '')
+        local dout = pread('dir /A:D /B "' .. p .. '" 2>nul')
+        if dout then
+            for name in dout:gmatch("[^\r\n]+") do
+                name = name:match("^%s*(.-)%s*$")
+                if name ~= "" and name ~= "." and name ~= ".." then
+                    dirs[#dirs+1] = name
+                end
+            end
+        end
+
+        local fout = pread('dir /A:-D /B "' .. p .. '" 2>nul')
+        if fout then
+            for name in fout:gmatch("[^\r\n]+") do
+                name = name:match("^%s*(.-)%s*$")
+                if name ~= "" then
+                    files[#files+1] = name
+                end
+            end
+        end
+    else
+        local out = pread('ls -la ' .. posixQuote(path) .. ' 2>/dev/null')
+        if out then
+            for line in out:gmatch("[^\n]+") do
+                if line:match("^[dlrwx%-]") then
+                    local perms = line:sub(1, 1)
+                    -- Skip 8 tokens to reach filename (handles month/day/time cols)
+                    local _, pos = line:find("^%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+")
+                    local name = pos and line:sub(pos + 1) or ""
+                    -- Trim whitespace
+                    name = name:match("^%s*(.-)%s*$") or ""
+                    -- Strip symlink arrow
+                    name = name:match("^(.-)%s+%->%s+") or name
+
+                    if name ~= "" and name ~= "." and name ~= ".." then
+                        if showHidden or name:sub(1,1) ~= "." then
+                            if perms == "d" then
+                                dirs[#dirs+1] = name
+                            else
+                                files[#files+1] = name
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(dirs,  function(a,b) return a:lower() < b:lower() end)
+    table.sort(files, function(a,b) return a:lower() < b:lower() end)
+    return dirs, files
+end
+
+-- Join two path components.
+local function joinPath(dir, name)
+    if IS_WINDOWS then
+        dir = dir:gsub("/", "\\")
+        if dir:sub(-1) == "\\" then return dir .. name end
+        return dir .. "\\" .. name
+    else
+        if dir:sub(-1) == "/" then return dir .. name end
+        return dir .. "/" .. name
+    end
+end
+
+-- Normalise path (forward slashes, no trailing slash except root).
+local function normPath(path)
+    if IS_WINDOWS then
+        path = path:gsub("/", "\\")
+        if #path > 3 then path = path:gsub("\\$", "") end
+    else
+        path = path:gsub("\\", "/")
+        if #path > 1 then path = path:gsub("/$", "") end
+    end
+    return path
+end
+
+-- Return the parent of a path.
+local function parentOf(path)
+    path = normPath(path)
+    if IS_WINDOWS then
+        -- "C:\\foo\\bar" -> "C:\\foo",  "C:\\" -> "C:\\"
+        local parent = path:match("^(.+)\\[^\\]+$")
+        if not parent then return path end
+        if parent:match("^%a:$") then parent = parent .. "\\" end
+        return parent
+    else
+        if path == "/" then return "/" end
+        local parent = path:match("^(.+)/[^/]+$")
+        if not parent or parent == "" then return "/" end
+        return parent
+    end
+end
+
+-- Get the home directory.
+local function homeDir()
+    if IS_WINDOWS then
+        return normPath(os.getenv("USERPROFILE") or os.getenv("HOMEDRIVE") .. os.getenv("HOMEPATH") or "C:\\")
+    else
+        return normPath(os.getenv("HOME") or "/")
+    end
+end
+
+-- Get current working directory via os.getenv or a popen fallback.
+local function getCwd()
+    local cwd
+    if IS_WINDOWS then
+        local f = io.popen("cd")
+        if f then cwd = f:read("*a"):match("^%s*(.-)%s*$"); f:close() end
+    else
+        local f = io.popen("pwd")
+        if f then cwd = f:read("*a"):match("^%s*(.-)%s*$"); f:close() end
+    end
+    return normPath(cwd or homeDir())
+end
+
+-- Filter a file list by allowed extensions.
+local function filterFiles(files, filter)
+    if not filter or #filter == 0 then return files end
+    local allowed = {}
+    for _, ext in ipairs(filter) do allowed[ext:lower()] = true end
+    local out = {}
+    for _, f in ipairs(files) do
+        local ext = f:match("%.([^%.]+)$") or ""
+        if allowed[ext:lower()] then out[#out+1] = f end
+    end
+    return out
+end
+
+local function noOf(sx,sy,sw,sh)
+    return nil,nil,nil,nil,sx,sy,sw,sh
+end
+
+local ROW_H  = 28
+
+local function makeRowPool(scrollFrame, callback)
+    local pool = { rows = {}, active = 0 }
+
+    local function makeRow(idx)
+        local yOff = (idx - 1) * ROW_H
+        local bg = scrollFrame:newFrame(0, yOff, 0, ROW_H, 0, 0, 1)  -- scale w=1, no captured w
+        bg.drawBorder = false
+        local nameLabel = bg:newTextLabel("", 0, 0, 0, ROW_H, 0, 0, 1)  -- fills parent width
+        nameLabel.color = color.blue
+        nameLabel.align  = gui.ALIGN_CENTER
+        nameLabel.ignore = true
+        if not bg.callback then
+            bg.OnReleased(callback)
+            bg.callback = true
+            nameLabel.OnEnter(function(self)
+                self:setShader(gui.SHADERS.glow)
+                self:shaderTime(true)
+            end)
+            nameLabel.OnExit(function(self)
+                self:setShader()
+                self:shaderTime(false)
+            end)
+        end
+        nameLabel:fitFont()
+        return { bg = bg, nameLabel = nameLabel }
+    end
+
+    function pool:ensure(n)
+        while #self.rows < n do
+            self.rows[#self.rows + 1] = makeRow(#self.rows + 1)
+        end
+    end
+
+    function pool:apply(data)
+        self:ensure(#data)
+        self.active = #data
+
+        for i, d in ipairs(data) do
+            local row = self.rows[i]
+            row.bg:setDualDim(nil, (i - 1) * ROW_H)
+            row.bg.visible = true
+            row.bg.text = d[1]
+            row.bg.isDir = d[2]
+            row.nameLabel.visible = true
+            row.nameLabel.text = d[1]
+            if d[2] then
+                row.nameLabel.color = color.new("#F5C842")
+            else
+                row.nameLabel.color = color.new("#4A90D9")
+            end
+        end
+
+        -- Hide unused rows
+        for i = #data + 1, #self.rows do
+            self.rows[i].bg.visible = false
+            self.rows[i].nameLabel.visible = false
+        end
+
+        thread:newThread(function()
+            scrollFrame:setContentSize(400, math.max(#data * ROW_H, 1),true)
+        end)
+    end
+
+    return pool
+end
+
+function gui.OpenSaveDir(root)
+    local path = love.filesystem.getSaveDirectory() .. (root or "")
+    if love.system.getOS() == "Windows" then
+        os.execute('explorer "' .. path:gsub("/", "\\") .. '"')
+    elseif love.system.getOS() == "OS X" then
+        os.execute('open "' .. path .. '"')
+    else
+        os.execute('xdg-open "' .. path .. '"')
+    end
+end
+
+-- Should only have one instance
+local pickerWindow
+local doCallback
+local selected
+local workingDir
+function gui:newFilePicker(title, root, filter, callback)
+    if root and root:sub(1,1) ~= "/" then
+        root = "/" .. root
+    end
+    
+    workingDir = love.filesystem.getSaveDirectory() .. (root or "")
+
+    doCallback = function()
+        callback(selected)
+    end
+
+    if pickerWindow then
+        pickerWindow.visible = true
+        pickerWindow:removeTag("visual")
+        pickerWindow:list(workingDir)
+        return
+    end
+
+    pickerWindow = self:newFrame(0,0,0,0,.25,.15,.5,.7)
+    local header = pickerWindow:newFrame(5,5,-10,-10,0,0,1,.075)
+    local save = header:newTextButton("Open game directory", noOf(0,0,1,1))
+    local refresh = pickerWindow:newTextButton("Refresh Directory", 5, 0, -15, -10, 0, .075, 1/3, .05)
+    local sel = pickerWindow:newTextLabel("Parent Directory", -5,0,-5,-10,1/3,.075,1/3,.05)
+    local cancel = pickerWindow:newTextLabel("Cancel", -5,0,0,-10,2/3,.075,1/3,.05)
+
+    local scrollContent = pickerWindow:newScrollFrame(0, -5, 0, 5, 0, .125, 1, .875)
+
+    local buttons = {save, sel, refresh, cancel}
+
+    local function setWDir(wdir)
+        workingDir = wdir
+    end
+
+    pickerWindow.color = color.new("#374151")
+
+    thread:newThread(function()
+        thread.skip(2)
+        gui.apply({
+            align = gui.ALIGN_CENTER,
+            fitFont = {},
+            color = color.new("#2c4989"),
+            OnEnter = function(self)
+                self:setShader(gui.SHADERS.glow)
+                self:shaderTime(true)
+            end,
+            OnExit = function(self)
+                self:setShader()
+                self:shaderTime(false)
+            end,
+        }, unpack(buttons))
+        sel.color = color.new("#0D7377")
+        refresh.color = color.new("#83a8e7")
+    end)
+
+    gui.Events.OnResized(thread:newFunction(function()
+        thread.skip(2)
+        gui.apply({
+            fitFont = {},
+        }, unpack(buttons))
+    end))
+
+    save:OnReleased(function()
+        gui.OpenSaveDir(root)
+    end)
+
+    refresh:OnReleased(function()
+        pickerWindow:list()
+    end)
+
+    sel:OnReleased(function()
+        local fmt = workingDir:gsub("\\","/")
+        if fmt == love.filesystem.getSaveDirectory() .. (root or "") then
+            return 
+        end
+        pickerWindow:list(parentOf(workingDir))
+    end)
+
+    cancel:OnReleased(function()
+        pickerWindow.visible = false
+    end)
+
+    local pool = makeRowPool(scrollContent,function(self)
+        if self.isDir then
+            pickerWindow:list(workingDir .. PATH_SEP .. self.text)
+        else
+            selected = workingDir .. "/" .. self.text
+            gui:newMessageBox({
+                title    = "Confirm",
+                message  = "Do you want to select this file ".. self.text.. "?",
+                buttons  = { "Yes", "No" },
+                onChoice = function(label, idx)
+                    if label == "Yes" then 
+                        doCallback(selected)
+                        pickerWindow.visible = false
+                        pickerWindow:setTag("visual")
+                    end
+                end,
+            })
+        end
+    end)
+    
+    function pickerWindow:list(wdir)
+        if wdir then
+            setWDir(wdir)
+        end
+
+        local entries = {}
+        local dirs, files = listDir(workingDir, false)
+
+        for i, dir in pairs(dirs) do
+            table.insert(entries, {dir, true})
+        end
+
+        for i, file in pairs(files) do
+            table.insert(entries, {file, false})
+        end
+        pool:apply(entries)
+    end
+    
+    pickerWindow:list()
+end

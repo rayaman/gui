@@ -2,8 +2,8 @@ local gui = require("gui")
 local theme = require("gui.core.theme")
 local color = require("gui.core.color")
 local multi, thread = require("multi"):init()
-local mediaProc = gui:newProcessor()
-local miscProc = gui:newProcessor()
+local mediaProc = gui:newProcessor("media-updater")
+local miscProc = gui:newProcessor("misc-updater")
 
 local function noOf(sx,sy,sw,sh)
     return nil,nil,nil,nil,sx,sy,sw,sh
@@ -106,7 +106,7 @@ function gui:newCheckbox(label, x, y, size, sx, sy, checked)
         return label or ""
     end
 
-    checkbox.OnChanged = multi:newConnection()
+    checkbox.OnChanged = miscProc:newConnection()
 
     return checkbox
 end
@@ -116,7 +116,7 @@ function gui:newRadioGroup(options, x, y, sx, sy, size)
     local rg = self:newFrame()
     local selected
 
-    rg.OnSelectionChanged = multi:newConnection()
+    rg.OnSelectionChanged = miscProc:newConnection()
 
     for i,v in ipairs(options or {}) do
         table.insert(group,self:newCheckbox(tostring(v),x,y+((i-1)*size+((options.padding or 0)*(i-1))),size,sx,sy))
@@ -155,7 +155,7 @@ function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
     progressbar.fillframe = fillframe
     progressbar.fill = fill
     progressbar.display = percentDisplay
-    progressbar.OnProgressUpdated = multi:newConnection()
+    progressbar.OnProgressUpdated = miscProc:newConnection()
     percentDisplay.visibility = 0
     local displayPercent = false
 

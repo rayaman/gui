@@ -52,6 +52,7 @@
 ]]
 
 local probe = {}
+local clock = require("socket").gettime
 
 -- EMA state — written by the TLoop callback, read by getLoad()
 -- Both are plain numbers so Lua's assignment is atomic within one thread.
@@ -60,56 +61,30 @@ local _lagMs    = 0      -- smoothed lag in milliseconds for display
 local _installed = false
 
 function probe:install(multi_obj, opts)
+    local _,_,flags = love.window.getMode()
     if _installed then return end
     _installed = true
 
     opts = opts or {}
     local INTERVAL = opts.interval or 0.05   -- seconds between probes
     local ALPHA    = opts.alpha    or 0.15   -- EMA weight for new sample
-    local MAX_LAG  = opts.maxLag   or 0.5    -- seconds of lag = 100% load
-
-    local clock = os.clock
+    local MAX_LAG  = opts.maxLag   or 0.1    -- seconds of lag = 100% load
 
     -- Track when the tick *should* have fired so we can compute slip
     -- relative to the scheduled time, not relative to the previous firing.
     -- This avoids error accumulation over long runs.
-    local expectedTime = clock() + INTERVAL
-
-    local tloop = multi_obj:newTLoop(nil, INTERVAL)
-    tloop:setName("SchedulerProbe")
-    tloop:setPriority("core")  -- run as early as possible each frame
-
-    tloop.OnLoop(function(self, life, dt)
-        local now     = clock()
-        local lag     = math.max(0, now - expectedTime)   -- never negative
-        local ratio   = math.min(lag / MAX_LAG, 1)        -- clamp to [0,1]
-
-        -- Exponential moving average: new = alpha*sample + (1-alpha)*old
-        _emaRatio = ALPHA * ratio    + (1 - ALPHA) * _emaRatio
-        _lagMs    = ALPHA * lag*1000 + (1 - ALPHA) * _lagMs
-
-        -- Advance expected time by one interval from where it *should* have been,
-        -- not from now — prevents the probe from drifting under sustained load.
-        expectedTime = expectedTime + INTERVAL
-        -- If we fall more than one interval behind (e.g. after a long GC pause),
-        -- re-anchor so we don't fire in a catch-up burst.
-        if now > expectedTime + INTERVAL then
-            expectedTime = now + INTERVAL
-        end
-    end)
-
     -- Replace multi:getLoad() with a non-blocking version that just reads the EMA
     function multi_obj:getLoad()
-        local pct = math.ceil(_emaRatio * 100)
-        return pct, _lagMs
+        local fps = love.timer.getFPS()
+        local targetFPS = flags.refreshrate
+        local pct = math.max(0, math.ceil((1 - fps / targetFPS) * 100))
+        return pct, 1000 / math.max(fps, 1)  -- lagMs equivalent = frame time
     end
 
     -- Also expose raw probe state for diagnostics
     function multi_obj:getSchedulerLag()
         return _lagMs, _emaRatio
     end
-
-    return tloop
 end
 
 return probe

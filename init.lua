@@ -6,6 +6,7 @@ local gif   = require("gui.core.gifloader")
 local gui = {}
 local updater = multi:newProcessor("UpdateManager", true)
 local drawer = multi:newProcessor("DrawManager", true)
+local core_conns = multi:newProcessor("gui.events", true)
 
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
@@ -44,39 +45,39 @@ gui.ALIGN_RIGHT = 2
 
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
-gui.Events.OnQuit = multi:newConnection()
-gui.Events.OnDirectoryDropped = multi:newConnection()
-gui.Events.OnDisplayRotated = multi:newConnection()
-gui.Events.OnFilesDropped = multi:newConnection()
-gui.Events.OnFocus = multi:newConnection()
-gui.Events.OnMouseFocus = multi:newConnection()
-gui.Events.OnResized = multi:newConnection()
-gui.Events.OnVisible = multi:newConnection()
-gui.Events.OnKeyPressed = multi:newConnection()
-gui.Events.OnKeyReleased = multi:newConnection()
-gui.Events.OnTextEdited = multi:newConnection()
-gui.Events.OnTextInputed = multi:newConnection()
-gui.Events.OnMouseMoved = multi:newConnection()
-gui.Events.OnMousePressed = multi:newConnection()
-gui.Events.OnMouseReleased = multi:newConnection()
-gui.Events.OnWheelMoved = multi:newConnection()
-gui.Events.OnTouchMoved = multi:newConnection()
-gui.Events.OnTouchPressed = multi:newConnection()
-gui.Events.OnTouchReleased = multi:newConnection()
+gui.Events.OnQuit = core_conns:newConnection()
+gui.Events.OnDirectoryDropped = core_conns:newConnection()
+gui.Events.OnDisplayRotated = core_conns:newConnection()
+gui.Events.OnFilesDropped = core_conns:newConnection()
+gui.Events.OnFocus = core_conns:newConnection()
+gui.Events.OnMouseFocus = core_conns:newConnection()
+gui.Events.OnResized = core_conns:newConnection()
+gui.Events.OnVisible = core_conns:newConnection()
+gui.Events.OnKeyPressed = core_conns:newConnection()
+gui.Events.OnKeyReleased = core_conns:newConnection()
+gui.Events.OnTextEdited = core_conns:newConnection()
+gui.Events.OnTextInputed = core_conns:newConnection()
+gui.Events.OnMouseMoved = core_conns:newConnection()
+gui.Events.OnMousePressed = core_conns:newConnection()
+gui.Events.OnMouseReleased = core_conns:newConnection()
+gui.Events.OnWheelMoved = core_conns:newConnection()
+gui.Events.OnTouchMoved = core_conns:newConnection()
+gui.Events.OnTouchPressed = core_conns:newConnection()
+gui.Events.OnTouchReleased = core_conns:newConnection()
 
 -- Joysticks and gamepads
-gui.Events.OnGamepadPressed = multi:newConnection()
-gui.Events.OnGamepadReleased = multi:newConnection()
-gui.Events.OnGamepadAxis = multi:newConnection()
-gui.Events.OnJoystickAdded = multi:newConnection()
-gui.Events.OnJoystickHat = multi:newConnection()
-gui.Events.OnJoystickPressed = multi:newConnection()
-gui.Events.OnJoystickReleased = multi:newConnection()
-gui.Events.OnJoystickRemoved = multi:newConnection()
+gui.Events.OnGamepadPressed = core_conns:newConnection()
+gui.Events.OnGamepadReleased = core_conns:newConnection()
+gui.Events.OnGamepadAxis = core_conns:newConnection()
+gui.Events.OnJoystickAdded = core_conns:newConnection()
+gui.Events.OnJoystickHat = core_conns:newConnection()
+gui.Events.OnJoystickPressed = core_conns:newConnection()
+gui.Events.OnJoystickReleased = core_conns:newConnection()
+gui.Events.OnJoystickRemoved = core_conns:newConnection()
 
 -- Internal Connections
-gui.Events.OnCreated = multi:newConnection()
-gui.Events.OnObjectFocusChanged = multi:newConnection()
+gui.Events.OnCreated = core_conns:newConnection()
+gui.Events.OnObjectFocusChanged = core_conns:newConnection()
 
 -- Virtual gui init
 gui.virtual = {}
@@ -182,7 +183,7 @@ end)
 
 function gui:setHotKey(keys, conn)
     has_hotkey = true
-    local conn = conn or multi:newConnection()
+    local conn = conn or updater:newConnection()
     table.insert(hot_keys,
                  {Ref = self, Connection = conn, Keys = {unpack(keys)}})
     return conn
@@ -474,6 +475,7 @@ function gui:OnUpdate(func) -- Not crazy about this approach, will probably rewo
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
+    if not self.visible then return false end
     local x, y, w, h
     if self.__variables.clip[1] then
         local clip = self.__variables.clip
@@ -557,7 +559,7 @@ function gui:clone(opt)
                     -- We want to copy the connection functions from the original object and bind them to the new one
                     if not temp[i] then
                         -- Incase we are dealing with a custom object, create a connection if the custom objects unique declearation didn't
-                        temp[i] = multi:newConnection()
+                        temp[i] = updater:newConnection()
                     end
                     temp[i]:Bind(v:getConnections())
                 end
@@ -602,8 +604,20 @@ function gui:setTag(tag)
     self.tags[tag] = true
 end
 
+function gui:removeTag(tag)
+    self.tags[tag] = nil
+end
+
 function gui:hasTag(tag)
     return self.tags[tag]
+end
+
+function gui:ancestorHasTag(tag)
+    local parent = self.parent
+    while parent ~= gui and parent ~= nil do
+        if parent:hasTag(tag) then return true end
+        parent = parent.parent
+    end
 end
 
 function gui:parentHasTag(tag)
@@ -681,39 +695,39 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.rotation = 0
     c.formFactor = gui.FORM_RECTANGLE
 
-    c.OnLoad = multi:newConnection()
+    c.OnLoad = updater:newConnection()
 
-    c.OnPressed = testVisual .. (testHierarchy .. multi:newConnection())
-    c.OnPressedOuter = testVisual .. multi:newConnection()
-    c.OnReleased = testVisual .. (testHierarchy .. multi:newConnection())
-    c.OnReleasedOuter = testVisual .. multi:newConnection()
-    c.OnReleasedOther = testVisual .. multi:newConnection()
+    c.OnPressed = testVisual .. (testHierarchy .. updater:newConnection())
+    c.OnPressedOuter = testVisual .. updater:newConnection()
+    c.OnReleased = testVisual .. (testHierarchy .. updater:newConnection())
+    c.OnReleasedOuter = testVisual .. updater:newConnection()
+    c.OnReleasedOther = testVisual .. updater:newConnection()
 
-    c.OnDragStart = testVisual .. multi:newConnection()
-    c.OnDragging = testVisual .. multi:newConnection()
-    c.OnDragEnd = testVisual .. multi:newConnection()
+    c.OnDragStart = testVisual .. updater:newConnection()
+    c.OnDragging = testVisual .. updater:newConnection()
+    c.OnDragEnd = testVisual .. updater:newConnection()
 
-    c.OnEnter = (testHierarchy .. multi:newConnection())
-    c.OnExit = testVisual .. multi:newConnection()
+    c.OnEnter = testVisual .. (testHierarchy .. updater:newConnection())
+    c.OnExit = testVisual .. updater:newConnection()
 
-    c.OnMoved = testVisual .. (testHierarchy .. multi:newConnection())
+    c.OnMoved = testVisual .. (testHierarchy .. updater:newConnection())
     c.OnWheelMoved = testVisual .. (defaultCheck / gui.Events.OnWheelMoved)
 
-    c.OnSizeChanged = testVisual .. multi:newConnection()
-    c.OnPositionChanged = testVisual .. multi:newConnection()
+    c.OnSizeChanged = testVisual .. updater:newConnection()
+    c.OnPositionChanged = testVisual .. updater:newConnection()
 
-    c.OnLeftStickUp = testVisual .. multi:newConnection()
-    c.OnLeftStickDown = testVisual .. multi:newConnection()
-    c.OnLeftStickLeft = testVisual .. multi:newConnection()
-    c.OnLeftStickRight = testVisual .. multi:newConnection()
-    c.OnRightStickUp = testVisual .. multi:newConnection()
-    c.OnRightStickDown = testVisual .. multi:newConnection()
-    c.OnRightStickLeft = testVisual .. multi:newConnection()
-    c.OnRightStickRight = testVisual .. multi:newConnection()
+    c.OnLeftStickUp = testVisual .. updater:newConnection()
+    c.OnLeftStickDown = testVisual .. updater:newConnection()
+    c.OnLeftStickLeft = testVisual .. updater:newConnection()
+    c.OnLeftStickRight = testVisual .. updater:newConnection()
+    c.OnRightStickUp = testVisual .. updater:newConnection()
+    c.OnRightStickDown = testVisual .. updater:newConnection()
+    c.OnRightStickLeft = testVisual .. updater:newConnection()
+    c.OnRightStickRight = testVisual .. updater:newConnection()
 
-    c.OnDestroy = multi:newConnection()
+    c.OnDestroy = updater:newConnection()
 
-    c.OnCreated = creationCheck .. multi:newConnection()
+    c.OnCreated = creationCheck .. updater:newConnection()
     local _forwardedRef = multi.forwardConnection(gui.Events.OnCreated,c.OnCreated)
     local dragging = false
     local entered = false
@@ -977,8 +991,10 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     end
     local st
     function c:shaderTime(b)
-        if not b then
+        if not b and st then
             st:Unconnect()
+            st = false
+            return
         end
         if st then return end
         self.__shaderTime = 0
@@ -1056,7 +1072,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     c.textVisibility = 1
     c.font = love.graphics.newFont(12)
     c.textColor = color.black
-    c.OnFontUpdated = testVisual .. multi:newConnection()
+    c.OnFontUpdated = testVisual .. updater:newConnection()
 
     function c:calculateFontOffset(font, adjust)
         local adjust = adjust or 20
@@ -1236,7 +1252,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     local BLINK_RATE = 0.5
     local focused    = false
 
-    viewport.OnChanged = multi:newConnection()
+    viewport.OnChanged = updater:newConnection()
     viewport.readOnly  = false
 
     -- Split a string into lines
@@ -1559,7 +1575,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c.doSelection = false
 
-    c.OnReturn = testVisual .. multi:newConnection()
+    c.OnReturn = testVisual .. updater:newConnection()
 
     c.cur_pos = 0
     c.selection = {0, 0}
@@ -1912,7 +1928,7 @@ end
 -- Video
 function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(video, x,  y, w, h, sx, sy, sw, sh)
-    c.OnVideoFinished = multi:newConnection()
+    c.OnVideoFinished = updater:newConnection()
     c.playing = false
 
     function c:setVideo(v)
@@ -2009,7 +2025,7 @@ local drawtypes = {
                     end
                 end
             else
-                if child.scaleX < 0 or child.scaleY < 0 then
+                if type(child.scaleX) == "number" and child.scaleX < 0 or type(child.scaleY) == "number" and child.scaleY < 0 then
                     local sx, sy = child.scaleX, child.scaleY
                     local adjustX, adjustY = child.scaleX * w, child.scaleY * h
                     if sx < 0 and sy < 0 then
