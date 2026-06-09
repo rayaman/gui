@@ -22,7 +22,11 @@ local mt = {
 		return color.new(-c1[1],-c1[2],-c1[2])
 	end,
 	__tostring = function(c)
-		return "("..c[1]..","..c[2]..","..c[3]..",".. (c[4] or "1") ..")"
+		local name = c.name or ""
+		if name ~= "" then
+			name = name .. ": "
+		end
+		return name .. "("..c[1]..","..c[2]..","..c[3]..",".. (c[4] or "1") ..")"
 	end,
 	__eq = function (c1,c2)
 		return (c1[1]==c2[1] and c1[2]==c2[2] and c1[3]==c2[3])
@@ -92,11 +96,10 @@ function color.rgbToHex(r, g, b)
 
 	local rgb = (r * 0x10000) + (g * 0x100) + b
     return string.format("%06x", rgb)
-  end
+end
 
-function color.new(r, g, b, a)
+local function parseColor(r, g, b, a)
 	local temp
-
 	if type(r) == "string" then
 		r = r:gsub("%s",""):gsub("%%","")
 		if r:sub(1,4) == "rgba" then
@@ -121,15 +124,16 @@ function color.new(r, g, b, a)
 			else
 				r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 			end
-			temp = {love.math.colorFromBytes(r, g, b, a or 255)}
+			return love.math.colorFromBytes(r, g, b, a or 255)
 		end
 	elseif type(r) == "table" then
-		return r
+		return r[1], r[2], r[2], 1
 	end
+	return r, g, b, 1
+end
 
-	if not temp then
-		temp = {r, b, g, a}
-	end
+function color.new(r, g, b, a)
+	local temp = {parseColor(r, g, b, a)}
 
 	setmetatable(temp, mt)
 	return temp
@@ -145,6 +149,16 @@ function color.indexColor(name,r, g, b)
 	color[string.lower(name)] = c
 	color[string.upper(name)] = c
 	color[string.upper(string.sub(name,1,1))..string.lower(string.sub(name,2))] = c
+	c.name = name
+end
+
+-- Allows you to modify an existing color that has been indexed
+function color.reindexColor(name, r, g, b, a)
+	local r, g, b, a = parseColor(r, g, b, a)
+	color[string.lower(name)][1] = r
+	color[string.lower(name)][2] = g
+	color[string.lower(name)][3] = b
+	color[string.lower(name)][4] = a
 end
 
 function color.darken(c, v)

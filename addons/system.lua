@@ -506,7 +506,7 @@ function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
     title:setFont(theme.fontPrimary)
     title:fitFont()
 
-    function window:setTitle(t) title.text = t end
+    function window:setTitle(t) title.text = t title:fitFont() end
 
     local X = header:newTextButton("", -25, -25, 20, 20, 1, 1)
     X:setRoundness(10, 10)
