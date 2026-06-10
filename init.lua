@@ -104,7 +104,10 @@ updater:newTask(function()
     Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
     Hook("filedropped", gui.Events.OnFilesDropped.Fire)
     Hook("focus", gui.Events.OnFocus.Fire)
-    Hook("resize", gui.Events.OnResized.Fire)
+    Hook("resize", updater:newFunction(function(...)
+        thread.skip(2)
+        gui.Events.OnResized.Fire(...)
+    end))
     Hook("visible", gui.Events.OnVisible.Fire)
 
     -- Mouse
@@ -2425,32 +2428,36 @@ function gui:setAspectSize(w, h)
     end
 end
 
-gui.Events.OnResized(function(w, h)
-    if gui.aspect_ratio then
-        local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
-        gui.x = xt
-        gui.y = yt
-        gui.dualDim.offset.size.x = nw
-        gui.dualDim.offset.size.y = nh
-        gui.w = nw
-        gui.h = nh
+updater:newThread(function()
+    while true do
+        thread.yield()
+        local w, h = love.graphics.getDimensions()
+        if gui.aspect_ratio then
+            local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
+            gui.x = xt
+            gui.y = yt
+            gui.dualDim.offset.size.x = nw
+            gui.dualDim.offset.size.y = nh
+            gui.w = nw
+            gui.h = nh
 
-        gui.virtual.x = xt
-        gui.virtual.y = yt
-        gui.virtual.dualDim.offset.size.x = nw
-        gui.virtual.dualDim.offset.size.y = nh
-        gui.virtual.w = nw
-        gui.virtual.h = nh
-    else
-        gui.dualDim.offset.size.x = w
-        gui.dualDim.offset.size.y = h
-        gui.w = w
-        gui.h = h
+            gui.virtual.x = xt
+            gui.virtual.y = yt
+            gui.virtual.dualDim.offset.size.x = nw
+            gui.virtual.dualDim.offset.size.y = nh
+            gui.virtual.w = nw
+            gui.virtual.h = nh
+        else
+            gui.dualDim.offset.size.x = w
+            gui.dualDim.offset.size.y = h
+            gui.w = w
+            gui.h = h
 
-        gui.virtual.dualDim.offset.size.x = w
-        gui.virtual.dualDim.offset.size.y = h
-        gui.virtual.w = w
-        gui.virtual.h = h
+            gui.virtual.dualDim.offset.size.x = w
+            gui.virtual.dualDim.offset.size.y = h
+            gui.virtual.w = w
+            gui.virtual.h = h
+        end
     end
 end)
 
