@@ -143,6 +143,9 @@ function color.random()
 	return color.new(math.random(0,10000000)/10000000, math.random(0,10000000)/10000000, math.random(0,10000000)/10000000, 1)
 end
 
+local is_internal = true
+local external = {}
+local internal = {}
 function color.indexColor(name,r, g, b)
 	local c = color.new(r,g,b)
 	-- Other ways to index a color
@@ -150,6 +153,26 @@ function color.indexColor(name,r, g, b)
 	color[string.upper(name)] = c
 	color[string.upper(string.sub(name,1,1))..string.lower(string.sub(name,2))] = c
 	c.name = name
+	c.isInternal = is_internal
+	if is_internal then
+		table.insert(internal, name)
+	else
+		table.insert(external, name)
+	end
+end
+
+function color.listColors(showAllColors)
+	local list = {}
+	if not showAllColors then
+		return external
+	end
+	for i,v in ipairs(external) do
+		list[#list+1] = v
+	end
+	for i,v in ipairs(internal) do
+		list[#list+1] = v
+	end
+	return list
 end
 
 -- Allows you to modify an existing color that has been indexed
@@ -1670,5 +1693,6 @@ color.indexColor("highlighter_blue","#30C5FF")
 for i=0,255 do
 	color.indexColor("gray"..i,i,i,i)
 end
-
+-- All indexed colors after this are user added
+is_internal = false
 return color

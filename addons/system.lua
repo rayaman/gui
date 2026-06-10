@@ -236,13 +236,13 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         updateScrollbars()        -- now applying=false, no guard needed
     end
 
-    viewport.OnWheelMoved(function(x, y)
+    viewport:OnWheelMoved(function(x, y)
         scrollY = scrollY - y * SCROLL_SPEED
         applyScroll()
     end)
 
     vThumb:enableDragging(gui.MOUSE_PRIMARY)
-    vThumb.OnDragging(function(self, dx, dy)
+    vThumb:OnDragging(function(self, dx, dy)
         local _, vh = getViewSize()
         local _, _, _, thumbH = vThumb:getAbsolutes()
         local trackH = vh - thumbH
@@ -252,7 +252,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
     end)
 
     hThumb:enableDragging(gui.MOUSE_PRIMARY)
-    hThumb.OnDragging(function(self, dx, dy)
+    hThumb:OnDragging(function(self, dx, dy)
         local vw, _ = getViewSize()
         local _, _, thumbW = hThumb:getAbsolutes()
         local trackW = vw - thumbW
@@ -261,7 +261,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         applyScroll()
     end)
 
-    content.OnSizeChanged(function()
+    content:OnSizeChanged(function()
         if applying then return end
         local _, _, cw, ch = content:getAbsolutes()
         local vw, vh = getViewSize()
@@ -272,7 +272,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         updateScrollbars()
     end)
 
-    viewport.OnSizeChanged(function()
+    viewport:OnSizeChanged(function()
         if applying then return end
         applyScroll()
     end)
@@ -331,7 +331,7 @@ end
 --                                 Also accessible via returned connection object.
 --
 -- RETURNS: window object (same as gui:newWindow)
---   window.OnChoice  — multi connection; fires with (label, index)
+--   window:OnChoice  — multi connection; fires with (label, index)
 --   window:close()   — hides the window (as usual)
 --   window:open()    — shows the window (as usual)
 --
@@ -422,14 +422,14 @@ function gui:newMessageBox(options)
         local capturedLabel = label
         local capturedIdx   = i
 
-        btn.OnReleased(function()
+        btn:OnReleased(function()
             win.OnChoice:Fire(capturedLabel, capturedIdx)
             win:close()
         end)
     end
 
     -- ── close button also fires OnChoice with nil ─────────────────────────────
-    win.XButton.OnPressed(function()
+    win.XButton:OnPressed(function()
         win.OnChoice:Fire(nil, nil)
     end)
 
@@ -512,12 +512,12 @@ function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
     X:setRoundness(10, 10)
     X:respectHierarchy(false)
     X.align = gui.ALIGN_CENTER
-    X.color = color.red
+    X.color = color.new("#e50000")
     window.XButton = X
 
-    local darkenX = color.darken(color.red, .2)
-    X.OnEnter(function(self) self.color = darkenX end)
-    X.OnExit(function(self) self.color = color.red end)
+    local darkenX = color.darken(color.new("#e50000"), .2)
+    X:OnEnter(function(self) self.color = darkenX end)
+    X:OnExit(function(self) self.color = color.new("#e50000") end)
 
     if draggable then
         header:enableDragging(gui.MOUSE_PRIMARY)
@@ -533,10 +533,10 @@ function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
     end
 
     window.OnClose = multi:newConnection()
-    X.OnPressed(function(self, ...)
+    X:OnPressed(function(self, ...)
         window.OnClose:Fire(window, ...)
     end)
-    window.OnClose(function()
+    window:OnClose(function()
         header:setParent(gui.virtual)
         love.mouse.setCursor(pointer)
     end)
@@ -553,34 +553,34 @@ function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
 
     process:newThread(function() window:setTheme(theme) end)
 
-    window.OnSizeChanged(function() window:refresh() end)
+    window:OnSizeChanged(function() window:refresh() end)
     function window:refresh() window:setTheme(theme) end
 
     window.process = process
-    window.OnCreated(function(element)
-        if element:hasType(gui.TYPE_BUTTON) then
-            element:setFont(theme.fontButton)
-            element.color     = theme.colorButtonNormal
-            element.textColor = theme.colorButtonText
-            if not element.__registeredTheme then
-                element.OnEnter(function(self) self.color = theme.colorButtonHighlight end)
-                element.OnExit(function(self)  self.color = theme.colorButtonNormal end)
-            end
-            element:fitFont()
-            element.__registeredTheme = true
-        elseif element:hasType(gui.TYPE_TEXT) then
-            element.color     = theme.colorPrimary
-            element:setFont(theme.fontPrimary)
-            element.textColor = theme.colorPrimaryText
-            element:fitFont()
-        elseif element:hasType(gui.TYPE_FRAME) then
-            if element.__isHeader then
-                element.color = theme.colorPrimaryDark
-            else
-                element.color = theme.colorPrimary
-            end
-        end
-    end)
+    -- window:OnCreated(function(element)
+    --     if element:hasType(gui.TYPE_BUTTON) then
+    --         element:setFont(theme.fontButton)
+    --         element.color     = theme.colorButtonNormal
+    --         element.textColor = theme.colorButtonText
+    --         if not element.__registeredTheme then
+    --             element:OnEnter(function(self) self.color = theme.colorButtonHighlight end)
+    --             element:OnExit(function(self)  self.color = theme.colorButtonNormal end)
+    --         end
+    --         element:fitFont()
+    --         element.__registeredTheme = true
+    --     elseif element:hasType(gui.TYPE_TEXT) then
+    --         element.color     = theme.colorPrimary
+    --         element:setFont(theme.fontPrimary)
+    --         element.textColor = theme.colorPrimaryText
+    --         element:fitFont()
+    --     elseif element:hasType(gui.TYPE_FRAME) then
+    --         if element.__isHeader then
+    --             element.color = theme.colorPrimaryDark
+    --         else
+    --             element.color = theme.colorPrimary
+    --         end
+    --     end
+    -- end)
     return window
 end
 
@@ -621,7 +621,7 @@ local function makeRowPool(scrollFrame)
         -- Kill button (red)
         local killBtn  = bg:newTextButton("Kill", COL_X[8] + 2, 2, COL_WIDTHS[8] - 4, ROW_H - 4)
         killBtn.align  = gui.ALIGN_CENTER
-        killBtn.color  = color.darken(color.red, .1)
+        killBtn.color  = color.darken(color.new("#e50000"), .1)
 
         local row = {
             bg          = bg,
@@ -637,7 +637,7 @@ local function makeRowPool(scrollFrame)
             isProc      = false,
         }
 
-        pauseBtn.OnReleased(function()
+        pauseBtn:OnReleased(function()
             if not row.obj then return end
             if row.obj:isPaused() then
                 row.obj:Resume()
@@ -648,7 +648,7 @@ local function makeRowPool(scrollFrame)
             pauseBtn.text  = row.obj:isPaused() and "Resume" or "Pause"
         end)
 
-        killBtn.OnReleased(function()
+        killBtn:OnReleased(function()
             if not row.obj or row.isProc then return end
             if row.obj.Kill then
                 row.obj:Kill()
@@ -660,7 +660,7 @@ local function makeRowPool(scrollFrame)
 
         -- Priority label is clickable to cycle priority
         priorityLbl.ignore = false
-        priorityLbl.OnReleased(function()
+        priorityLbl:OnReleased(function()
             if not row.obj or row.isProc then return end
             local cur  = rawget(row.obj, "Priority") or 256
             local next = nextPriority(cur)
@@ -808,7 +808,7 @@ local function makeHeader(parent, onSort)
             btn.align = (i == 1) and gui.ALIGN_LEFT or gui.ALIGN_CENTER
             indicators[COL_KEYS[i]] = btn
             local key = COL_KEYS[i]
-            btn.OnReleased(function()
+            btn:OnReleased(function()
                 if sortCol == key then
                     sortAsc = not sortAsc
                 else
@@ -850,7 +850,7 @@ local function makeTabBar(parent, tabs, onSwitch)
         local btn = bar:newTextButton(label, (i-1)*tabW, 0, tabW, TAB_H)
         btn.align = gui.ALIGN_CENTER
         btns[i] = btn
-        btn.OnReleased(function()
+        btn:OnReleased(function()
             onSwitch(i)
         end)
     end
@@ -955,7 +955,7 @@ function gui:showTaskManager()
     local errScroll   = errorPanel:newScrollFrame(0, ROW_H, 0, -ROW_H, 0, 0, 1, 1)
     local errorPool   = makeErrorPool(errScroll)
 
-    clearBtn.OnReleased(function() errorPool:clear() end)
+    clearBtn:OnReleased(function() errorPool:clear() end)
 
     -- ── wire up error capture ─────────────────────────────────────────────────
     -- Thread errors fire on the *thread's own* OnError, not the processor's.
@@ -1070,7 +1070,7 @@ ToggleTaskManager = gui:setHotKey({"lctrl","t"}) +
 
 ToggleTaskManager(function()
     if not taskManager then
-        gui:showTaskManager()
+        -- gui:showTaskManager()
     elseif taskManager:isActive() then
         taskManager:close()
     else
@@ -1079,7 +1079,7 @@ ToggleTaskManager(function()
 end)
 
 ToggleTaskManager:Fire()
-taskManager:close()
+-- taskManager:close()
 
 local PATH_SEP   = love.system.getOS() == "Windows" and "\\" or "/"
 local IS_WINDOWS = love.system.getOS() == "Windows"
@@ -1265,17 +1265,17 @@ local function makeRowPool(scrollFrame, callback)
         local bg = scrollFrame:newFrame(0, yOff, 0, ROW_H, 0, 0, 1)  -- scale w=1, no captured w
         bg.drawBorder = false
         local nameLabel = bg:newTextLabel("", 0, 0, 0, ROW_H, 0, 0, 1)  -- fills parent width
-        nameLabel.color = color.blue
+        nameLabel.color = color.new("#0343df")
         nameLabel.align  = gui.ALIGN_CENTER
         nameLabel.ignore = true
         if not bg.callback then
-            bg.OnReleased(callback)
+            bg:OnReleased(callback)
             bg.callback = true
-            nameLabel.OnEnter(function(self)
+            nameLabel:OnEnter(function(self)
                 self:setShader(gui.SHADERS.glow)
                 self:shaderTime(true)
             end)
-            nameLabel.OnExit(function(self)
+            nameLabel:OnExit(function(self)
                 self:setShader()
                 self:shaderTime(false)
             end)

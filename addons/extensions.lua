@@ -73,11 +73,11 @@ end
 
 function gui:newCheckbox(label, x, y, size, sx, sy, checked)
     local checkbox = self:newFrame(x, y, size, size, sx, sy)
-    checkbox.color = color.black
+    checkbox.color = color.new("#000000")
     local border = checkbox:newVisualFrame(noOf(.1,.1,.8,.8))
-    border.color = color.white
+    border.color = color.new("#ffffff")
     local toggle = border:newFrame(noOf(.3,.3,.4,.4))
-    toggle.color = color.black
+    toggle.color = new("#000000")
     toggle.visible = false
 
     checkbox:OnReleased(function()
@@ -86,7 +86,7 @@ function gui:newCheckbox(label, x, y, size, sx, sy, checked)
     
     if label ~= "" then
         local text = checkbox:newTextLabel(label, noOf(1.25,0,15,1))
-        text:OnUpdate(function()
+        gui.Events.OnResized(function()
             text:centerFont()
         end)
         text:setFont(size-2)
@@ -148,10 +148,10 @@ function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
     local fill = fillframe:newFrame(noOf(0, 0, 1, 1))
     local percentDisplay = fillframe:newTextLabel("",noOf(0,0,1,1))
     percentDisplay.align = gui.ALIGN_CENTER
-    percentDisplay.textColor = color.new("#CC5500")
+    percentDisplay.textColor = new("#CC5500")
     fillframe.visibility = 0
-    progressbar.color = color.new("#000000")
-    fill.color = color.new("#ffffff")
+    progressbar.color = new("#000000")
+    fill.color = new("#ffffff")
     progressbar.fillframe = fillframe
     progressbar.fill = fill
     progressbar.display = percentDisplay
