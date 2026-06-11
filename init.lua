@@ -1,3 +1,4 @@
+local font = require("gui.core.font")
 local utf8 = require("utf8")
 local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
@@ -79,6 +80,8 @@ gui.Events.OnJoystickRemoved = core_conns:newConnection()
 gui.Events.OnCreated = core_conns:newConnection()
 gui.Events.OnObjectFocusChanged = core_conns:newConnection()
 
+gui.Events.OnUpdate = core_conns:newConnection()
+
 -- Virtual gui init
 gui.virtual = {}
 
@@ -141,10 +144,6 @@ end)
 
 
 -- Hotkeys
-
-local function noOf(sx,sy,sw,sh)
-    return nil,nil,nil,nil,sx,sy,sw,sh
-end
 
 local has_hotkey = false
 local hot_keys = {}
@@ -227,6 +226,14 @@ end
 
 function gui:getTag()
     return self.__tag
+end
+
+function gui:noOf(sx,sy,sw,sh)
+    if type(self) == "number" then -- gui.noOf
+        return nil,nil,nil,nil,self,sx,sy,sw
+    else
+        return nil,nil,nil,nil,sx,sy,sw,sh
+    end
 end
 
 --[[
@@ -1121,7 +1128,13 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         return top - adjust, bottom - adjust
     end
 
+    local cache = {}
     function c:setFont(font, size)
+        local index = tostring(font) .. tostring(size)
+        if cache[index] then
+            self.font = cache[index]
+            return
+        end
         if type(font) == "number" then
             self.font = love.graphics.newFont(font)
         elseif type(font) == "string" then
@@ -1130,10 +1143,18 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         else
             self.font = font
         end
+        cache[index] = font
         self.OnFontUpdated:Fire(self)
     end
 
-    local cache = {}
+    -- something x > 0 
+    function c:scaleFont(scale)
+        if scale <= 0 then
+            error("scale cannot be <= 0")
+        end
+        self.textScale = scale
+    end
+
     function c:fitFont(minSize, maxSize, opt)
         local _,_,w,h = self:getAbsolutes()
         local sw, sh = love.graphics.getDimensions()
@@ -1198,11 +1219,8 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         return bestFont, bestSize
     end
 
-    function c:centerFont(y_offset)
-        local x, y, width, height = self:getAbsolutes()
-        local top, bottom = self:calculateFontOffset(self.font, y_offset or 0)
-        self.textOffsetY = floor(((height - bottom) - top) / 2)
-        self.OnFontUpdated:Fire(self)
+    function c:centerFont(b)
+        self.centerText = not b
     end
 
     function c:getUniques()
@@ -2007,7 +2025,7 @@ end
 
 -- local label, image, text, button, box, video, animation (spritesheet)
 local drawtypes = {
-    [0] = function(child, x, y, w, h) end,
+    [0] = function() end,
     [1] = function(child, x, y, w, h)
         if child.image then
             love.graphics.setColor(child.imageColor[1], child.imageColor[2], child.imageColor[3], child.imageVisibility)
@@ -2045,22 +2063,21 @@ local drawtypes = {
         end
     end,
     [2] = function(child, x, y, w, h)
-        love.graphics.setColor(child.textColor[1], child.textColor[2],
-                               child.textColor[3], child.textVisibility)
-        love.graphics.setFont(child.font)
-        -- if child.align == gui.ALIGN_LEFT then
-        --     child.adjust = 0
-        -- elseif child.align == gui.ALIGN_CENTER then
-        --     local fw = child.font:getWidth(child.text)
-        --     child.adjust = (w - fw) / 2
-        -- elseif child.align == gui.ALIGN_RIGHT then
-        --     local fw = child.font:getWidth(child.text)
-        --     child.adjust = w - fw - 4
-        -- end
         local mul = 1
         if (child.formFactor == gui.FORM_ARC) or (child.formFactor == gui.FORM_CIRCLE) then
             mul = 2
         end
+        if child.textScale then
+            child.font = font.set(child.font, math.floor(h*child.textScale))
+        end
+        if child.centerText then
+            local _, wrappedtext = child.font:getWrap(child.text, w*mul)
+            local fh = child.font:getHeight()
+            child.textOffsetY = (h-(fh*#wrappedtext))/2
+        end
+        love.graphics.setColor(child.textColor[1], child.textColor[2],
+                               child.textColor[3], child.textVisibility)
+        love.graphics.setFont(child.font)
         love.graphics.printf(child.text, child.adjust + x + child.textOffsetX,
                              y + child.textOffsetY, w*mul, ({[0]="center","left", "right", "justify"})[child.align], child.rotation,
                              child.textScaleX, child.textScaleY, 0, 0,
@@ -2458,6 +2475,14 @@ updater:newThread(function()
             gui.virtual.w = w
             gui.virtual.h = h
         end
+    end
+end)
+
+-- start global updater
+updater:newThread(function()
+    while true do
+        thread.skip(5)
+        gui.Events.OnUpdate.Fire()
     end
 end)
 
