@@ -887,6 +887,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     function c:fullFrame()
         self:setDualDim(0,0,0,0,0,0,1,1)
+        return self
     end
 
     function c:destroy()
