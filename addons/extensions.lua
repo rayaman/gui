@@ -86,9 +86,7 @@ function gui:newCheckbox(label, x, y, size, sx, sy, checked)
     
     if label ~= "" then
         local text = checkbox:newTextLabel(label, noOf(1.25,0,15,1))
-        gui.Events.OnResized(function()
-            text:centerFont()
-        end)
+        text:centerFont()
         text:setFont(size-2)
         text.visibility = 0
     end
@@ -191,7 +189,9 @@ function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
     fillframe.OnPressed(function(self, x, y, dx, dy, istouch)
         calcFunc(self, dx, dy, x, y, istouch)
     end)
-
+    
+    percentDisplay:centerFont()
+    
     function progressbar:update(v, drag)
         v = v or value
         if v > count then v = count end
@@ -200,7 +200,7 @@ function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
         fill:setDualDim(noOf(nil,nil,percent))
         if displayPercent then
             percentDisplay.text = math.floor((percent*100)+.5).. "%"
-            percentDisplay:centerFont()
+            
         end
         value = v
         self.OnProgressUpdated:Fire(self, percent, value, drag)
