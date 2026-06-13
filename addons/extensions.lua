@@ -19,7 +19,7 @@ function gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh, draggable, th)
     local length = video:getDuration()
     local play_pause = window:newImageButton("gui/assets/play.png",0,0,0,0,.45,.86,0,.14)
     local seek = window:newProgressBar(0,0,0,0,0,.8,1,.05,length*100,0)
-    seek.OnProgressUpdated(function(self,_,value, drag)
+    seek:OnProgressUpdated(function(self,_,value, drag)
         if drag then
             local status = video:isPlaying()
             video:seek(value/100)
@@ -64,7 +64,7 @@ function gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh, draggable, th)
         video:stop()
     end
 
-    window.OnClose(function()
+    window:OnClose(function()
         video:pause()
     end)
 
@@ -184,9 +184,9 @@ function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)
 
     fillframe:OnDragStart(calcFunc)
     
-    fillframe.OnDragging(calcFunc)
+    fillframe:OnDragging(calcFunc)
 
-    fillframe.OnPressed(function(self, x, y, dx, dy, istouch)
+    fillframe:OnPressed(function(self, x, y, dx, dy, istouch)
         calcFunc(self, dx, dy, x, y, istouch)
     end)
     

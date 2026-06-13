@@ -391,7 +391,7 @@ function gui:newMessageBox(options)
     -- ── OnChoice connection ───────────────────────────────────────────────────
     win.OnChoice = multi:newConnection()
     if options.onChoice then
-        win.OnChoice(options.onChoice)
+        win:OnChoice(options.onChoice)
     end
 
     -- ── message label ─────────────────────────────────────────────────────────
@@ -1032,7 +1032,7 @@ function gui:showTaskManager()
     schedulerProbe:install(multi)
 
     -- ── main-thread update ────────────────────────────────────────────────────
-    taskManager.OnUpdate(function()
+    taskManager:OnUpdate(function()
         taskManager:topStack()
         -- Apply task data
         if dirty and pendingData then
@@ -1070,7 +1070,7 @@ ToggleTaskManager = gui:setHotKey({"lctrl","t"}) +
 
 ToggleTaskManager(function()
     if not taskManager then
-        gui:showTaskManager()
+        -- gui:showTaskManager()
     elseif taskManager:isActive() then
         taskManager:close()
     else

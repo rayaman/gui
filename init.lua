@@ -746,6 +746,7 @@ end
 
 function gui:fullFrame()
     self:setDualDim(0,0,0,0,0,0,1,1)
+    return self
 end
 
 function gui:removeChildren()
@@ -853,8 +854,8 @@ function gui:centerX(bool)
     self.centerX = bool
     if self.centering then return end
     self.centering = true
-    self.OnSizeChanged(self.centerthread)
-    self.OnPositionChanged(self.centerthread)
+    self:OnSizeChanged(self.centerthread)
+    self:OnPositionChanged(self.centerthread)
     updater:newLoop(function()
         self:centerthread()
     end)
@@ -865,16 +866,10 @@ function gui:centerY(bool)
     self.centerY = bool
     if self.centering then return end
     self.centering = true
-    self.OnSizeChanged(self.centerthread)
-    self.OnPositionChanged(self.centerthread)
+    self:OnSizeChanged(self.centerthread)
+    self:OnPositionChanged(self.centerthread)
     updater:newLoop(self.centerthread)
 end
-
-function c:fullFrame()
-    self:setDualDim(0,0,0,0,0,0,1,1)
-    return self
-end
-
 
 ---- Connection Handler
 --[[
@@ -924,7 +919,8 @@ local VisualEvents = {"Exit", "PressedOuter", "ReleasedOuter", "ReleasedOther", 
 
 local BasicEvents = {"Load", "Destroy", "VideoFinished"}
 
-local initEvents = function(self)
+local initEvents = function(self, evnt_type)
+    print("Event: "..evnt_type)
     if self.__eventsInit then print("dup reg") return end
     self.__eventsInit = true
     self._mouseMoveRef = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
@@ -1023,7 +1019,7 @@ for _,v in pairs(BasicEvents) do
     -- end)
     local mt = {
         __call = function(_, self, func)
-            initEvents(self)
+            initEvents(self,v)
             table.insert(self.connections, gui["_On".. v](function(obj)
                 if obj == self then
                     func(obj)
@@ -1046,7 +1042,7 @@ for _,v in pairs(HierarchyEvents) do
     -- end)
     local mt = {
         __call = function(_, self, func)
-            initEvents(self)
+            initEvents(self,v)
             table.insert(self.connections, gui["_On".. v](function(obj, x, y, ...)
                 if obj == self and testVisual(obj) and obj:testHierarchy(x, y) then
                     func(obj, x, y, ...)
@@ -1069,7 +1065,7 @@ for _,v in pairs(VisualEvents) do
     -- end)
     local mt = {
         __call = function(_, self, func)
-            initEvents(self)
+            initEvents(self,v)
             table.insert(self.connections, gui["_On".. v](function(obj, ...)
                 if testVisual(obj) then
                     func(obj, ...)
@@ -1537,7 +1533,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     end
 
     -- Mouse click to position cursor
-    viewport.OnPressed(function(self, mx, my)
+    viewport:OnPressed(function(self, mx, my)
         focused = true
         local _, vy = viewport:getAbsolutes()
         local relY = my - vy + scrollY - 2
@@ -1557,7 +1553,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
         updateCursor()
     end)
 
-    viewport.OnPressedOuter(function()
+    viewport:OnPressedOuter(function()
         focused = false
         updateCursor()
     end)
@@ -1609,7 +1605,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     end)
 
     -- Scroll wheel
-    viewport.OnWheelMoved(function(_, dy)
+    viewport:OnWheelMoved(function(_, dy)
         scrollY = scrollY - dy * 30
         applyScroll()
         updateCursor()
@@ -1876,7 +1872,7 @@ end)
 gui.cacheImage = updater:newFunction(function(self, path_or_paths)
     if type(path_or_paths) == "string" then
         -- runs thread to load image then cache it for faster loading
-        load_image(path_or_paths).OnReturn(function(img)
+        load_image(path_or_paths):OnReturn(function(img)
             image_cache[path_or_paths] = img
         end)
     -- table of paths
