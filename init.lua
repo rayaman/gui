@@ -920,12 +920,12 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         gui.Events.OnMouseReleased:Unconnect(_mouseRelRef)
         gui.Events.OnMousePressed:Unconnect(_mousePressRef)
         gui.Events.OnCreated:Unconnect(_forwardedRef)
-        self.OnWheelMoved:Destroy()
 
         -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
         for key, value in pairs(self) do
             if type(value) == "table" and
             value.Type == multi.registerType("connector", "connections") then
+                value:Remove()
                 value:Destroy()
             end
         end

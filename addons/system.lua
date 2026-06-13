@@ -557,30 +557,30 @@ function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
     function window:refresh() window:setTheme(theme) end
 
     window.process = process
-    -- window:OnCreated(function(element)
-    --     if element:hasType(gui.TYPE_BUTTON) then
-    --         element:setFont(theme.fontButton)
-    --         element.color     = theme.colorButtonNormal
-    --         element.textColor = theme.colorButtonText
-    --         if not element.__registeredTheme then
-    --             element:OnEnter(function(self) self.color = theme.colorButtonHighlight end)
-    --             element:OnExit(function(self)  self.color = theme.colorButtonNormal end)
-    --         end
-    --         element:fitFont()
-    --         element.__registeredTheme = true
-    --     elseif element:hasType(gui.TYPE_TEXT) then
-    --         element.color     = theme.colorPrimary
-    --         element:setFont(theme.fontPrimary)
-    --         element.textColor = theme.colorPrimaryText
-    --         element:fitFont()
-    --     elseif element:hasType(gui.TYPE_FRAME) then
-    --         if element.__isHeader then
-    --             element.color = theme.colorPrimaryDark
-    --         else
-    --             element.color = theme.colorPrimary
-    --         end
-    --     end
-    -- end)
+    window:OnCreated(function(element)
+        if element:hasType(gui.TYPE_BUTTON) then
+            element:setFont(theme.fontButton)
+            element.color     = theme.colorButtonNormal
+            element.textColor = theme.colorButtonText
+            if not element.__registeredTheme then
+                element:OnEnter(function(self) self.color = theme.colorButtonHighlight end)
+                element:OnExit(function(self)  self.color = theme.colorButtonNormal end)
+            end
+            element:fitFont()
+            element.__registeredTheme = true
+        elseif element:hasType(gui.TYPE_TEXT) then
+            element.color     = theme.colorPrimary
+            element:setFont(theme.fontPrimary)
+            element.textColor = theme.colorPrimaryText
+            element:fitFont()
+        elseif element:hasType(gui.TYPE_FRAME) then
+            if element.__isHeader then
+                element.color = theme.colorPrimaryDark
+            else
+                element.color = theme.colorPrimary
+            end
+        end
+    end)
     return window
 end
 
@@ -1070,7 +1070,7 @@ ToggleTaskManager = gui:setHotKey({"lctrl","t"}) +
 
 ToggleTaskManager(function()
     if not taskManager then
-        -- gui:showTaskManager()
+        gui:showTaskManager()
     elseif taskManager:isActive() then
         taskManager:close()
     else
