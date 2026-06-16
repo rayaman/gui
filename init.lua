@@ -43,6 +43,7 @@ gui.MOUSE_MIDDLE = 3
 gui.ALIGN_CENTER = 0
 gui.ALIGN_LEFT = 1
 gui.ALIGN_RIGHT = 2
+gui.ALIGN_JUSTIFY = 3
 
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
