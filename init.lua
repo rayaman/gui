@@ -670,9 +670,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local draggable = false
     local hierarchy = false
 
-    local function testHierarchy(c, x, y, button, istouch, presses)
+    local function testHierarchy(obj, x, y)
         if hierarchy then
-            return not (global_drag or c:isBeingCovered(x, y, true))
+            return not (global_drag or obj:isBeingCovered(x, y, true))
         end
         return true
     end
@@ -688,6 +688,10 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     local function creationCheck(self)
         return self:isDescendantOf(c)
+    end
+
+    local function visHie(obj, x, y)
+        return testVisual(obj) and testHierarchy(obj, x, y)
     end
 
     setmetatable(c, gui)
@@ -707,33 +711,33 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     c.OnLoad = updater:newConnection()
 
-    c.OnPressed = testVisual .. (testHierarchy .. updater:newConnection())
-    c.OnPressedOuter = testVisual .. updater:newConnection()
-    c.OnReleased = testVisual .. (testHierarchy .. updater:newConnection())
-    c.OnReleasedOuter = testVisual .. updater:newConnection()
-    c.OnReleasedOther = testVisual .. updater:newConnection()
+    c.OnPressed = updater:newConnection(false, visHie)
+    c.OnPressedOuter = updater:newConnection(false, testVisual)
+    c.OnReleased = updater:newConnection(false, visHie)
+    c.OnReleasedOuter = updater:newConnection(false, testVisual)
+    c.OnReleasedOther = updater:newConnection(false, testVisual)
 
-    c.OnDragStart = testVisual .. updater:newConnection()
-    c.OnDragging = testVisual .. updater:newConnection()
-    c.OnDragEnd = testVisual .. updater:newConnection()
+    c.OnDragStart = updater:newConnection(false, testVisual)
+    c.OnDragging = updater:newConnection(false, testVisual)
+    c.OnDragEnd = updater:newConnection(false, testVisual)
 
-    c.OnEnter = testVisual .. (testHierarchy .. updater:newConnection())
-    c.OnExit = testVisual .. updater:newConnection()
+    c.OnEnter = updater:newConnection(false, visHie)
+    c.OnExit = updater:newConnection(false, testVisual)
 
-    c.OnMoved = testVisual .. (testHierarchy .. updater:newConnection())
+    c.OnMoved = updater:newConnection(false,visHie)
     c.OnWheelMoved = testVisual .. (defaultCheck / gui.Events.OnWheelMoved)
 
-    c.OnSizeChanged = testVisual .. updater:newConnection()
-    c.OnPositionChanged = testVisual .. updater:newConnection()
+    c.OnSizeChanged = updater:newConnection(false, testVisual)
+    c.OnPositionChanged = updater:newConnection(false, testVisual)
 
-    c.OnLeftStickUp = testVisual .. updater:newConnection()
-    c.OnLeftStickDown = testVisual .. updater:newConnection()
-    c.OnLeftStickLeft = testVisual .. updater:newConnection()
-    c.OnLeftStickRight = testVisual .. updater:newConnection()
-    c.OnRightStickUp = testVisual .. updater:newConnection()
-    c.OnRightStickDown = testVisual .. updater:newConnection()
-    c.OnRightStickLeft = testVisual .. updater:newConnection()
-    c.OnRightStickRight = testVisual .. updater:newConnection()
+    c.OnLeftStickUp = updater:newConnection(false, testVisual)
+    c.OnLeftStickDown = updater:newConnection(false, testVisual)
+    c.OnLeftStickLeft = updater:newConnection(false, testVisual)
+    c.OnLeftStickRight = updater:newConnection(false, testVisual)
+    c.OnRightStickUp = updater:newConnection(false, testVisual)
+    c.OnRightStickDown = updater:newConnection(false, testVisual)
+    c.OnRightStickLeft = updater:newConnection(false, testVisual)
+    c.OnRightStickRight = updater:newConnection(false, testVisual)
 
     c.OnDestroy = updater:newConnection()
 
@@ -925,7 +929,6 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         for key, value in pairs(self) do
             if type(value) == "table" and
             value.Type == multi.registerType("connector", "connections") then
-                value:Remove()
                 value:Destroy()
             end
         end
@@ -933,6 +936,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         -- Remove from parent
         table.remove(children, foundIdx)
         self.parent = nil
+        collectgarbage("collect")
     end
 
     function c:removeChildren()
@@ -1083,7 +1087,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     c.textVisibility = 1
     c.font = love.graphics.newFont(12)
     c.textColor = color.black
-    c.OnFontUpdated = testVisual .. updater:newConnection()
+    c.OnFontUpdated = updater:newConnection(false, testVisual)
 
     function c:calculateFontOffset(font, adjust)
         local adjust = adjust or 20
@@ -1471,12 +1475,12 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     end)
 
     -- Keyboard input (only when focused)
-    gui.Events.OnTextInputed(function(t)
+    local _textInputRef = gui.Events.OnTextInputed(function(t)
         if not focused then return end
         insertText(t)
     end)
 
-    gui.Events.OnKeyPressed(function(key)
+    local _keyPressRef = gui.Events.OnKeyPressed(function(key)
         if not focused then return end
         if key == "return" or key == "kpenter" then
             insertText("\n")
@@ -1516,6 +1520,11 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
         end
     end)
 
+    viewport.OnDestroy(function()
+        gui.Events.OnTextInputed:Unconnect(_textInputRef)
+        gui.Events.OnKeyPressed:Unconnect(_keyPressRef)
+    end)
+
     -- Scroll wheel
     viewport.OnWheelMoved(function(_, dy)
         scrollY = scrollY - dy * 30
@@ -1542,12 +1551,6 @@ end
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
     local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
-
-    c.OnEnter(function(c, x, y, dx, dy, istouch)
-        love.mouse.setCursor(cursor_hand)
-    end)
-
-    c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
     gui.Events.OnCreated:Fire(c)
     return c
 end
@@ -1597,7 +1600,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c.doSelection = false
 
-    c.OnReturn = testVisual .. updater:newConnection()
+    c.OnReturn = updater:newConnection(false, testVisual)
 
     c.cur_pos = 0
     c.selection = {0, 0}
@@ -1937,12 +1940,6 @@ function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c:setImage(source)
-
-    c.OnEnter(function(c, x, y, dx, dy, istouch)
-        love.mouse.setCursor(cursor_hand)
-    end)
-
-    c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
     gui.Events.OnCreated:Fire(c)
     return c
 end
