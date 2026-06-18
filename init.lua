@@ -50,6 +50,7 @@ gui.MOUSE_MIDDLE = 3
 gui.ALIGN_CENTER = 0
 gui.ALIGN_LEFT = 1
 gui.ALIGN_RIGHT = 2
+gui.ALIGN_JUSTIFY = 3
 
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
@@ -1080,7 +1081,12 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.connections = {}  -- Needed when cleaning up
     c.tags = {}
     local buildBackBetter
+
     c.dragbutton = 2
+
+    local function visHie(obj, x, y)
+        return testVisual(obj) and testHierarchy(obj, x, y)
+    end
 
     setmetatable(c, gui)
     c.__variables = {clip = {false, 0, 0, 0, 0}}
@@ -1096,7 +1102,6 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.drawBorder = true
     c.rotation = 0
     c.formFactor = gui.FORM_RECTANGLE
-
     c.dragging = false
     c.entered = false
     c.pressed = false
@@ -1168,6 +1173,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     c.textVisibility = 1
     c.font = love.graphics.newFont(12)
     c.textColor = black
+    c.OnFontUpdated = updater:newConnection(false, testVisual)
 
     function c:calculateFontOffset(font, adjust)
         local adjust = adjust or 20
@@ -1555,12 +1561,12 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     end)
 
     -- Keyboard input (only when focused)
-    gui.Events.OnTextInputed(function(t)
+    local _textInputRef = gui.Events.OnTextInputed(function(t)
         if not focused then return end
         insertText(t)
     end)
 
-    gui.Events.OnKeyPressed(function(key)
+    local _keyPressRef = gui.Events.OnKeyPressed(function(key)
         if not focused then return end
         if key == "return" or key == "kpenter" then
             insertText("\n")
@@ -1598,6 +1604,11 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
         elseif key == "end" then
             cursorCol = #(lines[cursorLine] or ""); updateCursor()
         end
+    end)
+
+    viewport.OnDestroy(function()
+        gui.Events.OnTextInputed:Unconnect(_textInputRef)
+        gui.Events.OnKeyPressed:Unconnect(_keyPressRef)
     end)
 
     -- Scroll wheel
@@ -1674,7 +1685,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c.doSelection = false
-
+    c.OnReturn = updater:newConnection(false, testVisual)
     c.cur_pos = 0
     c.selection = {0, 0}
     c.blink = true
