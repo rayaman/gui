@@ -797,7 +797,7 @@ function gui:shaderTime(b)
     end
     if self.st then return end
     self.__shaderTime = 0
-    self.st = mainupdater.OnLoop(function(_, _, dt)
+    self.st = self:OnUpdate(function(self, dt)
         if not self.shader then return end
         self.__shaderTime = self.__shaderTime + dt
         if self.shader:hasUniform("time") then
@@ -1000,7 +1000,6 @@ function gui:OnCreated(func)
 end
 
 function gui:OnUpdate(func)
-    print(debug.traceback("OnUpdate"))
     table.insert(self.connections, gui.Events.OnUpdate(function()
         func(self, love.timer.getDelta())
     end))
