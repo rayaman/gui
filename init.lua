@@ -24,6 +24,8 @@ local black = color.new("#000000")
 local highlighter_blue = color.new("#30C5FF")
 local DEFAULT_COLOR = {.6, .6, .6}
 
+local CONNECTOR_TYPE = multi.registerType("connector", "connections")
+
 -- Types
 gui.TYPE_FRAME      = frame
 gui.TYPE_IMAGE      = image
@@ -245,11 +247,6 @@ end
 C_ prefix = connect function to a connection
 I_ prefix = invoke function args should be wrapped in a table
 ]]
-local function handleConnection(object,field,value)
-    if field == "OnUpdate" then
-        object[field](object,value)
-    end
-end
 
 local function handleFunction(object,field,value)
     if type(value) ~= "table" then return end
@@ -266,7 +263,7 @@ function gui.apply(apply, ...)
                 object[field](object,value)
             elseif cmd == "I_" then
                 handleFunction(object,handle,value)
-            elseif tp == "table" and object[field].Type == multi.registerType("connector", "connections") then
+            elseif tp == "table" and object[field].Type == CONNECTOR_TYPE then
                 object[field](object,value)
             elseif tp == "function" then
                 handleFunction(object,field,value)
@@ -472,19 +469,6 @@ function gui:bottomStack()
         end
     end
     table.insert(siblings, 1, self)
-end
-
-local mainupdater = updater:newLoop()
-mainupdater:setName("GUI Update Handler")
-
-function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-    if type(self) == "function" then 
-        func = self 
-    end
-
-    mainupdater.OnLoop(function(_,_,dt) 
-        func(self, dt) 
-    end)
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
@@ -702,6 +686,7 @@ function gui:makeArc(tp, x, y, r, sx, sy, sr, angle1, angle2, segments)
 end
 
 function gui:destroy()
+    local unconnected = 0
     -- Find and remove self from parent's children list
     local children = self.parent and self.parent.children
     if not children then return end
@@ -727,14 +712,16 @@ function gui:destroy()
     self.children = {}
 
     -- Disconnect the global connections
-    for _,conn in pairs(self.connections) do
+    for i,conn in pairs(self.connections) do
+        print("unconnecting: "..i)
         conn:Unconnect()
+        unconnected = unconnected + 1
     end
 
     -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
     for key, value in pairs(self) do
         if type(value) == "table" and
-        value.Type == multi.registerType("connector", "connections") then
+        value.Type == CONNECTOR_TYPE then
             value:Destroy()
         end
     end
@@ -920,10 +907,9 @@ local VisualEvents = {"Exit", "PressedOuter", "ReleasedOuter", "ReleasedOther", 
 local BasicEvents = {"Load", "Destroy", "VideoFinished"}
 
 local initEvents = function(self, evnt_type)
-    print("Event: "..evnt_type)
-    if self.__eventsInit then print("dup reg") return end
+    if self.__eventsInit then return end
     self.__eventsInit = true
-    self._mouseMoveRef = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+    local ref1 = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
         if not self:isActive() then return end
         if self:canPress(x, y) or self.dragging then
             self.OnMoved:Fire(self, x, y, dx, dy, istouch)
@@ -940,7 +926,7 @@ local initEvents = function(self, evnt_type)
         end
     end)
 
-    self._mouseRelRef = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+    local ref2 = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
         self.pressed = false -- we need to handle dragging stopped even if an element is not active
         if self.dragging and button == self.dragbutton then
             self.dragging = false
@@ -957,7 +943,7 @@ local initEvents = function(self, evnt_type)
         end
     end)
 
-    self._mousePressRef = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+    local ref3 = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
         if not self:isActive() then return end
         if self:canPress(x, y) or self.dragging then
             self.OnPressed:Fire(self, x, y, button, istouch)
@@ -979,6 +965,10 @@ local initEvents = function(self, evnt_type)
             self.OnPressedOuter:Fire(self, x, y, button, istouch, presses)
         end
     end)
+
+    table.insert(self.connections, ref1)
+    table.insert(self.connections, ref2)
+    table.insert(self.connections, ref3)
 end
 
 
@@ -1001,11 +991,17 @@ function gui:OnWheelMoved(func)
 end
 
 function gui:OnCreated(func)
-    initEvents(self)
     table.insert(self.connections, gui.Events.OnCreated(function(obj)
         if obj == self and self.parent:isDescendantOf(self) then
             func(obj)
         end
+    end))
+end
+
+function gui:OnUpdate(func)
+    print(debug.traceback("OnUpdate"))
+    table.insert(self.connections, gui.Events.OnUpdate(function()
+        func(self, love.timer.getDelta())
     end))
 end
 
@@ -1019,8 +1015,8 @@ for _,v in pairs(BasicEvents) do
     -- end)
     local mt = {
         __call = function(_, self, func)
-            initEvents(self,v)
-            table.insert(self.connections, gui["_On".. v](function(obj)
+            initEvents(self, v)
+            table.insert(self.connections, gui["_On" .. v](function(obj)
                 if obj == self then
                     func(obj)
                 end
@@ -2559,7 +2555,7 @@ end)
 -- start global updater
 updater:newThread(function()
     while true do
-        thread.skip(5)
+        thread.skip(1)
         gui.Events.OnUpdate.Fire()
     end
 end)
