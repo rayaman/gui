@@ -39,6 +39,8 @@ local mt = {
 	end
 }
 
+local v3 = false
+
 function color.hsl(h, s, l, a)
 	if s<=0 then return l,l,l end
 	h, s, l = h/360*6, s/100, l/100
@@ -98,9 +100,20 @@ function color.rgbToHex(r, g, b)
     return string.format("%06x", rgb)
 end
 
+function color.setV3(b)
+	v3 = b
+end
+
 local function parseColor(r, g, b, a)
 	local temp
 	if type(r) == "string" then
+		if r == "random" then
+			if v3 then
+				return unpack(color.random())
+			else
+				return unpack(color.random())
+			end
+		end
 		r = r:gsub("%s",""):gsub("%%","")
 		if r:sub(1,4) == "rgba" then
 			local sr,sg,sb,sa = r:match("rgba%((%d-),(%d-),(%d-),(%d*%.?%d+)%)")
@@ -112,6 +125,9 @@ local function parseColor(r, g, b, a)
 		elseif r:sub(1,3) == "hsl" then
 			local sh,ss,sl = r:match("hsl%((%d-),(%d-),(%d-)%)")
 			r,g,b,a = color.hsl(tonumber(sh), tonumber(ss), tonumber(sl))
+		elseif r:sub(1,5) == "rgb01" then
+			local sr,sg,sb = r:match("rgb01%((%d*%.?%d+),(%d*%.?%d+),(%d*%.?%d+)%)")
+			r,g,b = tonumber(sr),tonumber(sg),tonumber(sb)
 		elseif r:sub(1,3) == "rgb" then
 			local sr,sg,sb = r:match("rgb%((%d-),(%d-),(%d-)%)")
 			r,g,b = love.math.colorFromBytes(tonumber(sr),tonumber(sg),tonumber(sb))
@@ -124,17 +140,28 @@ local function parseColor(r, g, b, a)
 			else
 				r, g, b = tonumber(string.sub(r,1,2),16),tonumber(string.sub(r,3,4),16),tonumber(string.sub(r,5,6),16)
 			end
-			return love.math.colorFromBytes(r, g, b, a or 255)
+			if v3 then
+				return love.math.colorFromBytes(r, g, b)
+			else
+				return love.math.colorFromBytes(r, g, b, a or 255)
+			end
 		end
 	elseif type(r) == "table" then
-		return r[1], r[2], r[2], 1
+		if v3 then
+			return r[1], r[2], r[3]
+		else
+			return r[1], r[2], r[3], 1
+		end
 	end
-	return r, g, b, 1
+	if v3 then
+		return r, g, b
+	else
+		return r, g, b, 1
+	end
 end
 
 function color.new(r, g, b, a)
 	local temp = {parseColor(r, g, b, a)}
-
 	setmetatable(temp, mt)
 	return temp
 end
@@ -146,9 +173,10 @@ end
 local is_internal = true
 local external = {}
 local internal = {}
-function color.indexColor(name,r, g, b)
-	local c = color.new(r,g,b)
+function color.indexColor(name, r, g, b, a)
+	local c = color.new(r, g, b, a)
 	-- Other ways to index a color
+	color[name] = c
 	color[string.lower(name)] = c
 	color[string.upper(name)] = c
 	color[string.upper(string.sub(name,1,1))..string.lower(string.sub(name,2))] = c
@@ -177,11 +205,18 @@ end
 
 -- Allows you to modify an existing color that has been indexed
 function color.reindexColor(name, r, g, b, a)
+	local _v3 = v3 -- store state
+	if #color[name] == 3 then
+		v3 = true
+	end
 	local r, g, b, a = parseColor(r, g, b, a)
 	color[string.lower(name)][1] = r
 	color[string.lower(name)][2] = g
 	color[string.lower(name)][3] = b
-	color[string.lower(name)][4] = a
+	if not v3 then
+		color[string.lower(name)][4] = a
+	end
+	v3 = _v3 -- restore
 end
 
 function color.darken(c, v)
