@@ -1057,7 +1057,6 @@ end
 function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local c = {}
     c.dragbutton = 2
-
     setmetatable(c, gui)
     c.focus = false
     c.active = true
