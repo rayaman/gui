@@ -394,7 +394,7 @@ function gui:newThread(func)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
-    gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
+    self:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
     self.OnSizeChanged:Fire(self, x, y, w, h, sx, sy, sw, sh)
 end
 
