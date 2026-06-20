@@ -226,13 +226,10 @@ gui.HotKeys.OnRedo =		gui:setHotKey({"lctrl", "y"}) +
 
 -- Utils
 
-function gui:tag(tag)
-    self.__tag = tag
-    return self
-end
-
-function gui:getTag()
-    return self.__tag
+function gui:addConnection(conn)
+    self.connections = self.connections or {}
+    table.insert(self.connections, conn)
+    return conn
 end
 
 function gui:noOf(sx,sy,sw,sh)
@@ -355,23 +352,18 @@ function gui:offsetToScale()
 end
 
 function gui:getAbsolutes(transform) -- returns x, y, w, h
-    local x,y,w,h
+    local x, y, w, h
+    local dd = self.dualDim
     if transform then
-        x, y, w, h = transform((self.parent.w * self.dualDim.scale.pos.x) +
-               self.dualDim.offset.pos.x + self.parent.x),
-               transform((self.parent.h * self.dualDim.scale.pos.y) +
-               self.dualDim.offset.pos.y + self.parent.y), transform((self.parent.w *
-               self.dualDim.scale.size.x) + self.dualDim.offset.size.x),
-               transform((self.parent.h * self.dualDim.scale.size.y) +
-               self.dualDim.offset.size.y)
+        x, y, w, h = transform((self.parent.w * dd.scaleX) + dd.offsetX + self.parent.x),
+                     transform((self.parent.h * dd.scaleY) + dd.offsetY + self.parent.y),
+                     transform((self.parent.w * dd.scaleW) + dd.offsetW),
+                     transform((self.parent.h * dd.scaleH) + dd.offsetH)
     else
-        x, y, w, h = (self.parent.w * self.dualDim.scale.pos.x) +
-               self.dualDim.offset.pos.x + self.parent.x,
-           (self.parent.h * self.dualDim.scale.pos.y) +
-               self.dualDim.offset.pos.y + self.parent.y, (self.parent.w *
-               self.dualDim.scale.size.x) + self.dualDim.offset.size.x,
-           (self.parent.h * self.dualDim.scale.size.y) +
-               self.dualDim.offset.size.y
+        x, y, w, h = (self.parent.w * dd.scaleX) + dd.offsetX + self.parent.x,
+                     (self.parent.h * dd.scaleY) + dd.offsetY + self.parent.y,
+                     (self.parent.w * dd.scaleW) + dd.offsetW,
+                     (self.parent.h * dd.scaleH) + dd.offsetH
     end
     if self.square == "w" then
         h = w
@@ -401,34 +393,21 @@ function gui:newThread(func)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
-    --[[
-    dd.offset.pos = {x = x or 0, y = y or 0}
-    self.dualDim.offset.size = {x = w or 0, y = h or 0}
-    self.dualDim.scale.pos = {x = sx or 0, y = sy or 0}
-    self.dualDim.scale.size = {x = sw or 0, y = sh or 0}
-    ]]
-    self.dualDim = self:newDualDim(
-        x or self.dualDim.offset.pos.x, 
-        y or self.dualDim.offset.pos.y, 
-        w or self.dualDim.offset.size.x, 
-        h or self.dualDim.offset.size.y, 
-        sx or self.dualDim.scale.pos.x, 
-        sy or self.dualDim.scale.pos.y, 
-        sw or self.dualDim.scale.size.x, 
-        sh or self.dualDim.scale.size.y)
+    gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
     self.OnSizeChanged:Fire(self, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
+    local dd = self.dualDim
     self.dualDim = self:newDualDim(
-        x or self.dualDim.offset.pos.x, 
-        y or self.dualDim.offset.pos.y, 
-        w or self.dualDim.offset.size.x, 
-        h or self.dualDim.offset.size.y, 
-        sx or self.dualDim.scale.pos.x, 
-        sy or self.dualDim.scale.pos.y, 
-        sw or self.dualDim.scale.size.x, 
-        sh or self.dualDim.scale.size.y)
+        x or dd.offsetX,
+        y or dd.offsetY,
+        w or dd.offsetW,
+        h or dd.offsetH,
+        sx or dd.scaleX,
+        sy or dd.scaleY,
+        sw or dd.scaleW,
+        sh or dd.scaleH)
 end
 
 local image_cache = {}
@@ -471,11 +450,11 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
-function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
+function gui:canPress(mx, my)
     if not self.visible then return false end
     local x, y, w, h
-    if self.__variables.clip[1] then
-        local clip = self.__variables.clip
+    local clip = self.__clip
+    if clip and clip[1] then
         x, y, w, h = self:intersecpt(clip[2], clip[3], clip[4], clip[5])
     else
         x, y, w, h = self:getAbsolutes()
@@ -597,15 +576,16 @@ function gui:getUniques(tab)
 end
 
 function gui:setTag(tag)
+    self.tags = self.tags or {}
     self.tags[tag] = true
 end
 
 function gui:removeTag(tag)
-    self.tags[tag] = nil
+    if self.tags then self.tags[tag] = nil end
 end
 
 function gui:hasTag(tag)
-    return self.tags[tag]
+    return self.tags and self.tags[tag]
 end
 
 function gui:ancestorHasTag(tag)
@@ -686,7 +666,6 @@ function gui:makeArc(tp, x, y, r, sx, sy, sr, angle1, angle2, segments)
 end
 
 function gui:destroy()
-    local unconnected = 0
     -- Find and remove self from parent's children list
     local children = self.parent and self.parent.children
     if not children then return end
@@ -712,10 +691,10 @@ function gui:destroy()
     self.children = {}
 
     -- Disconnect the global connections
-    for i,conn in pairs(self.connections) do
-        print("unconnecting: "..i)
-        conn:Unconnect()
-        unconnected = unconnected + 1
+    if self.connections then
+        for _,conn in pairs(self.connections) do
+            conn:Unconnect()
+        end
     end
 
     -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
@@ -966,9 +945,9 @@ local initEvents = function(self, evnt_type)
         end
     end)
 
-    table.insert(self.connections, ref1)
-    table.insert(self.connections, ref2)
-    table.insert(self.connections, ref3)
+    self:addConnection(ref1)
+    self:addConnection(ref2)
+    self:addConnection(ref3)
 end
 
 
@@ -983,7 +962,7 @@ end
 
 function gui:OnWheelMoved(func)
     initEvents(self)
-    table.insert(self.connections, gui.Events.OnWheelMoved(function(obj, ...)
+    self:addConnection(gui.Events.OnWheelMoved(function(obj, ...)
         if obj == self and testVisual(obj) and obj:defaultCheck(x, y) then
             func(obj, ...)
         end
@@ -991,7 +970,7 @@ function gui:OnWheelMoved(func)
 end
 
 function gui:OnCreated(func)
-    table.insert(self.connections, gui.Events.OnCreated(function(obj)
+    self:addConnection(gui.Events.OnCreated(function(obj)
         if obj == self and self.parent:isDescendantOf(self) then
             func(obj)
         end
@@ -1000,7 +979,7 @@ end
 
 function gui:OnUpdate(func)
     print(debug.traceback("OnUpdate"))
-    table.insert(self.connections, gui.Events.OnUpdate(function()
+    self:addConnection(gui.Events.OnUpdate(function()
         func(self, love.timer.getDelta())
     end))
 end
@@ -1016,7 +995,7 @@ for _,v in pairs(BasicEvents) do
     local mt = {
         __call = function(_, self, func)
             initEvents(self, v)
-            table.insert(self.connections, gui["_On" .. v](function(obj)
+            self:addConnection(gui["_On" .. v](function(obj)
                 if obj == self then
                     func(obj)
                 end
@@ -1039,7 +1018,7 @@ for _,v in pairs(HierarchyEvents) do
     local mt = {
         __call = function(_, self, func)
             initEvents(self,v)
-            table.insert(self.connections, gui["_On".. v](function(obj, x, y, ...)
+            self:addConnection(gui["_On".. v](function(obj, x, y, ...)
                 if obj == self and testVisual(obj) and obj:testHierarchy(x, y) then
                     func(obj, x, y, ...)
                 end
@@ -1062,7 +1041,7 @@ for _,v in pairs(VisualEvents) do
     local mt = {
         __call = function(_, self, func)
             initEvents(self,v)
-            table.insert(self.connections, gui["_On".. v](function(obj, ...)
+            self:addConnection(gui["_On".. v](function(obj, ...)
                 if testVisual(obj) then
                     func(obj, ...)
                 end
@@ -1077,13 +1056,9 @@ end
 -- Base Library
 function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local c = {}
-    c.connections = {}  -- Needed when cleaning up
-    c.tags = {}
-    local buildBackBetter
     c.dragbutton = 2
 
     setmetatable(c, gui)
-    c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.focus = false
     c.active = true
     c.type = typ
@@ -1122,20 +1097,18 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 end
 
 function gui:newDualDim(x, y, w, h, sx, sy, sw, sh)
-    local dd = {}
-    dd.offset = {}
-    dd.scale = {}
-    dd.offset.pos = {x = x or 0, y = y or 0}
-    dd.offset.size = {x = w or 0, y = h or 0}
-    dd.scale.pos = {x = sx or 0, y = sy or 0}
-    dd.scale.size = {x = sw or 0, y = sh or 0}
-    return dd
+    return {
+        offsetX = x or 0, offsetY = y or 0,
+        offsetW = w or 0, offsetH = h or 0,
+        scaleX  = sx or 0, scaleY  = sy or 0,
+        scaleW  = sw or 0, scaleH  = sh or 0,
+    }
 end
 
 function gui:getDualDim()
     local dd = self.dualDim
-    return dd.offset.pos.x, dd.offset.pos.y, dd.offset.size.x, dd.offset.size.y,
-           dd.scale.pos.x, dd.scale.pos.y, dd.scale.size.x, dd.scale.size.y
+    return dd.offsetX, dd.offsetY, dd.offsetW, dd.offsetH,
+           dd.scaleX, dd.scaleY, dd.scaleW, dd.scaleH
 end
 
 -- Frames
@@ -2230,8 +2203,12 @@ local draw_handler = function(child, no_draw, dt)
 
     if child.clipDescendants then
         local children = child:getAllChildren()
-        for c = 1, #children do -- Tell the children to clip themselves
-            local clip = children[c].__variables.clip
+        for c = 1, #children do
+            local clip = children[c].__clip
+            if not clip then
+                clip = {false, 0, 0, 0, 0}
+                children[c].__clip = clip
+            end
             clip[1] = true
             clip[2] = x
             clip[3] = y
@@ -2250,8 +2227,8 @@ local draw_handler = function(child, no_draw, dt)
         love.graphics.setShader(child.shader)
     end
 
-    if child.__variables.clip[1] then
-        local clip = child.__variables.clip
+    if child.__clip and child.__clip[1] then
+        local clip = child.__clip
         love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
@@ -2310,7 +2287,7 @@ local draw_handler = function(child, no_draw, dt)
 
     if child.post then child:post() end
 
-    if child.__variables.clip[1] then
+    if child.__clip and child.__clip[1] then
         love.graphics.setScissor() -- Remove the scissor
     end
 
@@ -2474,8 +2451,8 @@ setmetatable(gui.virtual, gui)
 
 local w, h = love.graphics.getDimensions()
 
-gui.virtual.dualDim.offset.size.x = w
-gui.virtual.dualDim.offset.size.y = h
+gui.virtual.dualDim.offsetW = w
+gui.virtual.dualDim.offsetH = h
 gui.virtual.w = w
 gui.virtual.h = h
 gui.virtual.parent = gui.virtual
@@ -2489,8 +2466,8 @@ gui.x = 0
 gui.y = 0
 
 local w, h = love.graphics.getDimensions()
-gui.dualDim.offset.size.x = w
-gui.dualDim.offset.size.y = h
+gui.dualDim.offsetW = w
+gui.dualDim.offsetH = h
 gui.w = w
 gui.h = h
 
@@ -2527,25 +2504,25 @@ updater:newThread(function()
             local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
             gui.x = xt
             gui.y = yt
-            gui.dualDim.offset.size.x = nw
-            gui.dualDim.offset.size.y = nh
+            gui.dualDim.offsetW = nw
+            gui.dualDim.offsetH = nh
             gui.w = nw
             gui.h = nh
 
             gui.virtual.x = xt
             gui.virtual.y = yt
-            gui.virtual.dualDim.offset.size.x = nw
-            gui.virtual.dualDim.offset.size.y = nh
+            gui.virtual.dualDim.offsetW = nw
+            gui.virtual.dualDim.offsetH = nh
             gui.virtual.w = nw
             gui.virtual.h = nh
         else
-            gui.dualDim.offset.size.x = w
-            gui.dualDim.offset.size.y = h
+            gui.dualDim.offsetW = w
+            gui.dualDim.offsetH = h
             gui.w = w
             gui.h = h
 
-            gui.virtual.dualDim.offset.size.x = w
-            gui.virtual.dualDim.offset.size.y = h
+            gui.virtual.dualDim.offsetW = w
+            gui.virtual.dualDim.offsetH = h
             gui.virtual.w = w
             gui.virtual.h = h
         end
