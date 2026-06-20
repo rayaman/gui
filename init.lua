@@ -1079,13 +1079,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local c = {}
     c.connections = {}  -- Needed when cleaning up
     c.tags = {}
-    local buildBackBetter
-
     c.dragbutton = 2
-
-    local function visHie(obj, x, y)
-        return testVisual(obj) and testHierarchy(obj, x, y)
-    end
 
     setmetatable(c, gui)
     c.__variables = {clip = {false, 0, 0, 0, 0}}
