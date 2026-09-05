@@ -807,7 +807,7 @@ end
 
 function gui.centerthread(self)
     if self.cX or self.cY then
-        local x, y, w, h = self:getAbsolutes()
+        local _,_, w, h = self:getAbsolutes()
         if self.cX then
             self:rawSetDualDim(-w / 2, nil, nil, nil, .5)
         end
@@ -817,24 +817,24 @@ function gui.centerthread(self)
     end
 end
 
-function gui:centerX(bool)
-    self.cX = bool
+function gui:centerX(b)
+    self.cX = b
     if self.centering then return end
     self.centering = true
     self:OnSizeChanged(self.centerthread)
     self:OnPositionChanged(self.centerthread)
-    self.__centerXLoop = updater:newLoop(self.centerthread)
-    self:OnDestroy(function() self.__centerXLoop:Destroy() end)
+    self.__centerLoop = updater:newLoop(function() self:centerthread() end)
+    self:OnDestroy(function() self.__centerLoop:Destroy() end)
 end
 
-function gui:centerY(bool)
-    self.cY = bool
+function gui:centerY(b)
+    self.cY = b
     if self.centering then return end
     self.centering = true
     self:OnSizeChanged(self.centerthread)
     self:OnPositionChanged(self.centerthread)
-    self.__centerXLoop = self.updater:newLoop(self.centerthread)
-    self:OnDestroy(function() self.__centerXLoop:Destroy() end)
+    self.__centerLoop = updater:newLoop(function() self:centerthread() end)
+    self:OnDestroy(function() self.__centerLoop:Destroy() end)
 end
 
 ---- Connection Handler
