@@ -806,36 +806,35 @@ function gui:enableDragging(but)
 end
 
 function gui.centerthread(self)
-    if self.centerX or self.centerY then
+    if self.cX or self.cY then
         local x, y, w, h = self:getAbsolutes()
-        if self.centerX then
+        if self.cX then
             self:rawSetDualDim(-w / 2, nil, nil, nil, .5)
         end
-        if self.centerY then
+        if self.cY then
             self:rawSetDualDim(nil, -h / 2, nil, nil, nil, .5)
         end
     end
 end
 
 function gui:centerX(bool)
-    self.centerX = bool
+    self.cX = bool
     if self.centering then return end
     self.centering = true
     self:OnSizeChanged(self.centerthread)
     self:OnPositionChanged(self.centerthread)
-    updater:newLoop(function()
-        self:centerthread()
-    end)
+    self.__centerXLoop = updater:newLoop(self.centerthread)
+    self:OnDestroy(function() self.__centerXLoop:Destroy() end)
 end
 
-
 function gui:centerY(bool)
-    self.centerY = bool
+    self.cY = bool
     if self.centering then return end
     self.centering = true
     self:OnSizeChanged(self.centerthread)
     self:OnPositionChanged(self.centerthread)
-    updater:newLoop(self.centerthread)
+    self.__centerXLoop = self.updater:newLoop(self.centerthread)
+    self:OnDestroy(function() self.__centerXLoop:Destroy() end)
 end
 
 ---- Connection Handler
