@@ -576,17 +576,32 @@ function gui:getUniques(tab)
     return base
 end
 
+function gui:tag(tag)
+    self:setTag(tag)
+    return self
+end
+
 function gui:setTag(tag)
+    if not self.tags then
+        self.primaryTag = tag
+    end
     self.tags = self.tags or {}
     self.tags[tag] = true
+    return self
 end
 
 function gui:removeTag(tag)
     if self.tags then self.tags[tag] = nil end
+    return self
 end
 
 function gui:hasTag(tag)
     return self.tags and self.tags[tag]
+end
+
+-- returns the first tag
+function gui:getTag()
+    return self.primaryTag
 end
 
 function gui:ancestorHasTag(tag)
@@ -595,6 +610,7 @@ function gui:ancestorHasTag(tag)
         if parent:hasTag(tag) then return true end
         parent = parent.parent
     end
+    return false
 end
 
 function gui:parentHasTag(tag)
@@ -985,12 +1001,6 @@ end
 
 for _,v in pairs(BasicEvents) do
     gui["_On".. v] = updater:newConnection()
-    -- gui["_On".. v](function(...)
-    --     local count = #gui["_On".. v]:getConnections()
-    --     if count > 1 then
-    --         print("Invoking: ".. v .. "Connections: ".. count, ...)
-    --     end
-    -- end)
     local mt = {
         __call = function(_, self, func)
             initEvents(self, v)
@@ -1008,12 +1018,6 @@ end
 
 for _,v in pairs(HierarchyEvents) do
     gui["_On".. v] = updater:newConnection()
-    -- gui["_On".. v](function(...)
-    --     local count = #gui["_On".. v]:getConnections()
-    --     if count > 1 then
-    --         print("Invoking: ".. v .. "Connections: ".. count, ...)
-    --     end
-    -- end)
     local mt = {
         __call = function(_, self, func)
             initEvents(self,v)
@@ -1031,12 +1035,6 @@ end
 
 for _,v in pairs(VisualEvents) do
     gui["_On".. v] = updater:newConnection()
-    -- gui["_On".. v](function(...)
-    --     local count = #gui["_On".. v]:getConnections()
-    --     if count > 1 then
-    --         print("Invoking: ".. v .. "Connections: ".. count, ...)
-    --     end
-    -- end)
     local mt = {
         __call = function(_, self, func)
             initEvents(self,v)
