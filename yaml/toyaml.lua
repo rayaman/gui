@@ -281,7 +281,7 @@ local function guiToYaml(obj, opts)
     -- ── Image-type fields ─────────────────────────────────────────────
     if band(obj.type, image) == image and band(obj.type, video) ~= video then
         -- Source path is stored via getSource()
-        local src = obj.getSource and obj:getSource()
+        local src = obj:getSource() and obj:getSource()
         if src then add("source", src) end
 
         if obj.scaleX ~= 1  then add("scale-x", obj.scaleX) end
@@ -296,7 +296,7 @@ local function guiToYaml(obj, opts)
 
     -- ── Video-type fields ─────────────────────────────────────────────
     if band(obj.type, video) == video then
-        local src = obj.getSource and obj:getSource()
+        local src = obj:getSource() and obj:getSource()
         if src then add("source", src) end
 
         local vc = colorToYaml(obj.videoColor)

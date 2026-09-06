@@ -19,6 +19,13 @@ local frame, image, text, box, video, button, anim = 0, 1, 2, 4, 8, 16, 32
 local global_drag
 local object_focus = gui
 
+local white = color.new("#ffffff")
+local black = color.new("#000000")
+local highlighter_blue = color.new("#30C5FF")
+local DEFAULT_COLOR = {.6, .6, .6}
+
+local CONNECTOR_TYPE = multi.registerType("connector", "connections")
+
 -- Types
 gui.TYPE_FRAME      = frame
 gui.TYPE_IMAGE      = image
@@ -220,13 +227,10 @@ gui.HotKeys.OnRedo =		gui:setHotKey({"lctrl", "y"}) +
 
 -- Utils
 
-function gui:tag(tag)
-    self.__tag = tag
-    return self
-end
-
-function gui:getTag()
-    return self.__tag
+function gui:addConnection(conn)
+    self.connections = self.connections or {}
+    table.insert(self.connections, conn)
+    return conn
 end
 
 function gui:noOf(sx,sy,sw,sh)
@@ -241,13 +245,6 @@ end
 C_ prefix = connect function to a connection
 I_ prefix = invoke function args should be wrapped in a table
 ]]
-local function handleConnection(object,field,value)
-    if field == "OnUpdate" then
-        object[field](object,value)
-    else
-        object[field](value)
-    end
-end
 
 local function handleFunction(object,field,value)
     if type(value) ~= "table" then return end
@@ -261,11 +258,11 @@ function gui.apply(apply, ...)
             local handle = field:sub(3,-1)
             local tp = type(object[field])
             if cmd == "C_" then
-                handleConnection(object,handle,value)
+                object[field](object,value)
             elseif cmd == "I_" then
                 handleFunction(object,handle,value)
-            elseif tp == "table" and object[field].Type == multi.registerType("connector", "connections") then
-                handleConnection(object,field,value)
+            elseif tp == "table" and object[field].Type == CONNECTOR_TYPE then
+                object[field](object,value)
             elseif tp == "function" then
                 handleFunction(object,field,value)
             else
@@ -356,23 +353,18 @@ function gui:offsetToScale()
 end
 
 function gui:getAbsolutes(transform) -- returns x, y, w, h
-    local x,y,w,h
+    local x, y, w, h
+    local dd = self.dualDim
     if transform then
-        x, y, w, h = transform((self.parent.w * self.dualDim.scale.pos.x) +
-               self.dualDim.offset.pos.x + self.parent.x),
-               transform((self.parent.h * self.dualDim.scale.pos.y) +
-               self.dualDim.offset.pos.y + self.parent.y), transform((self.parent.w *
-               self.dualDim.scale.size.x) + self.dualDim.offset.size.x),
-               transform((self.parent.h * self.dualDim.scale.size.y) +
-               self.dualDim.offset.size.y)
+        x, y, w, h = transform((self.parent.w * dd.scaleX) + dd.offsetX + self.parent.x),
+                     transform((self.parent.h * dd.scaleY) + dd.offsetY + self.parent.y),
+                     transform((self.parent.w * dd.scaleW) + dd.offsetW),
+                     transform((self.parent.h * dd.scaleH) + dd.offsetH)
     else
-        x, y, w, h = (self.parent.w * self.dualDim.scale.pos.x) +
-               self.dualDim.offset.pos.x + self.parent.x,
-           (self.parent.h * self.dualDim.scale.pos.y) +
-               self.dualDim.offset.pos.y + self.parent.y, (self.parent.w *
-               self.dualDim.scale.size.x) + self.dualDim.offset.size.x,
-           (self.parent.h * self.dualDim.scale.size.y) +
-               self.dualDim.offset.size.y
+        x, y, w, h = (self.parent.w * dd.scaleX) + dd.offsetX + self.parent.x,
+                     (self.parent.h * dd.scaleY) + dd.offsetY + self.parent.y,
+                     (self.parent.w * dd.scaleW) + dd.offsetW,
+                     (self.parent.h * dd.scaleH) + dd.offsetH
     end
     if self.square == "w" then
         h = w
@@ -402,34 +394,21 @@ function gui:newThread(func)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
-    --[[
-    dd.offset.pos = {x = x or 0, y = y or 0}
-    self.dualDim.offset.size = {x = w or 0, y = h or 0}
-    self.dualDim.scale.pos = {x = sx or 0, y = sy or 0}
-    self.dualDim.scale.size = {x = sw or 0, y = sh or 0}
-    ]]
-    self.dualDim = self:newDualDim(
-        x or self.dualDim.offset.pos.x, 
-        y or self.dualDim.offset.pos.y, 
-        w or self.dualDim.offset.size.x, 
-        h or self.dualDim.offset.size.y, 
-        sx or self.dualDim.scale.pos.x, 
-        sy or self.dualDim.scale.pos.y, 
-        sw or self.dualDim.scale.size.x, 
-        sh or self.dualDim.scale.size.y)
+    self:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
     self.OnSizeChanged:Fire(self, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
+    local dd = self.dualDim
     self.dualDim = self:newDualDim(
-        x or self.dualDim.offset.pos.x, 
-        y or self.dualDim.offset.pos.y, 
-        w or self.dualDim.offset.size.x, 
-        h or self.dualDim.offset.size.y, 
-        sx or self.dualDim.scale.pos.x, 
-        sy or self.dualDim.scale.pos.y, 
-        sw or self.dualDim.scale.size.x, 
-        sh or self.dualDim.scale.size.y)
+        x or dd.offsetX,
+        y or dd.offsetY,
+        w or dd.offsetW,
+        h or dd.offsetH,
+        sx or dd.scaleX,
+        sy or dd.scaleY,
+        sw or dd.scaleW,
+        sh or dd.scaleH)
 end
 
 local image_cache = {}
@@ -472,30 +451,16 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
-local mainupdater = updater:newLoop()
-mainupdater:setName("GUI Update Handler")
-
-function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-    if type(self) == "function" then 
-        func = self 
-    end
-
-    mainupdater.OnLoop(function(_,_,dt) 
-        func(self, dt) 
-    end)
-end
-
-function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
+function gui:canPress(mx, my)
     if not self.visible then return false end
     local x, y, w, h
-    if self.__variables.clip[1] then
-        local clip = self.__variables.clip
+    local clip = self.__clip
+    if clip and clip[1] then
         x, y, w, h = self:intersecpt(clip[2], clip[3], clip[4], clip[5])
-        return mx < x + w and mx > x and my + h < y + h and my + h > y
     else
         x, y, w, h = self:getAbsolutes()
     end
-    return not (mx > x + w or mx < x or my > y + h or my < y)
+    return mx >= x and mx <= x + w and my >= y and my <= y + h
 end
 
 function gui:isBeingCovered(mx, my, respect)
@@ -530,7 +495,7 @@ function gui:setParent(parent)
     end
 end
 
-local function processDo(ref) ref.Do[1]() end
+local function processDo(ref,self) ref.Do[1](self) end
 
 function gui:clone(opt)
     --[[
@@ -555,7 +520,7 @@ function gui:clone(opt)
     elseif self.type == image then
         temp = gui:newImageLabel(u.Do[2], self:getDualDim())
     else -- We are dealing with a complex object
-        temp = processDo(u)
+        temp = processDo(u,self)
     end
 
     for i, v in pairs(u) do temp[i] = v end
@@ -611,16 +576,32 @@ function gui:getUniques(tab)
     return base
 end
 
+function gui:tag(tag)
+    self:setTag(tag)
+    return self
+end
+
 function gui:setTag(tag)
+    if not self.tags then
+        self.primaryTag = tag
+    end
+    self.tags = self.tags or {}
     self.tags[tag] = true
+    return self
 end
 
 function gui:removeTag(tag)
-    self.tags[tag] = nil
+    if self.tags then self.tags[tag] = nil end
+    return self
 end
 
 function gui:hasTag(tag)
-    return self.tags[tag]
+    return self.tags and self.tags[tag]
+end
+
+-- returns the first tag
+function gui:getTag()
+    return self.primaryTag
 end
 
 function gui:ancestorHasTag(tag)
@@ -629,6 +610,7 @@ function gui:ancestorHasTag(tag)
         if parent:hasTag(tag) then return true end
         parent = parent.parent
     end
+    return false
 end
 
 function gui:parentHasTag(tag)
@@ -641,7 +623,7 @@ function gui:parentHasTag(tag)
     return false
 end
 
-local function testVisual(c, x, y, button, istouch, presses)
+local function testVisual(c)
     return not(c:hasTag("visual") or c:parentHasTag("visual")) 
 end
 
@@ -659,44 +641,420 @@ function gui:extend(c)
     end
 end
 
+function gui:setColor(key,col)
+    if col[4] then
+        self.visibility = col[4]
+    end
+    self[key] = col
+end
+
+function gui:isOffScreen()
+    local x, y, w, h = self:getAbsolutes()
+    return  y + h < 0 or y > gui.h or x + w < 0 or x > gui.w
+end
+
+function gui:setRoundness(rx, ry, seg, side)
+    self.roundness = side or true
+    self.__rx, self.__ry, self.__segments = rx or 5, ry or 5, seg or 30
+end
+
+function gui:setRoundnessDirection(hori, vert)
+    self.__rhori = hori
+    self.__rvert = vert
+end
+
+function gui:makeCircle(x, y, r, sx, sy, sr, segments)
+    self.formFactor = gui.FORM_CIRCLE
+    self.segments = segments
+    self.__radius = r
+    self:setDualDim(x, y, 2*r, 2*r, sx, sy, sr)
+    return self
+end
+
+function gui:makeArc(tp, x, y, r, sx, sy, sr, angle1, angle2, segments)
+    self.arcType = tp
+    self:setDualDim(x, y, 2*r, 2*r, sx, sy, sr)
+    self.__angleS = angle1
+    self.__angleE = angle2
+    self.__radius = r
+    self.segments = segments
+    self.formFactor = gui.FORM_ARC
+    return self
+end
+
+function gui:destroy()
+    -- Find and remove self from parent's children list
+    local children = self.parent and self.parent.children
+    if not children then return end
+
+    local foundIdx
+    for i, v in ipairs(children) do
+        if v == self then
+            foundIdx = i
+            break
+        end
+    end
+    if not foundIdx then return end
+
+    -- Fire OnDestroy before teardown so listeners still work during the callback
+    self.OnDestroy:Fire(self)
+
+    -- Recursively destroy all children first
+    for _, child in pairs(self.children) do
+        if type(child.destroy) == "function" then
+            child:destroy()
+        end
+    end
+    self.children = {}
+
+    -- Disconnect the global connections
+    if self.connections then
+        for _,conn in pairs(self.connections) do
+            conn:Unconnect()
+        end
+    end
+
+    -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
+    for key, value in pairs(self) do
+        if type(value) == "table" and
+        value.Type == CONNECTOR_TYPE then
+            value:Destroy()
+        end
+    end
+
+    -- Remove from parent
+    table.remove(children, foundIdx)
+    self.parent = nil
+end
+
+function gui:fullFrame()
+    self:setDualDim(0,0,0,0,0,0,1,1)
+    return self
+end
+
+function gui:removeChildren()
+    for _, child in pairs(self.children) do
+        if type(child.destroy) == "function" then
+            child:destroy()  -- recursive, disconnects gui.Events listeners
+        end
+    end
+    self.children = {}
+end
+-- shader stuff
+function gui:setShader(shader, env)
+    if type(shader) == "string" then
+        self.shader = love.graphics.newShader(shader)
+    elseif type(shader) == "table" then
+        self.shader = shader.source
+        for i,v in pairs(shader or {}) do
+            if i ~= "source" and i ~= "usage" then
+                if self[i] then
+                    if type(v) == "function" then
+                        local data = v(self)
+                        self.shader:send(i, data)
+                    else
+                        self.shader:send(i, self[i])
+                    end
+                elseif env[i] then
+                    if type(v) == "function" then
+                        local data = v(env)
+                        self.shader:send(i, data)
+                    else
+                        self.shader:send(i, env[i])
+                    end
+                else
+                    error(i .. " is a required argument!\n\n".. shader.usage())
+                end
+            end
+        end
+    else
+        self.shader = shader  -- already a compiled love Shader object
+    end
+    return self
+end
+
+function gui:clearShader()
+    self.shader = nil
+end
+
+function gui:setShaderUniform(name, ...)
+    if not self.shader then return end
+    if self.shader:hasUniform(name) then
+        self.shader:send(name, ...)
+    end
+end
+
+function gui:shaderTime(b)
+    if not b and self.st then
+        self.st:Unconnect()
+        self.st = false
+        return
+    end
+    if self.st then return end
+    self.__shaderTime = 0
+    self.st = self:OnUpdate(function(self, dt)
+        if not self.shader then return end
+        self.__shaderTime = self.__shaderTime + dt
+        if self.shader:hasUniform("time") then
+            self.shader:send("time", self.__shaderTime)
+        end
+    end)
+end
+
+function gui:testHierarchy(x, y)
+    if self.hierarchy then
+        return not (global_drag or self:isBeingCovered(x, y, true))
+    end
+    return true
+end
+
+function gui:respectHierarchy(bool) 
+    self.hierarchy = bool 
+end
+
+function gui:enableDragging(but)
+    if not but then
+        self.draggable = false
+        return
+    end
+    self.dragbutton = but or self.dragbutton
+    self.draggable = true
+end
+
+function gui.centerthread(self)
+    if self.cX or self.cY then
+        local _,_, w, h = self:getAbsolutes()
+        if self.cX then
+            self:rawSetDualDim(-w / 2, nil, nil, nil, .5)
+        end
+        if self.cY then
+            self:rawSetDualDim(nil, -h / 2, nil, nil, nil, .5)
+        end
+    end
+end
+
+function gui:centerX(b)
+    self.cX = b
+    if self.centering then return end
+    self.centering = true
+    self:OnSizeChanged(self.centerthread)
+    self:OnPositionChanged(self.centerthread)
+    self.__centerLoop = updater:newLoop(function() self:centerthread() end)
+    self:OnDestroy(function() self.__centerLoop:Destroy() end)
+end
+
+function gui:centerY(b)
+    self.cY = b
+    if self.centering then return end
+    self.centering = true
+    self:OnSizeChanged(self.centerthread)
+    self:OnPositionChanged(self.centerthread)
+    self.__centerLoop = updater:newLoop(function() self:centerthread() end)
+    self:OnDestroy(function() self.__centerLoop:Destroy() end)
+end
+
+---- Connection Handler
+--[[
+-- BasicEvents
+OnLoad      = updater:newConnection()
+OnDestroy   = updater:newConnection()
+
+-- HierarchyEvents
+OnPressed   = testVisual .. (testHierarchy .. updater:newConnection())
+OnReleased  = testVisual .. (testHierarchy .. updater:newConnection())
+OnEnter     = testVisual .. (testHierarchy .. updater:newConnection())
+OnMoved     = testVisual .. (testHierarchy .. updater:newConnection())
+
+-- VisualEvents
+OnExit              = testVisual .. updater:newConnection()
+OnPressedOuter      = testVisual .. updater:newConnection()
+OnReleasedOuter     = testVisual .. updater:newConnection()
+OnReleasedOther     = testVisual .. updater:newConnection()
+OnDragStart         = testVisual .. updater:newConnection()
+OnDragging          = testVisual .. updater:newConnection()
+OnDragEnd           = testVisual .. updater:newConnection()
+OnSizeChanged       = testVisual .. updater:newConnection()
+OnPositionChanged   = testVisual .. updater:newConnection()
+OnLeftStickUp       = testVisual .. updater:newConnection()
+OnLeftStickDown     = testVisual .. updater:newConnection()
+OnLeftStickLeft     = testVisual .. updater:newConnection()
+OnLeftStickRight    = testVisual .. updater:newConnection()
+OnRightStickUp      = testVisual .. updater:newConnection()
+OnRightStickDown    = testVisual .. updater:newConnection()
+OnRightStickLeft    = testVisual .. updater:newConnection()
+OnRightStickRight   = testVisual .. updater:newConnection()
+OnFontUpdated       = testVisual .. updater:newConnection()
+OnReturn            = testVisual .. updater:newConnection()
+
+
+OnWheelMoved = testVisual .. (defaultCheck / gui.Events.OnWheelMoved)
+
+OnCreated   = self:isDescendantOf(c) .. updater:newConnection()
+]]
+
+local HierarchyEvents = {"Enter", "Moved", "Pressed", "Released"}
+
+local VisualEvents = {"Exit", "PressedOuter", "ReleasedOuter", "ReleasedOther", "DragStart", 
+                      "Dragging", "DragEnd", "SizeChanged", "PositionChanged", "LeftStickUp", 
+                      "LeftStickDown", "LeftStickLeft", "LeftStickRight", "RightStickUp", 
+                      "RightStickDown", "RightStickLeft", "RightStickRight","FontUpdated"}
+
+local BasicEvents = {"Load", "Destroy", "VideoFinished"}
+
+local initEvents = function(self, evnt_type)
+    if self.__eventsInit then return end
+    self.__eventsInit = true
+    local ref1 = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+        if not self:isActive() then return end
+        if self:canPress(x, y) or self.dragging then
+            self.OnMoved:Fire(self, x, y, dx, dy, istouch)
+            if self.entered == false then
+                self.OnEnter:Fire(self, x, y)
+                self.entered = true
+            end
+            if self.dragging then
+                self.OnDragging:Fire(self, dx, dy, x, y, istouch)
+            end
+        elseif self.entered then
+            self.entered = false
+            self.OnExit:Fire(self, x, y)
+        end
+    end)
+
+    local ref2 = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+        self.pressed = false -- we need to handle dragging stopped even if an element is not active
+        if self.dragging and button == self.dragbutton then
+            self.dragging = false
+            global_drag = false
+            self.OnDragEnd:Fire(self, x, y, istouch, presses)
+        end
+        if not self:isActive() then return end
+        if self:canPress(x, y) then
+            self.OnReleased:Fire(self, x, y, button, istouch, presses)
+        elseif self.pressed then
+            self.OnReleasedOuter:Fire(self, x, y, button, istouch, presses)
+        else
+            self.OnReleasedOther:Fire(self, x, y, button, istouch, presses)
+        end
+    end)
+
+    local ref3 = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+        if not self:isActive() then return end
+        if self:canPress(x, y) or self.dragging then
+            self.OnPressed:Fire(self, x, y, button, istouch)
+            self.pressed = true
+
+            -- Only change and trigger the event if it is a different object
+            if self ~= object_focus then
+                gui.Events.OnObjectFocusChanged:Fire(object_focus, self)
+                object_focus = self
+            end
+
+            if self.draggable and button == self.dragbutton and not self:isBeingCovered(x, y, self.hierarchy) and
+                not global_drag then
+                self.dragging = true
+                global_drag = true
+                self.OnDragStart:Fire(self, x, y, button, istouch)
+            end
+        else
+            self.OnPressedOuter:Fire(self, x, y, button, istouch, presses)
+        end
+    end)
+
+    self:addConnection(ref1)
+    self:addConnection(ref2)
+    self:addConnection(ref3)
+end
+
+
+function gui:defaultCheck(...)
+    if not self:isActive() then return false end
+    local x, y = love.mouse.getPosition()
+    if self:canPress(x, y) then
+        return self, ...
+    end
+    return false
+end
+
+function gui:OnWheelMoved(func)
+    initEvents(self)
+    self:addConnection(gui.Events.OnWheelMoved(function(obj, ...)
+        if obj == self and testVisual(obj) and obj:defaultCheck(x, y) then
+            func(obj, ...)
+        end
+    end))
+end
+
+function gui:OnCreated(func)
+    self:addConnection(gui.Events.OnCreated(function(obj)
+        if obj == self and self.parent:isDescendantOf(self) then
+            func(obj)
+        end
+    end))
+end
+
+function gui:OnUpdate(func)
+    self:addConnection(gui.Events.OnUpdate(function()
+        func(self, love.timer.getDelta())
+    end))
+end
+
+for _,v in pairs(BasicEvents) do
+    gui["_On".. v] = updater:newConnection()
+    local mt = {
+        __call = function(_, self, func)
+            initEvents(self, v)
+            self:addConnection(gui["_On" .. v](function(obj)
+                if obj == self then
+                    func(obj)
+                end
+            end))
+        end,
+        __index = gui["_On".. v]
+    }
+    gui["On".. v] = {}
+    setmetatable(gui["On".. v], mt)
+end
+
+for _,v in pairs(HierarchyEvents) do
+    gui["_On".. v] = updater:newConnection()
+    local mt = {
+        __call = function(_, self, func)
+            initEvents(self,v)
+            self:addConnection(gui["_On".. v](function(obj, x, y, ...)
+                if obj == self and testVisual(obj) and obj:testHierarchy(x, y) then
+                    func(obj, x, y, ...)
+                end
+            end))
+        end,
+        __index = gui["_On".. v]
+    }
+    gui["On".. v] = {}
+    setmetatable(gui["On".. v], mt)
+end
+
+for _,v in pairs(VisualEvents) do
+    gui["_On".. v] = updater:newConnection()
+    local mt = {
+        __call = function(_, self, func)
+            initEvents(self,v)
+            self:addConnection(gui["_On".. v](function(obj, ...)
+                if testVisual(obj) then
+                    func(obj, ...)
+                end
+            end))
+        end,
+        __index = gui["_On".. v]
+    }
+    gui["On".. v] = {}
+    setmetatable(gui["On".. v], mt)
+end
+
 -- Base Library
 function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local c = {}
-    c.tags = {}
-    local buildBackBetter
-    local centerX = false
-    local centerY = false
-    local centering = false
-    local dragbutton = 2
-    local draggable = false
-    local hierarchy = false
-
-    local function testHierarchy(obj, x, y)
-        if hierarchy then
-            return not (global_drag or obj:isBeingCovered(x, y, true))
-        end
-        return true
-    end
-
-    local function defaultCheck(...)
-        if not c:isActive() then return false end
-        local x, y = love.mouse.getPosition()
-        if c:canPress(x, y) then
-            return c, ...
-        end
-        return false
-    end
-
-    local function creationCheck(self)
-        return self:isDescendantOf(c)
-    end
-
-    local function visHie(obj, x, y)
-        return testVisual(obj) and testHierarchy(obj, x, y)
-    end
-
+    c.dragbutton = 2
     setmetatable(c, gui)
-    c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.focus = false
     c.active = true
     c.type = typ
@@ -704,250 +1062,14 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.children = {}
     c.visible = true
     c.visibility = 1
-    c.color = {.6, .6, .6}
-    c.borderColor = color.black
+    c.color = DEFAULT_COLOR
+    c.borderColor = black
     c.drawBorder = true
     c.rotation = 0
     c.formFactor = gui.FORM_RECTANGLE
-
-    c.OnLoad = updater:newConnection()
-
-    c.OnPressed = updater:newConnection(false, visHie)
-    c.OnPressedOuter = updater:newConnection(false, testVisual)
-    c.OnReleased = updater:newConnection(false, visHie)
-    c.OnReleasedOuter = updater:newConnection(false, testVisual)
-    c.OnReleasedOther = updater:newConnection(false, testVisual)
-
-    c.OnDragStart = updater:newConnection(false, testVisual)
-    c.OnDragging = updater:newConnection(false, testVisual)
-    c.OnDragEnd = updater:newConnection(false, testVisual)
-
-    c.OnEnter = updater:newConnection(false, visHie)
-    c.OnExit = updater:newConnection(false, testVisual)
-
-    c.OnMoved = updater:newConnection(false,visHie)
-    c.OnWheelMoved = testVisual .. (defaultCheck / gui.Events.OnWheelMoved)
-
-    c.OnSizeChanged = updater:newConnection(false, testVisual)
-    c.OnPositionChanged = updater:newConnection(false, testVisual)
-
-    c.OnLeftStickUp = updater:newConnection(false, testVisual)
-    c.OnLeftStickDown = updater:newConnection(false, testVisual)
-    c.OnLeftStickLeft = updater:newConnection(false, testVisual)
-    c.OnLeftStickRight = updater:newConnection(false, testVisual)
-    c.OnRightStickUp = updater:newConnection(false, testVisual)
-    c.OnRightStickDown = updater:newConnection(false, testVisual)
-    c.OnRightStickLeft = updater:newConnection(false, testVisual)
-    c.OnRightStickRight = updater:newConnection(false, testVisual)
-
-    c.OnDestroy = updater:newConnection()
-
-    c.OnCreated = creationCheck .. updater:newConnection()
-    local _forwardedRef = multi.forwardConnection(gui.Events.OnCreated,c.OnCreated)
-    local dragging = false
-    local entered = false
-    local moved = false
-    local pressed = false
-
-    local _mouseMoveRef = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
-        if not c:isActive() then return end
-        if c:canPress(x, y) or dragging then
-            c.OnMoved:Fire(c, x, y, dx, dy, istouch)
-            if entered == false then
-                c.OnEnter:Fire(c, x, y)
-                entered = true
-            end
-            if dragging then
-                c.OnDragging:Fire(c, dx, dy, x, y, istouch)
-            end
-        elseif entered then
-            entered = false
-            c.OnExit:Fire(c, x, y)
-        end
-    end)
-
-    local _mouseRelRef = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
-        pressed = false -- we need to handle dragging stopped even if an element is not active
-        if dragging and button == dragbutton then
-            dragging = false
-            global_drag = false
-            c.OnDragEnd:Fire(c, dx, dy, x, y, istouch, presses)
-        end
-        if not c:isActive() then return end
-        if c:canPress(x, y) then
-            c.OnReleased:Fire(c, x, y, button, istouch, presses)
-        elseif pressed then
-            c.OnReleasedOuter:Fire(c, x, y, button, istouch, presses)
-        else
-            c.OnReleasedOther:Fire(c, x, y, button, istouch, presses)
-        end
-    end)
-
-    local _mousePressRef = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
-        if not c:isActive() then return end
-        if c:canPress(x, y) or dragging then
-            c.OnPressed:Fire(c, x, y, dx, dy, istouch)
-            pressed = true
-
-            -- Only change and trigger the event if it is a different object
-            if c ~= object_focus then
-                gui.Events.OnObjectFocusChanged:Fire(object_focus, c)
-                object_focus = c
-            end
-
-            if draggable and button == dragbutton and not c:isBeingCovered(x, y, hierarchy) and
-                not global_drag then
-                dragging = true
-                global_drag = true
-                c.OnDragStart:Fire(c, dx, dy, x, y, istouch)
-            end
-        else
-            c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
-        end
-    end)
-
-    function c:setColor(key,col)
-        if col[4] then
-            self.visibility = col[4]
-        end
-        self[key] = col
-    end
-
-    function c:isOffScreen()
-        local x, y, w, h = self:getAbsolutes()
-        return  y + h < 0 or y > gui.h or x + w < 0 or x > gui.w
-    end
-
-    function c:setRoundness(rx, ry, seg, side)
-        self.roundness = side or true
-        self.__rx, self.__ry, self.__segments = rx or 5, ry or 5, seg or 30
-    end
-
-    function c:setRoundnessDirection(hori, vert)
-        self.__rhori = hori
-        self.__rvert = vert
-    end
-
-    function c:makeCircle(x, y, r, sx, sy, sr, segments)
-        self.formFactor = gui.FORM_CIRCLE
-        self.segments = segments
-        self.__radius = r
-        self:setDualDim(x, y, 2*r, 2*r, sx, sy, sr)
-        return self
-    end
-
-    function c:makeArc(tp, x, y, r, sx, sy, sr, angle1, angle2, segments)
-        self.arcType = tp
-        self:setDualDim(x, y, 2*r, 2*r, sx, sy, sr)
-        self.__angleS = angle1
-        self.__angleE = angle2
-        self.__radius = r
-        self.segments = segments
-        self.formFactor = gui.FORM_ARC
-        return self
-    end
-
-    function c:respectHierarchy(bool) 
-        hierarchy = bool 
-    end
-
-    local function centerthread()
-        if centerX or centerY then
-            local x, y, w, h = c:getAbsolutes()
-            if centerX then
-                c:rawSetDualDim(-w / 2, nil, nil, nil, .5)
-            end
-            if centerY then
-                c:rawSetDualDim(nil, -h / 2, nil, nil, nil, .5)
-            end
-        end
-    end
-
-    function c:enableDragging(but)
-        if not but then
-            draggable = false
-            return
-        end
-        dragbutton = but or dragbutton
-        draggable = true
-    end
-
-    function c:centerX(bool)
-        centerX = bool
-        if centering then return end
-        centering = true
-        self.OnSizeChanged(centerthread)
-        self.OnPositionChanged(centerthread)
-        updater:newLoop(centerthread)
-    end
-
-    function c:centerY(bool)
-        centerY = bool
-        if centering then return end
-        centering = true
-        self.OnSizeChanged(centerthread)
-        self.OnPositionChanged(centerthread)
-        updater:newLoop(centerthread)
-    end
-
-    function c:fullFrame()
-        self:setDualDim(0,0,0,0,0,0,1,1)
-        return self
-    end
-
-    function c:destroy()
-        -- Find and remove self from parent's children list
-        local children = self.parent and self.parent.children
-        if not children then return end
-
-        local foundIdx
-        for i, v in ipairs(children) do
-            if v == self then
-                foundIdx = i
-                break
-            end
-        end
-        if not foundIdx then return end
-
-        -- Fire OnDestroy before teardown so listeners still work during the callback
-        self.OnDestroy:Fire(self)
-
-        -- Recursively destroy all children first
-        for _, child in pairs(self.children) do
-            if type(child.destroy) == "function" then
-                child:destroy()
-            end
-        end
-        self.children = {}
-
-        -- Disconnect the global connections
-        gui.Events.OnMouseMoved:Unconnect(_mouseMoveRef)
-        gui.Events.OnMouseReleased:Unconnect(_mouseRelRef)
-        gui.Events.OnMousePressed:Unconnect(_mousePressRef)
-        gui.Events.OnCreated:Unconnect(_forwardedRef)
-
-        -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
-        for key, value in pairs(self) do
-            if type(value) == "table" and
-            value.Type == multi.registerType("connector", "connections") then
-                value:Destroy()
-            end
-        end
-
-        -- Remove from parent
-        table.remove(children, foundIdx)
-        self.parent = nil
-        collectgarbage("collect")
-    end
-
-    function c:removeChildren()
-        for _, child in pairs(self.children) do
-            if type(child.destroy) == "function" then
-                child:destroy()  -- recursive, disconnects gui.Events listeners
-            end
-        end
-        self.children = {}
-    end
+    c.dragging = false
+    c.entered = false
+    c.pressed = false
 
     -- Add to the parents children table
     if virtual then
@@ -957,70 +1079,11 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         c.parent = self
         table.insert(self.children, c)
     end
+
     local a = 0
+
     if typ == frame then
         gui.Events.OnCreated:Fire(c) -- Trigger frame types instantly
-    end
-    -- shader stuff
-
-    function c:setShader(shader, env)
-        if type(shader) == "string" then
-            self.shader = love.graphics.newShader(shader)
-        elseif type(shader) == "table" then
-            self.shader = shader.source
-            for i,v in pairs(shader or {}) do
-                if i ~= "source" and i ~= "usage" then
-                    if self[i] then
-                        if type(v) == "function" then
-                            local data = v(self)
-                            self.shader:send(i, data)
-                        else
-                            self.shader:send(i, self[i])
-                        end
-                    elseif env[i] then
-                        if type(v) == "function" then
-                            local data = v(env)
-                            self.shader:send(i, data)
-                        else
-                            self.shader:send(i, env[i])
-                        end
-                    else
-                        error(i .. " is a required argument!\n\n".. shader.usage())
-                    end
-                end
-            end
-        else
-            self.shader = shader  -- already a compiled love Shader object
-        end
-        return self
-    end
-
-    function c:clearShader()
-        self.shader = nil
-    end
-
-    function c:setShaderUniform(name, ...)
-        if not self.shader then return end
-        if self.shader:hasUniform(name) then
-            self.shader:send(name, ...)
-        end
-    end
-    local st
-    function c:shaderTime(b)
-        if not b and st then
-            st:Unconnect()
-            st = false
-            return
-        end
-        if st then return end
-        self.__shaderTime = 0
-        st = mainupdater.OnLoop(function(_, _, dt)
-            if not self.shader then return end
-            self.__shaderTime = self.__shaderTime + dt
-            if self.shader:hasUniform("time") then
-                self.shader:send("time", self.__shaderTime)
-            end
-        end)
     end
 
     gui:extend(c, typ)
@@ -1029,20 +1092,18 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 end
 
 function gui:newDualDim(x, y, w, h, sx, sy, sw, sh)
-    local dd = {}
-    dd.offset = {}
-    dd.scale = {}
-    dd.offset.pos = {x = x or 0, y = y or 0}
-    dd.offset.size = {x = w or 0, y = h or 0}
-    dd.scale.pos = {x = sx or 0, y = sy or 0}
-    dd.scale.size = {x = sw or 0, y = sh or 0}
-    return dd
+    return {
+        offsetX = x or 0, offsetY = y or 0,
+        offsetW = w or 0, offsetH = h or 0,
+        scaleX  = sx or 0, scaleY  = sy or 0,
+        scaleW  = sw or 0, scaleH  = sh or 0,
+    }
 end
 
 function gui:getDualDim()
     local dd = self.dualDim
-    return dd.offset.pos.x, dd.offset.pos.y, dd.offset.size.x, dd.offset.size.y,
-           dd.scale.pos.x, dd.scale.pos.y, dd.scale.size.x, dd.scale.size.y
+    return dd.offsetX, dd.offsetY, dd.offsetW, dd.offsetH,
+           dd.scaleX, dd.scaleY, dd.scaleW, dd.scaleH
 end
 
 -- Frames
@@ -1060,19 +1121,6 @@ function gui:newVisualFrame(x, y, w, h, sx, sy, sw, sh)
     return visual
 end
 
-local function anyToString(value)
-    local t = type(value)
-    if t == "table" then
-        local parts = {}
-        for k, v in pairs(value) do
-            parts[#parts + 1] = tostring(k) .. "=" .. tostring(v)
-        end
-        return "{" .. table.concat(parts, ", ") .. "}"
-    end
-    return tostring(value)
-end
-
-local testIMG
 -- Texts
 function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(text + typ, x, y, w, h, sx, sy, sw, sh)
@@ -1087,7 +1135,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     c.textShearingFactorY = 0
     c.textVisibility = 1
     c.font = love.graphics.newFont(12)
-    c.textColor = color.black
+    c.textColor = black
     c.OnFontUpdated = updater:newConnection(false, testVisual)
 
     function c:calculateFontOffset(font, adjust)
@@ -1450,7 +1498,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     end
 
     -- Mouse click to position cursor
-    viewport.OnPressed(function(self, mx, my)
+    viewport:OnPressed(function(self, mx, my)
         focused = true
         local _, vy = viewport:getAbsolutes()
         local relY = my - vy + scrollY - 2
@@ -1470,7 +1518,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
         updateCursor()
     end)
 
-    viewport.OnPressedOuter(function()
+    viewport:OnPressedOuter(function()
         focused = false
         updateCursor()
     end)
@@ -1527,7 +1575,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
     end)
 
     -- Scroll wheel
-    viewport.OnWheelMoved(function(_, dy)
+    viewport:OnWheelMoved(function(_, dy)
         scrollY = scrollY - dy * 30
         applyScroll()
         updateCursor()
@@ -1600,9 +1648,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     local c = self:newTextBase(box, txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c.doSelection = false
-
     c.OnReturn = updater:newConnection(false, testVisual)
-
     c.cur_pos = 0
     c.selection = {0, 0}
     c.blink = true
@@ -1637,38 +1683,42 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
         c.selection = {0, 0}
     end
 
-    c.OnEnter(function(c, x, y, dx, dy, istouch)
+    c:OnEnter(function()
         love.mouse.setCursor(love.mouse.getSystemCursor("ibeam"))
     end)
 
-    c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor(cur) end)
+    c:OnExit(function() love.mouse.setCursor(cur) end)
 
-    c.OnPressed(function(c, x, y, dx, dy, istouch)
+    c:OnPressed(function(c, x, y, dx, dy, istouch)
         object_focus.bar_show = true
         c.cur_pos = getTextPosition(c.text, c, c:getLocalCords(x, y))
         c.selection[1] = c.cur_pos
         c.doSelection = true
     end)
 
-    c.OnMoved(function(c, x, y, dx, dy, istouch)
+    c:OnMoved(function(c, x, y)
         if c.doSelection then
             local xx, yy = c:getLocalCords(x, y)
             c.selection[2] = getTextPosition(c.text, c, xx, yy, true)
         end
-    end); -- Needed to keep next line from being treated like a function call
-
-    -- Connect to both events
-    (c.OnReleased + c.OnReleasedOuter)(function(c, x, y, dx, dy, istouch)
-        c.doSelection = false
-    end);
-
-    -- ReleasedOther is different than ReleasedOuter (Other/Outer)
-    (c.OnReleasedOther + c.OnPressedOuter)(function()
-        c.doSelection = false
-        c.selection = {0, 0}
     end)
 
-    c.OnPressedOuter(function() c.bar_show = false end)
+    -- Connect to both events
+    local unselect = function(c)
+        c.doSelection = false
+    end
+    c:OnReleased(unselect)
+    c:OnReleasedOuter(unselect)
+
+    -- ReleasedOther is different than ReleasedOuter (Other/Outer)
+    local doselection = function()
+        c.doSelection = false
+        c.selection = {0, 0}
+    end
+    c:OnReleasedOther(doselection)
+    c:OnPressedOuter(doselection)
+
+    c:OnPressedOuter(function() c.bar_show = false end)
     gui.Events.OnCreated:Fire(c)
     return c
 end
@@ -1792,7 +1842,7 @@ end)
 gui.cacheImage = updater:newFunction(function(self, path_or_paths)
     if type(path_or_paths) == "string" then
         -- runs thread to load image then cache it for faster loading
-        load_image(path_or_paths).OnReturn(function(img)
+        load_image(path_or_paths):OnReturn(function(img)
             image_cache[path_or_paths] = img
         end)
     -- table of paths
@@ -1828,7 +1878,7 @@ function gui:applyGradient(direction, ...)
     local img = love.graphics.newImage(result)
     img:setFilter('linear', 'linear')
     local x, y, w, h = self:getAbsolutes()
-    self.imageColor = color.white
+    self.imageColor = white
     self.imageVisibility = 1
     self.image = img
     self.image:setWrap("repeat", "repeat")
@@ -1843,7 +1893,7 @@ end
 
 function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     local c = self:newBase(image + typ, x, y, w, h, sx, sy, sw, sh)
-    c.color = color.white
+    c.color = white
     c.visibility = 0
     c.scaleX = 1
     c.scaleY = 1
@@ -1878,7 +1928,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
             img = gif.load(i)
 
             gif.Updater(img, drawer)
-            c.OnDestroy(function()
+            c:OnDestroy(function()
                 img.kill = true -- trigger the gif thread to terminate
             end)
 
@@ -1905,7 +1955,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
             if not c.__isGif then
                 c.image:setWrap("repeat", "repeat")
             end
-            c.imageColor = color.white
+            c.imageColor = white
             c.quad = love.graphics.newQuad(x, y, w, h, c.image:getWidth(), c.image:getHeight())
             c.imageVisibility = 1
 
@@ -1917,7 +1967,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         end
 
         local x, y, w, h = c:getAbsolutes()
-        c.imageColor = color.white
+        c.imageColor = white
         c.imageVisibility = 1
         c.image = img
         if not self.__isGif then 
@@ -1948,7 +1998,6 @@ end
 -- Video
 function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(video, x,  y, w, h, sx, sy, sw, sh)
-    c.OnVideoFinished = updater:newConnection()
     c.playing = false
 
     function c:setVideo(v)
@@ -2015,7 +2064,7 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.videoVisibility = 1
-    c.videoColor = color.white
+    c.videoColor = white
     gui.Events.OnCreated:Fire(c)
     return c
 end
@@ -2096,7 +2145,7 @@ local drawtypes = {
             love.graphics.setLineWidth(lw)
         end
         if child:HasSelection() then
-            local blue = color.highlighter_blue
+            local blue = highlighter_blue
             local start, stop = child.selection[1], child.selection[2]
             if start > stop then start, stop = stop, start end
             local x1, y1 = child.font:getWidth(child.text:sub(1, start - 1)), 0
@@ -2155,8 +2204,12 @@ local draw_handler = function(child, no_draw, dt)
 
     if child.clipDescendants then
         local children = child:getAllChildren()
-        for c = 1, #children do -- Tell the children to clip themselves
-            local clip = children[c].__variables.clip
+        for c = 1, #children do
+            local clip = children[c].__clip
+            if not clip then
+                clip = {false, 0, 0, 0, 0}
+                children[c].__clip = clip
+            end
             clip[1] = true
             clip[2] = x
             clip[3] = y
@@ -2175,8 +2228,8 @@ local draw_handler = function(child, no_draw, dt)
         love.graphics.setShader(child.shader)
     end
 
-    if child.__variables.clip[1] then
-        local clip = child.__variables.clip
+    if child.__clip and child.__clip[1] then
+        local clip = child.__clip
         love.graphics.setScissor(clip[2], clip[3], clip[4], clip[5])
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
@@ -2235,7 +2288,7 @@ local draw_handler = function(child, no_draw, dt)
 
     if child.post then child:post() end
 
-    if child.__variables.clip[1] then
+    if child.__clip and child.__clip[1] then
         love.graphics.setScissor() -- Remove the scissor
     end
 
@@ -2399,8 +2452,8 @@ setmetatable(gui.virtual, gui)
 
 local w, h = love.graphics.getDimensions()
 
-gui.virtual.dualDim.offset.size.x = w
-gui.virtual.dualDim.offset.size.y = h
+gui.virtual.dualDim.offsetW = w
+gui.virtual.dualDim.offsetH = h
 gui.virtual.w = w
 gui.virtual.h = h
 gui.virtual.parent = gui.virtual
@@ -2414,8 +2467,8 @@ gui.x = 0
 gui.y = 0
 
 local w, h = love.graphics.getDimensions()
-gui.dualDim.offset.size.x = w
-gui.dualDim.offset.size.y = h
+gui.dualDim.offsetW = w
+gui.dualDim.offsetH = h
 gui.w = w
 gui.h = h
 
@@ -2452,25 +2505,25 @@ updater:newThread(function()
             local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
             gui.x = xt
             gui.y = yt
-            gui.dualDim.offset.size.x = nw
-            gui.dualDim.offset.size.y = nh
+            gui.dualDim.offsetW = nw
+            gui.dualDim.offsetH = nh
             gui.w = nw
             gui.h = nh
 
             gui.virtual.x = xt
             gui.virtual.y = yt
-            gui.virtual.dualDim.offset.size.x = nw
-            gui.virtual.dualDim.offset.size.y = nh
+            gui.virtual.dualDim.offsetW = nw
+            gui.virtual.dualDim.offsetH = nh
             gui.virtual.w = nw
             gui.virtual.h = nh
         else
-            gui.dualDim.offset.size.x = w
-            gui.dualDim.offset.size.y = h
+            gui.dualDim.offsetW = w
+            gui.dualDim.offsetH = h
             gui.w = w
             gui.h = h
 
-            gui.virtual.dualDim.offset.size.x = w
-            gui.virtual.dualDim.offset.size.y = h
+            gui.virtual.dualDim.offsetW = w
+            gui.virtual.dualDim.offsetH = h
             gui.virtual.w = w
             gui.virtual.h = h
         end
@@ -2480,7 +2533,7 @@ end)
 -- start global updater
 updater:newThread(function()
     while true do
-        thread.skip(5)
+        thread.skip(1)
         gui.Events.OnUpdate.Fire()
     end
 end)
