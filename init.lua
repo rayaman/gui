@@ -280,15 +280,27 @@ function gui:getObjectFocus() return object_focus end
 
 function gui:hasType(t) return band(self.type, t) == t end
 
+--[[
+self.dualDim = self:newDualDim(
+        x or dd.offsetX,
+        y or dd.offsetY,
+        w or dd.offsetW,
+        h or dd.offsetH,
+        sx or dd.scaleX,
+        sy or dd.scaleY,
+        sw or dd.scaleW,
+        sh or dd.scaleH)
+]]
+
 function gui:move(x, y)
-    self.dualDim.offset.pos.x = self.dualDim.offset.pos.x + x
-    self.dualDim.offset.pos.y = self.dualDim.offset.pos.y + y
+    self.dualDim.offsetX = self.dualDim.offsetX + x
+    self.dualDim.offsetY = self.dualDim.offsetY + y
     self.OnPositionChanged:Fire(self, x, y)
 end
 
 function gui:size(x,y)
-    self.dualDim.offset.size.x = self.dualDim.offset.size.x + x
-    self.dualDim.offset.size.y = self.dualDim.offset.size.y + y
+    self.dualDim.offsetW = self.dualDim.offsetW + x
+    self.dualDim.offsetH = self.dualDim.offsetH + y
     self.OnSizeChanged:Fire(self, x, y)
 end
 

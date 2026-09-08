@@ -1070,7 +1070,7 @@ ToggleTaskManager = gui:setHotKey({"lctrl","t"}) +
 
 ToggleTaskManager(function()
     if not taskManager then
-        -- gui:showTaskManager()
+        gui:showTaskManager()
     elseif taskManager:isActive() then
         taskManager:close()
     else
