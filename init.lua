@@ -241,6 +241,10 @@ function gui:noOf(sx,sy,sw,sh)
     end
 end
 
+function gui:run(func)
+    func(self)
+end
+
 --[[
 C_ prefix = connect function to a connection
 I_ prefix = invoke function args should be wrapped in a table
@@ -978,7 +982,6 @@ local initEvents = function(self, evnt_type)
     self:addConnection(ref3)
 end
 
-
 function gui:defaultCheck(...)
     if not self:isActive() then return false end
     local x, y = love.mouse.getPosition()
@@ -990,9 +993,9 @@ end
 
 function gui:OnWheelMoved(func)
     initEvents(self)
-    self:addConnection(gui.Events.OnWheelMoved(function(obj, ...)
-        if obj == self and testVisual(obj) and obj:defaultCheck(x, y) then
-            func(obj, ...)
+    self:addConnection(gui.Events.OnWheelMoved(function(...)
+        if testVisual(self) and self:defaultCheck(x, y) then
+            func(self, ...)
         end
     end))
 end
@@ -1664,6 +1667,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     c.cur_pos = 0
     c.selection = {0, 0}
     c.blink = true
+    c.seek = true
 
     function c:getUniques()
         return gui.getUniques(c, {
@@ -1703,6 +1707,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
 
     c:OnPressed(function(c, x, y, dx, dy, istouch)
         object_focus.bar_show = true
+        if not c.seek then return end
         c.cur_pos = getTextPosition(c.text, c, c:getLocalCords(x, y))
         c.selection[1] = c.cur_pos
         c.doSelection = true

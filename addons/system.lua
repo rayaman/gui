@@ -458,46 +458,45 @@ function gui:newWindow(x, y, w, h, sx, sy, sw, sh, text, draggable, theme)
     local bottom      = window:newFrame(4, -4, -8, 4, 0, 1, 1):tag("bottom")
     local bottomleft  = window:newFrame(0, -4, 4, 4, 0, 1):tag("bleft")
     local bottomright = window:newFrame(-4, -4, 4, 4, 1, 1):tag("bright")
-    gui.apply({
-        visibility = 0,
-        I_enableDragging = {gui.MOUSE_PRIMARY},
-        respectHierarchy = {false},
-        OnUpdate = function(self) self:topStack() end,
-        OnDragging = function(self, dx, dy)
-            local ox, oy, ow, oh = header:getAbsolutes()
-            local tag = self:getTag()
-            if tag == "left" or tag == "bleft" then
-                window:size(0, dy)
-                header:move(dx, 0)
-                header:size(-dx, 0)
-            else
-                window:size(0, dy)
-                header:size(dx, 0)
-            end
-            local x, y, w, h = header:getAbsolutes()
-            if w < 200 and (tag == "left" or tag == "bleft") then
-                header:setDualDim(ox, nil, 200)
-            elseif w < 200 then
-                header:setDualDim(nil, nil, 200)
-            end
-            local x, y, w, h = window:getAbsolutes()
-            if h < 100 then window:setDualDim(nil, nil, nil, 100) end
-        end,
-        OnDragEnd = function(self) love.mouse.setCursor(pointer) end,
-        OnEnter = function(self)
-            local tag = self:getTag()
-            if tag == "left" or tag == "right" then
-                love.mouse.setCursor(sizewe)
-            elseif tag == "bleft" then
-                love.mouse.setCursor(sizenesw)
-            elseif tag == "bright" then
-                love.mouse.setCursor(sizenwse)
-            else
-                love.mouse.setCursor(sizens)
-            end
-        end,
-        OnExit = function(self) love.mouse.setCursor(pointer) end,
-    }, left, right, bottom, bottomleft, bottomright)
+    -- gui.apply({
+    --     visibility = 0,
+    --     I_enableDragging = {gui.MOUSE_PRIMARY},
+    --     respectHierarchy = {false},
+    --     OnDragging = function(self, dx, dy)
+    --         local ox, oy, ow, oh = header:getAbsolutes()
+    --         local tag = self:getTag()
+    --         if tag == "left" or tag == "bleft" then
+    --             window:size(0, dy)
+    --             header:move(dx, 0)
+    --             header:size(-dx, 0)
+    --         else
+    --             window:size(0, dy)
+    --             header:size(dx, 0)
+    --         end
+    --         local x, y, w, h = header:getAbsolutes()
+    --         if w < 200 and (tag == "left" or tag == "bleft") then
+    --             header:setDualDim(ox, nil, 200)
+    --         elseif w < 200 then
+    --             header:setDualDim(nil, nil, 200)
+    --         end
+    --         local x, y, w, h = window:getAbsolutes()
+    --         if h < 100 then window:setDualDim(nil, nil, nil, 100) end
+    --     end,
+    --     OnDragEnd = function(self) love.mouse.setCursor(pointer) end,
+    --     OnEnter = function(self)
+    --         local tag = self:getTag()
+    --         if tag == "left" or tag == "right" then
+    --             love.mouse.setCursor(sizewe)
+    --         elseif tag == "bleft" then
+    --             love.mouse.setCursor(sizenesw)
+    --         elseif tag == "bright" then
+    --             love.mouse.setCursor(sizenwse)
+    --         else
+    --             love.mouse.setCursor(sizens)
+    --         end
+    --     end,
+    --     OnExit = function(self) love.mouse.setCursor(pointer) end,
+    -- }, left, right, bottom, bottomleft, bottomright)
 
     local title = header:newTextLabel(text or "", 5, 0, w - 35, 35)
     title.clipDescendants = true
@@ -885,6 +884,7 @@ end
 local taskManager
 
 function gui:showTaskManager()
+
     if taskManager then return end
 
     local WIN_W = TOTAL_W + 20
@@ -1032,45 +1032,45 @@ function gui:showTaskManager()
     schedulerProbe:install(multi)
 
     -- ── main-thread update ────────────────────────────────────────────────────
-    taskManager:OnUpdate(function()
-        taskManager:topStack()
-        -- Apply task data
-        if dirty and pendingData then
-            dirty = false
-            local data = pendingData
-            pendingData = nil
+    -- taskManager:OnUpdate(function()
+    --     taskManager:topStack()
+    --     -- Apply task data
+    --     if dirty and pendingData then
+    --         dirty = false
+    --         local data = pendingData
+    --         pendingData = nil
 
-            if sortKey then
-                sortRows(data, sortKey, sortAsc)
-            end
+    --         if sortKey then
+    --             sortRows(data, sortKey, sortAsc)
+    --         end
 
-            pool:apply(data)
-            setStatLine(#data)
-        end
+    --         pool:apply(data)
+    --         setStatLine(#data)
+    --     end
 
-        -- Load bar — getLoad() is now non-blocking, safe to call every frame
-        local pct, lagMs = multi:getLoad()
-        local _, _, barW, _ = loadStrip:getAbsolutes()
-        local fillW = math.max(1, math.floor(barW * pct / 100))
-        loadFill:setDualDim(nil, nil, fillW)
-        if pct < 50 then
-            loadFill.color = { 0.1, 0.6, 0.3 }
-        elseif pct < 80 then
-            loadFill.color = { 0.8, 0.6, 0.1 }
-        else
-            loadFill.color = { 0.8, 0.15, 0.1 }
-        end
-        loadLbl.text = string.format("Load: %d%%  Lag: %.1fms", pct, lagMs)
-    end)
+    --     -- Load bar — getLoad() is now non-blocking, safe to call every frame
+    --     local pct, lagMs = multi:getLoad()
+    --     local _, _, barW, _ = loadStrip:getAbsolutes()
+    --     local fillW = math.max(1, math.floor(barW * pct / 100))
+    --     loadFill:setDualDim(nil, nil, fillW)
+    --     if pct < 50 then
+    --         loadFill.color = { 0.1, 0.6, 0.3 }
+    --     elseif pct < 80 then
+    --         loadFill.color = { 0.8, 0.6, 0.1 }
+    --     else
+    --         loadFill.color = { 0.8, 0.15, 0.1 }
+    --     end
+    --     loadLbl.text = string.format("Load: %d%%  Lag: %.1fms", pct, lagMs)
+    -- end)
 end
 
 -- ── hotkey ────────────────────────────────────────────────────────────────────
-ToggleTaskManager = gui:setHotKey({"lctrl","t"}) +
-                    gui:setHotKey({"rctrl","t"})
+ToggleTaskManager = gui:setHotKey({"lctrl","`"}) +
+                    gui:setHotKey({"rctrl","`"})
 
 ToggleTaskManager(function()
     if not taskManager then
-        gui:showTaskManager()
+        -- gui:showTaskManager()
     elseif taskManager:isActive() then
         taskManager:close()
     else
@@ -1078,7 +1078,7 @@ ToggleTaskManager(function()
     end
 end)
 
-ToggleTaskManager:Fire()
+-- ToggleTaskManager:Fire()
 -- taskManager:close()
 
 local PATH_SEP   = love.system.getOS() == "Windows" and "\\" or "/"
