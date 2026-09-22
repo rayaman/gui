@@ -1,4 +1,4 @@
-local color = require("gui.core.color")
+local color = require("gui.core.color").newPalette("$gui.core.theme")
 local theme = {}
 local defaultFont = love.graphics.getFont()
 theme.__index = theme
@@ -15,7 +15,6 @@ local function generate_harmonious_colors(num_colors, lightness)
         else
             table.insert(colors, color.new(color.hsl(new_hue, math.random(45, 55), math.random(30, 80))))
         end
-            
     end
     return colors
 end
