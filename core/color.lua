@@ -162,6 +162,48 @@ local function parseColor(r, g, b, a)
 	end
 end
 
+-- Converts any supported color (hex string, "rgb(...)", "hsl(...)", table, or r,g,b floats) to HSL.
+-- Returns hue 0-360, saturation 0-100, lightness 0-100.
+-- The hue is expressed in color.hsl's own frame (it assigns green/blue the opposite of the
+-- standard convention), so rgbToHsl(color.hsl(h, s, l)) round trips back to h exactly.
+function color.rgbToHsl(r, g, b)
+	if type(r) == "string" or type(r) == "table" then
+		r, g, b = parseColor(r)
+	end
+	local maxC, minC = max(r, g, b), min(r, g, b)
+	local delta = maxC - minC
+	local h, s = 0, 0
+	local l = (maxC + minC) / 2
+	if delta > 0 then
+		s = l > .5 and delta / (2 - maxC - minC) or delta / (maxC + minC)
+		if maxC == r then
+			h = (g - b) / delta % 6
+		elseif maxC == g then
+			h = (b - r) / delta + 2
+		else
+			h = (r - g) / delta + 4
+		end
+		-- mirror onto color.hsl's hue circle so the value can be fed straight back to color.hsl
+		h = (360 - h * 60) % 360
+	end
+	return h, s * 100, l * 100
+end
+
+-- Shifts a reference color around the color wheel. dh is degrees, s/l override the reference's
+-- saturation/lightness (0-100). Returns r,g,b,a in the 0-1 range color.hsl produces.
+function color.hueShift(c, dh, s, l)
+	local h, refS, refL = color.rgbToHsl(c)
+	return color.hsl((h + dh) % 360, s or refS, l or refL)
+end
+
+-- Standalone color constructor. Palettes already expose this as palette.new; this makes the
+-- same call available directly on the module.
+function color.new(r, g, b, a)
+	local temp = {parseColor(r, g, b, a)}
+	setmetatable(temp, mt)
+	return temp
+end
+
 function color.newPalette(name)
     local p = {}
     setmetatable(p,palette)
@@ -184,9 +226,7 @@ function color.lighten(c, v)
 end
 
 function palette.new(r, g, b, a)
-	local temp = {parseColor(r, g, b, a)}
-	setmetatable(temp, mt)
-	return temp
+	return color.new(r, g, b, a)
 end
 
 function palette:indexColor(name, r, g, b, a)

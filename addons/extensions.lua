@@ -11,6 +11,8 @@ palette:indexColor("blue","#10465c")
 palette:indexColor("black","#000000")
 palette:indexColor("orange","#CC5500")
 
+local th = theme:getTheme()
+
 local function noOf(sx,sy,sw,sh)
     return nil,nil,nil,nil,sx,sy,sw,sh
 end
@@ -272,6 +274,9 @@ function gui:newNumberPicker(x, y, w, h, sx, sy, sw, sh, opts)
     local right   = rightF:newTextButton("+", 0, 0, 0, 0, 0, 0, 1, 1)
     local textbox = picker:newTextBox("", 0, 0, 0, 0, .15, 0, .7, 1)
 
+    picker.color = th.primaryNav
+    textbox.color = th.primaryFG
+
     textbox.blink = false
 
     gui.apply({
@@ -318,8 +323,8 @@ function gui:newNumberPicker(x, y, w, h, sx, sy, sw, sh, opts)
         local canDec = (opts.min == nil) or (opts.value > opts.min)
         local canInc = (opts.max == nil) or (opts.value < opts.max)
         left.active, right.active = canDec, canInc
-        left.textColor  = canDec and {0, 0, 0, 1} or {.6, .6, .6, 1}
-        right.textColor = canInc and {0, 0, 0, 1} or {.6, .6, .6, 1}
+        left.textColor  = canDec and th.primaryText or th.primaryNav
+        right.textColor = canInc and th.primaryText or th.primaryNav
     end
 
     function picker:setValue(n, silent)
@@ -462,6 +467,7 @@ function gui:newColorPicker(x, y, w, h, sx, sy, sw, sh, opts)
     picker.active = false      -- container only; don't compete for focus with its children
     picker.drawBorder = false
     picker.visibility = 1
+    picker.color = th.primaryBG
 
     local hue, sat, val = rgbToHsv(r0, g0, b0)
     local hueR, hueG, hueB = hsvToRgb(hue, 1, 1)
@@ -587,10 +593,12 @@ function gui:newColorPicker(x, y, w, h, sx, sy, sw, sh, opts)
     -- ---- Hex input (new) ----
     local hexFrame = picker:newFrame(6, 0, -12, -6, .70, .816, .30, .184)
     hexFrame:setRoundness(6, 6)
+    hexFrame.color = th.primaryLabel
 
     local hexLabel = hexFrame:newTextLabel("#", 0, 0, 0, 0, 0, 0, .18, 1)
     hexBox = hexFrame:newTextBox("", 0, 0, 0, 0, .18, 0, .82, 1)
     hexBox.blink = false
+    hexBox.color = th.secondaryLabel
 
     gui.apply({
         scaleFont  = {.4},
