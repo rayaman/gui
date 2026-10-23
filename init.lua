@@ -1,12 +1,13 @@
+local font = require("gui.core.font")
 local utf8 = require("utf8")
 local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.core.color")
-local gif   = require("gui.addons.gifloader")
+local gif   = require("gui.core.gifloader")
 local gui = {}
 local updater = multi:newProcessor("UpdateManager", true)
-
 local drawer = multi:newProcessor("DrawManager", true)
+local core_conns = multi:newProcessor("gui.events", true)
 
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
@@ -17,7 +18,6 @@ local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad,
 local frame, image, text, box, video, button, anim = 0, 1, 2, 4, 8, 16, 32
 local global_drag
 local object_focus = gui
-local first_loop = false
 
 -- Types
 gui.TYPE_FRAME      = frame
@@ -43,48 +43,48 @@ gui.MOUSE_MIDDLE = 3
 gui.ALIGN_CENTER = 0
 gui.ALIGN_LEFT = 1
 gui.ALIGN_RIGHT = 2
+gui.ALIGN_JUSTIFY = 3
 
 -- Connections
 gui.Events = {} -- We are using fastmode for all connection objects.
-gui.Events.OnQuit = multi:newConnection()
-gui.Events.OnDirectoryDropped = multi:newConnection()
-gui.Events.OnDisplayRotated = multi:newConnection()
-gui.Events.OnFilesDropped = multi:newConnection()
-gui.Events.OnFocus = multi:newConnection()
-gui.Events.OnMouseFocus = multi:newConnection()
-gui.Events.OnResized = multi:newConnection()
-gui.Events.OnVisible = multi:newConnection()
-gui.Events.OnKeyPressed = multi:newConnection()
-gui.Events.OnKeyReleased = multi:newConnection()
-gui.Events.OnTextEdited = multi:newConnection()
-gui.Events.OnTextInputed = multi:newConnection()
-gui.Events.OnMouseMoved = multi:newConnection()
-gui.Events.OnMousePressed = multi:newConnection()
-gui.Events.OnMouseReleased = multi:newConnection()
-gui.Events.OnWheelMoved = multi:newConnection()
-gui.Events.OnTouchMoved = multi:newConnection()
-gui.Events.OnTouchPressed = multi:newConnection()
-gui.Events.OnTouchReleased = multi:newConnection()
+gui.Events.OnQuit = core_conns:newConnection()
+gui.Events.OnDirectoryDropped = core_conns:newConnection()
+gui.Events.OnDisplayRotated = core_conns:newConnection()
+gui.Events.OnFilesDropped = core_conns:newConnection()
+gui.Events.OnFocus = core_conns:newConnection()
+gui.Events.OnMouseFocus = core_conns:newConnection()
+gui.Events.OnResized = core_conns:newConnection()
+gui.Events.OnVisible = core_conns:newConnection()
+gui.Events.OnKeyPressed = core_conns:newConnection()
+gui.Events.OnKeyReleased = core_conns:newConnection()
+gui.Events.OnTextEdited = core_conns:newConnection()
+gui.Events.OnTextInputed = core_conns:newConnection()
+gui.Events.OnMouseMoved = core_conns:newConnection()
+gui.Events.OnMousePressed = core_conns:newConnection()
+gui.Events.OnMouseReleased = core_conns:newConnection()
+gui.Events.OnWheelMoved = core_conns:newConnection()
+gui.Events.OnTouchMoved = core_conns:newConnection()
+gui.Events.OnTouchPressed = core_conns:newConnection()
+gui.Events.OnTouchReleased = core_conns:newConnection()
 
 -- Joysticks and gamepads
-gui.Events.OnGamepadPressed = multi:newConnection()
-gui.Events.OnGamepadReleased = multi:newConnection()
-gui.Events.OnGamepadAxis = multi:newConnection()
-gui.Events.OnJoystickAdded = multi:newConnection()
-gui.Events.OnJoystickHat = multi:newConnection()
-gui.Events.OnJoystickPressed = multi:newConnection()
-gui.Events.OnJoystickReleased = multi:newConnection()
-gui.Events.OnJoystickRemoved = multi:newConnection()
+gui.Events.OnGamepadPressed = core_conns:newConnection()
+gui.Events.OnGamepadReleased = core_conns:newConnection()
+gui.Events.OnGamepadAxis = core_conns:newConnection()
+gui.Events.OnJoystickAdded = core_conns:newConnection()
+gui.Events.OnJoystickHat = core_conns:newConnection()
+gui.Events.OnJoystickPressed = core_conns:newConnection()
+gui.Events.OnJoystickReleased = core_conns:newConnection()
+gui.Events.OnJoystickRemoved = core_conns:newConnection()
 
--- Non Love Events
+-- Internal Connections
+gui.Events.OnCreated = core_conns:newConnection()
+gui.Events.OnObjectFocusChanged = core_conns:newConnection()
 
-gui.Events.OnThemeChanged = multi:newConnection()
+gui.Events.OnUpdate = core_conns:newConnection()
 
 -- Virtual gui init
 gui.virtual = {}
-
--- Internal Connections
-gui.Events.OnObjectFocusChanged = multi:newConnection()
 
 -- Hooks
 
@@ -108,7 +108,10 @@ updater:newTask(function()
     Hook("displayrotated", gui.Events.OnDisplayRotated.Fire)
     Hook("filedropped", gui.Events.OnFilesDropped.Fire)
     Hook("focus", gui.Events.OnFocus.Fire)
-    Hook("resize", gui.Events.OnResized.Fire)
+    Hook("resize", updater:newFunction(function(...)
+        thread.skip(2)
+        gui.Events.OnResized.Fire(...)
+    end))
     Hook("visible", gui.Events.OnVisible.Fire)
 
     -- Mouse
@@ -140,6 +143,7 @@ updater:newTask(function()
     Hook("joystickadded", gui.Events.OnJoystickAdded.Fire)
 end)
 
+
 -- Hotkeys
 
 local has_hotkey = false
@@ -147,19 +151,21 @@ local hot_keys = {}
 
 -- Wait for keys to release to reset
 local unPress = updater:newFunction(function(keys)
-    thread.hold(function()
+    local check = function()
         for key = 1, #keys["Keys"] do
             if not love.keyboard.isDown(keys["Keys"][key]) then
                 keys.isBusy = false
                 return true
             end
         end
-    end)
+    end
+    thread.hold(check)
 end)
 
 updater:newThread("GUI Hotkey Manager", function()
+    local check = function() return has_hotkey end
     while true do
-        thread.hold(function() return has_hotkey end)
+        thread.hold(check)
         for i = 1, #hot_keys do
             local good = true
             for key = 1, #hot_keys[i]["Keys"] do
@@ -180,7 +186,7 @@ end)
 
 function gui:setHotKey(keys, conn)
     has_hotkey = true
-    local conn = conn or multi:newConnection()
+    local conn = conn or updater:newConnection()
     table.insert(hot_keys,
                  {Ref = self, Connection = conn, Keys = {unpack(keys)}})
     return conn
@@ -223,19 +229,45 @@ function gui:getTag()
     return self.__tag
 end
 
+function gui:noOf(sx,sy,sw,sh)
+    if type(self) == "number" then -- gui.noOf
+        return nil,nil,nil,nil,self,sx,sy,sw
+    else
+        return nil,nil,nil,nil,sx,sy,sw,sh
+    end
+end
+
 --[[
 C_ prefix = connect function to a connection
 I_ prefix = invoke function args should be wrapped in a table
 ]]
+local function handleConnection(object,field,value)
+    if field == "OnUpdate" then
+        object[field](object,value)
+    else
+        object[field](value)
+    end
+end
+
+local function handleFunction(object,field,value)
+    if type(value) ~= "table" then return end
+    object[field](object,unpack(value))
+end
+
 function gui.apply(apply, ...)
     for field, value in pairs(apply) do
         for _, object in pairs({...}) do
             local cmd = field:sub(1,2)
             local handle = field:sub(3,-1)
+            local tp = type(object[field])
             if cmd == "C_" then
-                object[handle](value)
+                handleConnection(object,handle,value)
             elseif cmd == "I_" then
-                object[handle](object,unpack(value))
+                handleFunction(object,handle,value)
+            elseif tp == "table" and object[field].Type == multi.registerType("connector", "connections") then
+                handleConnection(object,field,value)
+            elseif tp == "function" then
+                handleFunction(object,field,value)
             else
                 object[field] = value
             end
@@ -303,7 +335,7 @@ end
 
 function gui:isDescendantOf(obj)
     local parent = self.parent
-    while parent ~= gui do
+    while parent ~= gui and parent ~= nil do
         if parent == obj then return true end
         parent = parent.parent
     end
@@ -324,8 +356,9 @@ function gui:offsetToScale()
 end
 
 function gui:getAbsolutes(transform) -- returns x, y, w, h
+    local x,y,w,h
     if transform then
-        return transform((self.parent.w * self.dualDim.scale.pos.x) +
+        x, y, w, h = transform((self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x),
                transform((self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y), transform((self.parent.w *
@@ -333,7 +366,7 @@ function gui:getAbsolutes(transform) -- returns x, y, w, h
                transform((self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y)
     else
-        return (self.parent.w * self.dualDim.scale.pos.x) +
+        x, y, w, h = (self.parent.w * self.dualDim.scale.pos.x) +
                self.dualDim.offset.pos.x + self.parent.x,
            (self.parent.h * self.dualDim.scale.pos.y) +
                self.dualDim.offset.pos.y + self.parent.y, (self.parent.w *
@@ -341,6 +374,12 @@ function gui:getAbsolutes(transform) -- returns x, y, w, h
            (self.parent.h * self.dualDim.scale.size.y) +
                self.dualDim.offset.size.y
     end
+    if self.square == "w" then
+        h = w
+    elseif self.square == "h" then
+        w = h
+    end
+    return x, y, w, h
 end
 
 function gui:getAllChildren(vis)
@@ -433,14 +472,21 @@ function gui:bottomStack()
     table.insert(siblings, 1, self)
 end
 
-local mainupdater = updater:newLoop().OnLoop
+local mainupdater = updater:newLoop()
+mainupdater:setName("GUI Update Handler")
 
 function gui:OnUpdate(func) -- Not crazy about this approach, will probably rework this
-    if type(self) == "function" then func = self end
-    mainupdater(function(self,_,dt) func(self, dt) end)
+    if type(self) == "function" then 
+        func = self 
+    end
+
+    mainupdater.OnLoop(function(_,_,dt) 
+        func(self, dt) 
+    end)
 end
 
 function gui:canPress(mx, my) -- Get the intersection of the clip area and the self then test with the clip, otherwise test as normal
+    if not self.visible then return false end
     local x, y, w, h
     if self.__variables.clip[1] then
         local clip = self.__variables.clip
@@ -452,13 +498,13 @@ function gui:canPress(mx, my) -- Get the intersection of the clip area and the s
     return not (mx > x + w or mx < x or my > y + h or my < y)
 end
 
-function gui:isBeingCovered(mx, my)
+function gui:isBeingCovered(mx, my, respect)
+    -- if not respect then return false end
     local children = gui:getAllChildren()
     for i = #children, 1, -1 do
-        if children[i] == self then
+        if children[i] == self or not respect then
             return false
-        elseif children[i]:canPress(mx, my) and not (children[i] == self) and
-            not (children[i].ignore) then
+        elseif children[i]:canPress(mx, my) and not (children[i] == self) and not (children[i].ignore) then
             return true
         end
     end
@@ -524,7 +570,7 @@ function gui:clone(opt)
                     -- We want to copy the connection functions from the original object and bind them to the new one
                     if not temp[i] then
                         -- Incase we are dealing with a custom object, create a connection if the custom objects unique declearation didn't
-                        temp[i] = multi:newConnection()
+                        temp[i] = updater:newConnection()
                     end
                     temp[i]:Bind(v:getConnections())
                 end
@@ -541,12 +587,11 @@ function gui:clone(opt)
 end
 
 function gui:isActive()
-    return self.active and not (self:isDescendantOf(gui.virtual))
+    return self.active and not self:isDescendantOf(gui.virtual)
 end
 
 function gui:isOnScreen()
-    
-    return 
+    return not self:isOffScreen()
 end
 
 -- Base get uniques
@@ -558,7 +603,8 @@ function gui:getUniques(tab)
         color = self.color,
         borderColor = self.borderColor,
         drawBorder = self.drawborder,
-        rotation = self.rotation
+        rotation = self.rotation,
+        shader = self.shader
     }
 
     if tab then for i, v in pairs(tab) do base[i] = tab[i] end end
@@ -569,8 +615,20 @@ function gui:setTag(tag)
     self.tags[tag] = true
 end
 
+function gui:removeTag(tag)
+    self.tags[tag] = nil
+end
+
 function gui:hasTag(tag)
     return self.tags[tag]
+end
+
+function gui:ancestorHasTag(tag)
+    local parent = self.parent
+    while parent ~= gui and parent ~= nil do
+        if parent:hasTag(tag) then return true end
+        parent = parent.parent
+    end
 end
 
 function gui:parentHasTag(tag)
@@ -587,6 +645,20 @@ local function testVisual(c, x, y, button, istouch, presses)
     return not(c:hasTag("visual") or c:parentHasTag("visual")) 
 end
 
+local extensions = {}
+
+function gui.registerExtension(template)
+    table.insert(extensions, template)
+end
+
+function gui:extend(c)
+    for i,v in pairs(extensions) do
+        for key, value in pairs(v) do
+            c[key] = value
+        end
+    end
+end
+
 -- Base Library
 function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local c = {}
@@ -599,9 +671,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     local draggable = false
     local hierarchy = false
 
-    local function testHierarchy(c, x, y, button, istouch, presses)
+    local function testHierarchy(obj, x, y)
         if hierarchy then
-            return not (global_drag or c:isBeingCovered(x, y))
+            return not (global_drag or obj:isBeingCovered(x, y, true))
         end
         return true
     end
@@ -615,8 +687,15 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return false
     end
 
-    setmetatable(c, self)
-    c.__index = self.__index
+    local function creationCheck(self)
+        return self:isDescendantOf(c)
+    end
+
+    local function visHie(obj, x, y)
+        return testVisual(obj) and testHierarchy(obj, x, y)
+    end
+
+    setmetatable(c, gui)
     c.__variables = {clip = {false, 0, 0, 0, 0}}
     c.focus = false
     c.active = true
@@ -631,44 +710,46 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
     c.rotation = 0
     c.formFactor = gui.FORM_RECTANGLE
 
-    c.OnLoad = multi:newConnection()
+    c.OnLoad = updater:newConnection()
 
-    c.OnPressed = testVisual .. (testHierarchy .. multi:newConnection())
-    c.OnPressedOuter = testVisual .. multi:newConnection()
-    c.OnReleased = testVisual .. (testHierarchy .. multi:newConnection())
-    c.OnReleasedOuter = testVisual .. multi:newConnection()
-    c.OnReleasedOther = testVisual .. multi:newConnection()
+    c.OnPressed = updater:newConnection(false, visHie)
+    c.OnPressedOuter = updater:newConnection(false, testVisual)
+    c.OnReleased = updater:newConnection(false, visHie)
+    c.OnReleasedOuter = updater:newConnection(false, testVisual)
+    c.OnReleasedOther = updater:newConnection(false, testVisual)
 
-    c.OnDragStart = testVisual .. multi:newConnection()
-    c.OnDragging = testVisual .. multi:newConnection()
-    c.OnDragEnd = testVisual .. multi:newConnection()
+    c.OnDragStart = updater:newConnection(false, testVisual)
+    c.OnDragging = updater:newConnection(false, testVisual)
+    c.OnDragEnd = updater:newConnection(false, testVisual)
 
-    c.OnEnter = (testHierarchy .. multi:newConnection())
-    c.OnExit = testVisual .. multi:newConnection()
+    c.OnEnter = updater:newConnection(false, visHie)
+    c.OnExit = updater:newConnection(false, testVisual)
 
-    c.OnMoved = testVisual .. (testHierarchy .. multi:newConnection())
+    c.OnMoved = updater:newConnection(false,visHie)
     c.OnWheelMoved = testVisual .. (defaultCheck / gui.Events.OnWheelMoved)
 
-    c.OnSizeChanged = testVisual .. multi:newConnection()
-    c.OnPositionChanged = testVisual .. multi:newConnection()
+    c.OnSizeChanged = updater:newConnection(false, testVisual)
+    c.OnPositionChanged = updater:newConnection(false, testVisual)
 
-    c.OnLeftStickUp = testVisual .. multi:newConnection()
-    c.OnLeftStickDown = testVisual .. multi:newConnection()
-    c.OnLeftStickLeft = testVisual .. multi:newConnection()
-    c.OnLeftStickRight = testVisual .. multi:newConnection()
-    c.OnRightStickUp = testVisual .. multi:newConnection()
-    c.OnRightStickDown = testVisual .. multi:newConnection()
-    c.OnRightStickLeft = testVisual .. multi:newConnection()
-    c.OnRightStickRight = testVisual .. multi:newConnection()
+    c.OnLeftStickUp = updater:newConnection(false, testVisual)
+    c.OnLeftStickDown = updater:newConnection(false, testVisual)
+    c.OnLeftStickLeft = updater:newConnection(false, testVisual)
+    c.OnLeftStickRight = updater:newConnection(false, testVisual)
+    c.OnRightStickUp = updater:newConnection(false, testVisual)
+    c.OnRightStickDown = updater:newConnection(false, testVisual)
+    c.OnRightStickLeft = updater:newConnection(false, testVisual)
+    c.OnRightStickRight = updater:newConnection(false, testVisual)
 
-    c.OnDestroy = multi:newConnection()
+    c.OnDestroy = updater:newConnection()
 
+    c.OnCreated = creationCheck .. updater:newConnection()
+    local _forwardedRef = multi.forwardConnection(gui.Events.OnCreated,c.OnCreated)
     local dragging = false
     local entered = false
     local moved = false
     local pressed = false
 
-    gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
+    local _mouseMoveRef = gui.Events.OnMouseMoved(function(x, y, dx, dy, istouch)
         if not c:isActive() then return end
         if c:canPress(x, y) or dragging then
             c.OnMoved:Fire(c, x, y, dx, dy, istouch)
@@ -685,7 +766,13 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         end
     end)
 
-    gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+    local _mouseRelRef = gui.Events.OnMouseReleased(function(x, y, button, istouch, presses)
+        pressed = false -- we need to handle dragging stopped even if an element is not active
+        if dragging and button == dragbutton then
+            dragging = false
+            global_drag = false
+            c.OnDragEnd:Fire(c, dx, dy, x, y, istouch, presses)
+        end
         if not c:isActive() then return end
         if c:canPress(x, y) then
             c.OnReleased:Fire(c, x, y, button, istouch, presses)
@@ -694,15 +781,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         else
             c.OnReleasedOther:Fire(c, x, y, button, istouch, presses)
         end
-        pressed = false
-        if dragging and button == dragbutton then
-            dragging = false
-            global_drag = false
-            c.OnDragEnd:Fire(c, dx, dy, x, y, istouch, presses)
-        end
     end)
 
-    gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
+    local _mousePressRef = gui.Events.OnMousePressed(function(x, y, button, istouch, presses)
         if not c:isActive() then return end
         if c:canPress(x, y) or dragging then
             c.OnPressed:Fire(c, x, y, dx, dy, istouch)
@@ -714,7 +795,7 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
                 object_focus = c
             end
 
-            if draggable and button == dragbutton and not c:isBeingCovered(x, y) and
+            if draggable and button == dragbutton and not c:isBeingCovered(x, y, hierarchy) and
                 not global_drag then
                 dragging = true
                 global_drag = true
@@ -724,6 +805,13 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
             c.OnPressedOuter:Fire(c, x, y, button, istouch, presses)
         end
     end)
+
+    function c:setColor(key,col)
+        if col[4] then
+            self.visibility = col[4]
+        end
+        self[key] = col
+    end
 
     function c:isOffScreen()
         local x, y, w, h = self:getAbsolutes()
@@ -759,7 +847,9 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         return self
     end
 
-    function c:respectHierarchy(bool) hierarchy = bool end
+    function c:respectHierarchy(bool) 
+        hierarchy = bool 
+    end
 
     local function centerthread()
         if centerX or centerY then
@@ -802,19 +892,61 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
 
     function c:fullFrame()
         self:setDualDim(0,0,0,0,0,0,1,1)
+        return self
     end
 
     function c:destroy()
-        for i,v in pairs(self.parent:getChildren()) do
-            if v == c then
-                for _, children in pairs(v) do
-                    children:destroy()
-                end
-                v.OnDestroy:Fire(v)
-                table.remove(self.parent.children,i)
+        -- Find and remove self from parent's children list
+        local children = self.parent and self.parent.children
+        if not children then return end
+
+        local foundIdx
+        for i, v in ipairs(children) do
+            if v == self then
+                foundIdx = i
                 break
             end
         end
+        if not foundIdx then return end
+
+        -- Fire OnDestroy before teardown so listeners still work during the callback
+        self.OnDestroy:Fire(self)
+
+        -- Recursively destroy all children first
+        for _, child in pairs(self.children) do
+            if type(child.destroy) == "function" then
+                child:destroy()
+            end
+        end
+        self.children = {}
+
+        -- Disconnect the global connections
+        gui.Events.OnMouseMoved:Unconnect(_mouseMoveRef)
+        gui.Events.OnMouseReleased:Unconnect(_mouseRelRef)
+        gui.Events.OnMousePressed:Unconnect(_mousePressRef)
+        gui.Events.OnCreated:Unconnect(_forwardedRef)
+
+        -- Destroy all connection objects on self (OnPressed, OnReleased, etc.)
+        for key, value in pairs(self) do
+            if type(value) == "table" and
+            value.Type == multi.registerType("connector", "connections") then
+                value:Destroy()
+            end
+        end
+
+        -- Remove from parent
+        table.remove(children, foundIdx)
+        self.parent = nil
+        collectgarbage("collect")
+    end
+
+    function c:removeChildren()
+        for _, child in pairs(self.children) do
+            if type(child.destroy) == "function" then
+                child:destroy()  -- recursive, disconnects gui.Events listeners
+            end
+        end
+        self.children = {}
     end
 
     -- Add to the parents children table
@@ -826,6 +958,73 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         table.insert(self.children, c)
     end
     local a = 0
+    if typ == frame then
+        gui.Events.OnCreated:Fire(c) -- Trigger frame types instantly
+    end
+    -- shader stuff
+
+    function c:setShader(shader, env)
+        if type(shader) == "string" then
+            self.shader = love.graphics.newShader(shader)
+        elseif type(shader) == "table" then
+            self.shader = shader.source
+            for i,v in pairs(shader or {}) do
+                if i ~= "source" and i ~= "usage" then
+                    if self[i] then
+                        if type(v) == "function" then
+                            local data = v(self)
+                            self.shader:send(i, data)
+                        else
+                            self.shader:send(i, self[i])
+                        end
+                    elseif env[i] then
+                        if type(v) == "function" then
+                            local data = v(env)
+                            self.shader:send(i, data)
+                        else
+                            self.shader:send(i, env[i])
+                        end
+                    else
+                        error(i .. " is a required argument!\n\n".. shader.usage())
+                    end
+                end
+            end
+        else
+            self.shader = shader  -- already a compiled love Shader object
+        end
+        return self
+    end
+
+    function c:clearShader()
+        self.shader = nil
+    end
+
+    function c:setShaderUniform(name, ...)
+        if not self.shader then return end
+        if self.shader:hasUniform(name) then
+            self.shader:send(name, ...)
+        end
+    end
+    local st
+    function c:shaderTime(b)
+        if not b and st then
+            st:Unconnect()
+            st = false
+            return
+        end
+        if st then return end
+        self.__shaderTime = 0
+        st = mainupdater.OnLoop(function(_, _, dt)
+            if not self.shader then return end
+            self.__shaderTime = self.__shaderTime + dt
+            if self.shader:hasUniform("time") then
+                self.shader:send("time", self.__shaderTime)
+            end
+        end)
+    end
+
+    gui:extend(c, typ)
+
     return c
 end
 
@@ -889,7 +1088,7 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
     c.textVisibility = 1
     c.font = love.graphics.newFont(12)
     c.textColor = color.black
-    c.OnFontUpdated = testVisual .. multi:newConnection()
+    c.OnFontUpdated = updater:newConnection(false, testVisual)
 
     function c:calculateFontOffset(font, adjust)
         local adjust = adjust or 20
@@ -935,7 +1134,13 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         return top - adjust, bottom - adjust
     end
 
+    local cache = {}
     function c:setFont(font, size)
+        local index = tostring(font) .. tostring(size)
+        if cache[index] then
+            self.font = cache[index]
+            return
+        end
         if type(font) == "number" then
             self.font = love.graphics.newFont(font)
         elseif type(font) == "string" then
@@ -944,18 +1149,28 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         else
             self.font = font
         end
+        cache[index] = font
         self.OnFontUpdated:Fire(self)
     end
 
-    local cache = {}
+    -- something x > 0 
+    function c:scaleFont(scale)
+        if scale <= 0 then
+            error("scale cannot be <= 0")
+        end
+        self.textScale = scale
+    end
+
     function c:fitFont(minSize, maxSize, opt)
         local _,_,w,h = self:getAbsolutes()
+        local sw, sh = love.graphics.getDimensions()
+        local index = self.text .. tostring(w) .. tostring(h) .. tostring(sw) .. tostring(sh)
+        if cache[index] then
+            self:setFont(cache[index][1])
+            return unpack(cache[index])
+        end
         if opt == nil then
             opt = {scale=1}
-        end
-        local index=string.format("%d-%d-%d-%d-%d",minSize or 0, maxSize or 0, opt.scale or 0, w, h)
-        if cache[index] then
-            return unpack(cache[index])
         end
         local font
         local x, y, boxWidth, boxHeight = self:getAbsolutes()
@@ -1002,53 +1217,16 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
         end
         if type(opt) == "table" and opt.scale ~= 0 then
             bestFont = font(mid*opt.scale)
+        else
+            bestFont = font(mid - 1)
         end
         self:setFont(bestFont)
         cache[index] = {bestFont, bestSize}
         return bestFont, bestSize
     end
 
-    -- function c:fitFont(n, max)
-    --     local max = max or math.huge
-    --     local font
-    --     local isdefault = false
-    --     if self.fontFile then
-    --         if self.fontFile:match("ttf") then
-    --             font = function(n)
-    --                 return love.graphics.newFont(self.fontFile, n, "normal")
-    --             end
-    --         else
-    --             font = function(n)
-    --                 return love.graphics.newFont(self.fontFile, n)
-    --             end
-    --         end
-    --     else
-    --         isdefault = true
-    --         font = function(n) return love.graphics.setNewFont(n) end
-    --     end
-    --     local x, y, width, height = self:getAbsolutes()
-    --     local Font, text = self.Font, self.text
-    --     local s = 3
-    --     Font = font(s)
-    --     while height < max and Font:getHeight() < height and Font:getWidth(text) < width do
-    --         s = s + 1
-    --         Font = font(s)
-    --     end
-    --     Font = font(s - (4 + (n or 0)))
-    --     Font:setFilter("linear", "nearest", 4)
-    --     self.font = Font
-    --     self.textOffsetY = 0
-    --     local top, bottom = self:calculateFontOffset(Font, 0)
-    --     self.textOffsetY = floor(((height - bottom) - top) / 2)
-    --     self.OnFontUpdated:Fire(self)
-    --     return s - (4 + (n or 0))
-    -- end
-
-    function c:centerFont(y_offset)
-        local x, y, width, height = self:getAbsolutes()
-        local top, bottom = self:calculateFontOffset(self.font, y_offset or 0)
-        self.textOffsetY = floor(((height - bottom) - top) / 2)
-        self.OnFontUpdated:Fire(self)
+    function c:centerFont(b)
+        self.centerText = not b
     end
 
     function c:getUniques()
@@ -1066,24 +1244,322 @@ function gui:newTextBase(typ, txt, x, y, w, h, sx, sy, sw, sh)
             textColor = c.textColor
         })
     end
+
     return c
+end
+
+function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
+    -- Outer viewport (clips content)
+    local viewport = self:newFrame(x, y, w or 0, h or 0, sx, sy, sw, sh)
+    viewport.clipDescendants = true
+    viewport.color = color.new("#f9f9f9")
+    viewport:setRoundness(3, 3)
+
+    -- Inner content frame (scrolled by offsetting its y)
+    local content = viewport:newFrame(2, 2, -4, -4, 0, 0, 1, 0)
+    content.drawBorder = false
+    content.color      = {0, 0, 0, 0}
+    content.visibility = 0
+
+    -- Cursor line rendering happens via a separate frame
+    local cursorBar = viewport:newFrame(0, 0, 1, 0)
+    cursorBar.color      = color.new("#222222")
+    cursorBar.drawBorder = false
+    cursorBar.ignore     = true
+    cursorBar.visibility = 0
+
+    local lines    = {}
+    local lineObjs = {}   -- TextLabel per line
+    local LINE_H   = 18
+    local scrollY  = 0
+    local cursorLine = 1
+    local cursorCol  = 0
+    local blinkOn    = true
+    local blinkTimer = 0
+    local BLINK_RATE = 0.5
+    local focused    = false
+
+    viewport.OnChanged = updater:newConnection()
+    viewport.readOnly  = false
+
+    -- Split a string into lines
+    local function splitLines(s)
+        local result = {}
+        local pos = 1
+        while true do
+            local nl = s:find("\n", pos, true)
+            if nl then
+                result[#result + 1] = s:sub(pos, nl - 1)
+                pos = nl + 1
+            else
+                result[#result + 1] = s:sub(pos)
+                break
+            end
+        end
+        return result
+    end
+
+    -- Join lines back to a single string
+    local function joinLines()
+        return table.concat(lines, "\n")
+    end
+
+    -- Rebuild all line label objects
+    local function rebuildLabels()
+        for _, obj in ipairs(lineObjs) do
+            obj:destroy()
+        end
+        lineObjs = {}
+
+        for i, lineText in ipairs(lines) do
+            local lbl = content:newTextLabel(lineText, 0, (i-1)*LINE_H, 0, LINE_H, 0, 0, 1)
+            lbl.drawBorder = false
+            lbl.color      = {0, 0, 0, 0}
+            lbl.visibility = 0
+            lbl.textColor  = color.new("#222222")
+            lbl.align      = gui.ALIGN_LEFT
+            lbl.ignore     = true
+            lbl:setFont(13)
+            lineObjs[i] = lbl
+        end
+
+        -- Resize content frame to fit all lines
+        local totalH = #lines * LINE_H + 4
+        content:setDualDim(nil, nil, nil, totalH)
+    end
+
+    -- Apply vertical scroll so the cursor stays visible
+    local function applyScroll()
+        local _, _, _, vh = viewport:getAbsolutes()
+        local contentH = #lines * LINE_H + 4
+        local maxScroll = math.max(0, contentH - vh)
+        scrollY = math.max(0, math.min(scrollY, maxScroll))
+        content:rawSetDualDim(2, 2 - scrollY)
+    end
+
+    local function ensureCursorVisible()
+        local _, _, _, vh = viewport:getAbsolutes()
+        local cursorY = (cursorLine - 1) * LINE_H
+        if cursorY < scrollY then
+            scrollY = cursorY
+        elseif cursorY + LINE_H > scrollY + vh then
+            scrollY = cursorY + LINE_H - vh
+        end
+        applyScroll()
+    end
+
+    -- Update the cursor bar position
+    local function updateCursor()
+        if not focused then
+            cursorBar.visibility = 0
+            return
+        end
+        local ax, ay = viewport:getAbsolutes()
+        local lineText = lines[cursorLine] or ""
+        local font = love.graphics.newFont(13)
+        local cx = 2 + font:getWidth(lineText:sub(1, cursorCol))
+        local cy = 2 + (cursorLine - 1) * LINE_H - scrollY
+        cursorBar:rawSetDualDim(cx, cy, 1, LINE_H)
+        cursorBar.visibility = blinkOn and 1 or 0
+    end
+
+    local function setText(s)
+        lines = splitLines(s or "")
+        if #lines == 0 then lines = {""} end
+        rebuildLabels()
+        cursorLine = math.min(cursorLine, #lines)
+        cursorCol  = math.min(cursorCol, #lines[cursorLine])
+        applyScroll()
+        updateCursor()
+    end
+
+    function viewport:getText()
+        return joinLines()
+    end
+
+    function viewport:setText(s)
+        setText(s)
+        self.OnChanged:Fire(self, joinLines())
+    end
+
+    function viewport:appendLine(s)
+        lines[#lines + 1] = s
+        rebuildLabels()
+        applyScroll()
+    end
+
+    function viewport:scrollToBottom()
+        scrollY = math.huge
+        applyScroll()
+    end
+
+    -- Insert text at cursor
+    local function insertText(s)
+        if viewport.readOnly then return end
+        local line = lines[cursorLine] or ""
+        -- Handle newlines in inserted text
+        if s == "\n" then
+            local before = line:sub(1, cursorCol)
+            local after  = line:sub(cursorCol + 1)
+            lines[cursorLine] = before
+            table.insert(lines, cursorLine + 1, after)
+            cursorLine = cursorLine + 1
+            cursorCol  = 0
+        else
+            lines[cursorLine] = line:sub(1, cursorCol) .. s .. line:sub(cursorCol + 1)
+            cursorCol = cursorCol + #s
+        end
+        rebuildLabels()
+        ensureCursorVisible()
+        updateCursor()
+        viewport.OnChanged:Fire(viewport, joinLines())
+    end
+
+    local function deleteBack()
+        if viewport.readOnly then return end
+        if cursorCol > 0 then
+            local line = lines[cursorLine]
+            lines[cursorLine] = line:sub(1, cursorCol - 1) .. line:sub(cursorCol + 1)
+            cursorCol = cursorCol - 1
+        elseif cursorLine > 1 then
+            -- merge with previous line
+            local prevLine = lines[cursorLine - 1]
+            cursorCol = #prevLine
+            lines[cursorLine - 1] = prevLine .. lines[cursorLine]
+            table.remove(lines, cursorLine)
+            cursorLine = cursorLine - 1
+        end
+        rebuildLabels()
+        ensureCursorVisible()
+        updateCursor()
+        viewport.OnChanged:Fire(viewport, joinLines())
+    end
+
+    local function deleteForward()
+        if viewport.readOnly then return end
+        local line = lines[cursorLine]
+        if cursorCol < #line then
+            lines[cursorLine] = line:sub(1, cursorCol) .. line:sub(cursorCol + 2)
+        elseif cursorLine < #lines then
+            lines[cursorLine] = line .. lines[cursorLine + 1]
+            table.remove(lines, cursorLine + 1)
+        end
+        rebuildLabels()
+        updateCursor()
+        viewport.OnChanged:Fire(viewport, joinLines())
+    end
+
+    -- Mouse click to position cursor
+    viewport.OnPressed(function(self, mx, my)
+        focused = true
+        local _, vy = viewport:getAbsolutes()
+        local relY = my - vy + scrollY - 2
+        cursorLine = math.max(1, math.min(#lines, math.floor(relY / LINE_H) + 1))
+        local lineText = lines[cursorLine] or ""
+        local font     = love.graphics.newFont(13)
+        local _, vx    = viewport:getAbsolutes()
+        local relX     = mx - vx - 2
+        -- binary-search for cursor column
+        local col = 0
+        for i = 1, #lineText do
+            local w = font:getWidth(lineText:sub(1, i))
+            if w > relX then break end
+            col = i
+        end
+        cursorCol = col
+        updateCursor()
+    end)
+
+    viewport.OnPressedOuter(function()
+        focused = false
+        updateCursor()
+    end)
+
+    -- Keyboard input (only when focused)
+    local _textInputRef = gui.Events.OnTextInputed(function(t)
+        if not focused then return end
+        insertText(t)
+    end)
+
+    local _keyPressRef = gui.Events.OnKeyPressed(function(key)
+        if not focused then return end
+        if key == "return" or key == "kpenter" then
+            insertText("\n")
+        elseif key == "backspace" then
+            deleteBack()
+        elseif key == "delete" then
+            deleteForward()
+        elseif key == "up" then
+            cursorLine = math.max(1, cursorLine - 1)
+            cursorCol  = math.min(cursorCol, #(lines[cursorLine] or ""))
+            ensureCursorVisible(); updateCursor()
+        elseif key == "down" then
+            cursorLine = math.min(#lines, cursorLine + 1)
+            cursorCol  = math.min(cursorCol, #(lines[cursorLine] or ""))
+            ensureCursorVisible(); updateCursor()
+        elseif key == "left" then
+            if cursorCol > 0 then
+                cursorCol = cursorCol - 1
+            elseif cursorLine > 1 then
+                cursorLine = cursorLine - 1
+                cursorCol  = #lines[cursorLine]
+            end
+            ensureCursorVisible(); updateCursor()
+        elseif key == "right" then
+            local lineLen = #(lines[cursorLine] or "")
+            if cursorCol < lineLen then
+                cursorCol = cursorCol + 1
+            elseif cursorLine < #lines then
+                cursorLine = cursorLine + 1
+                cursorCol  = 0
+            end
+            ensureCursorVisible(); updateCursor()
+        elseif key == "home" then
+            cursorCol = 0; updateCursor()
+        elseif key == "end" then
+            cursorCol = #(lines[cursorLine] or ""); updateCursor()
+        end
+    end)
+
+    viewport.OnDestroy(function()
+        gui.Events.OnTextInputed:Unconnect(_textInputRef)
+        gui.Events.OnKeyPressed:Unconnect(_keyPressRef)
+    end)
+
+    -- Scroll wheel
+    viewport.OnWheelMoved(function(_, dy)
+        scrollY = scrollY - dy * 30
+        applyScroll()
+        updateCursor()
+    end)
+
+    -- Cursor blink
+    viewport:OnUpdate(function(self, dt)
+        blinkTimer = blinkTimer + dt
+        if blinkTimer >= BLINK_RATE then
+            blinkTimer = 0
+            blinkOn = not blinkOn
+            if focused then
+                cursorBar.visibility = blinkOn and 1 or 0
+            end
+        end
+    end)
+
+    setText(initialText or "")
+    return viewport
 end
 
 function gui:newTextButton(txt, x, y, w, h, sx, sy, sw, sh)
     local c = self:newTextBase(button, txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
-
-    c.OnEnter(function(c, x, y, dx, dy, istouch)
-        love.mouse.setCursor(cursor_hand)
-    end)
-
-    c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 function gui:newTextLabel(txt, x, y, w, h, sx, sy, sw, sh)
-    return self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+    local c = self:newTextBase(frame, txt, x, y, w, h, sx, sy, sw, sh)
+    gui.Events.OnCreated:Fire(c)
+    return c
 end
 
 -- local val used when drawing
@@ -1125,10 +1601,11 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c.doSelection = false
 
-    c.OnReturn = testVisual .. multi:newConnection()
+    c.OnReturn = updater:newConnection(false, testVisual)
 
     c.cur_pos = 0
     c.selection = {0, 0}
+    c.blink = true
 
     function c:getUniques()
         return gui.getUniques(c, {
@@ -1192,15 +1669,16 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     end)
 
     c.OnPressedOuter(function() c.bar_show = false end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 local function textBoxThread()
     updater:newThread("Textbox Handler", function()
+        local check = function() return object_focus:hasType(box) and object_focus.blink end
         while true do
             -- Do nothing if we aren't dealing with a textbox
-            thread.hold(function() return object_focus:hasType(box) end)
+            thread.hold(check)
             local ref = object_focus
             ref.bar_show = true
             thread.sleep(.5)
@@ -1247,10 +1725,6 @@ local function delete(obj, cmd)
         end
     end
 end
-
-gui.Events.OnObjectFocusChanged(function(prev, new)
-    --
-end)
 
 gui.HotKeys.OnSelectAll(function()
     if object_focus:hasType(box) then
@@ -1399,7 +1873,8 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
-        if i:match(".gif") then
+
+        if type(i) == "string" and i:match(".gif") then
             img = gif.load(i)
 
             gif.Updater(img, drawer)
@@ -1409,7 +1884,7 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
 
             IMAGE = i
             c.__isGif = true
-        else
+        elseif type(i) == "string" then
             img = love.image.newImageData(i)
             img = love.graphics.newImage(img)
             IMAGE = i
@@ -1458,6 +1933,7 @@ end
 function gui:newImageLabel(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
     c:setImage(source)
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1465,20 +1941,14 @@ function gui:newImageButton(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(frame, x, y, w, h, sx, sy, sw, sh)
     c:respectHierarchy(true)
     c:setImage(source)
-
-    c.OnEnter(function(c, x, y, dx, dy, istouch)
-        love.mouse.setCursor(cursor_hand)
-    end)
-
-    c.OnExit(function(c, x, y, dx, dy, istouch) love.mouse.setCursor() end)
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
 -- Video
 function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
     local c = self:newImageBase(video, x,  y, w, h, sx, sy, sw, sh)
-    c.OnVideoFinished = multi:newConnection()
+    c.OnVideoFinished = updater:newConnection()
     c.playing = false
 
     function c:setVideo(v)
@@ -1492,6 +1962,10 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
         c.videoHeigth = c.video:getHeight()
         c.videoWidth = c.video:getWidth()
         c.quad = love.graphics.newQuad(0, 0, w, h, c.videoWidth, c.videoHeigth)
+    end
+
+    function c:getDuration()
+        return c.audioLength
     end
 
     function c:getVideo() return self.video end
@@ -1521,17 +1995,19 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     function c:tell() return c.video:tell() end
 
-    c:newThread(function(self)
+    function c:isPlaying() return c.video:isPlaying() end
+
+    updater:newThread("Video Handler",function()
 
         local testCompletion = function() -- More intensive test
-            if self.video:tell() == 0 then
-                self.OnVideoFinished:Fire(self)
+            if c.video:tell() == 0 then
+                c.OnVideoFinished:Fire(c)
                 return true
             end
         end
 
         local isplaying = function() -- Less intensive test
-            return self.video:isPlaying()
+            return c.video:isPlaying()
         end
 
         while true do thread.chain(isplaying, testCompletion) end
@@ -1540,7 +2016,7 @@ function gui:newVideo(source, x, y, w, h, sx, sy, sw, sh)
 
     c.videoVisibility = 1
     c.videoColor = color.white
-
+    gui.Events.OnCreated:Fire(c)
     return c
 end
 
@@ -1548,7 +2024,7 @@ end
 
 -- local label, image, text, button, box, video, animation (spritesheet)
 local drawtypes = {
-    [0] = function(child, x, y, w, h) end,
+    [0] = function() end,
     [1] = function(child, x, y, w, h)
         if child.image then
             love.graphics.setColor(child.imageColor[1], child.imageColor[2], child.imageColor[3], child.imageVisibility)
@@ -1569,7 +2045,7 @@ local drawtypes = {
                     end
                 end
             else
-                if child.scaleX < 0 or child.scaleY < 0 then
+                if type(child.scaleX) == "number" and child.scaleX < 0 or type(child.scaleY) == "number" and child.scaleY < 0 then
                     local sx, sy = child.scaleX, child.scaleY
                     local adjustX, adjustY = child.scaleX * w, child.scaleY * h
                     if sx < 0 and sy < 0 then
@@ -1586,24 +2062,23 @@ local drawtypes = {
         end
     end,
     [2] = function(child, x, y, w, h)
-        love.graphics.setColor(child.textColor[1], child.textColor[2],
-                               child.textColor[3], child.textVisibility)
-        love.graphics.setFont(child.font)
-        if child.align == gui.ALIGN_LEFT then
-            child.adjust = 0
-        elseif child.align == gui.ALIGN_CENTER then
-            local fw = child.font:getWidth(child.text)
-            child.adjust = (w - fw) / 2
-        elseif child.align == gui.ALIGN_RIGHT then
-            local fw = child.font:getWidth(child.text)
-            child.adjust = w - fw - 4
-        end
         local mul = 1
         if (child.formFactor == gui.FORM_ARC) or (child.formFactor == gui.FORM_CIRCLE) then
             mul = 2
         end
+        if child.textScale then
+            child.font = font.set(child.font, math.floor(h*child.textScale))
+        end
+        if child.centerText then
+            local _, wrappedtext = child.font:getWrap(child.text, w*mul)
+            local fh = child.font:getHeight()
+            child.textOffsetY = (h-(fh*#wrappedtext))/2
+        end
+        love.graphics.setColor(child.textColor[1], child.textColor[2],
+                               child.textColor[3], child.textVisibility)
+        love.graphics.setFont(child.font)
         love.graphics.printf(child.text, child.adjust + x + child.textOffsetX,
-                             y + child.textOffsetY, w*mul, "left", child.rotation,
+                             y + child.textOffsetY, w*mul, ({[0]="center","left", "right", "justify"})[child.align], child.rotation,
                              child.textScaleX, child.textScaleY, 0, 0,
                              child.textShearingFactorX,
                              child.textShearingFactorY)
@@ -1690,7 +2165,13 @@ local draw_handler = function(child, no_draw, dt)
         end
     end
 
-    if child.shader and band(ctype, image) == 2 then
+    if child.shader then
+        if child.shader:hasUniform("size") then
+            child.shader:send("size", {w, h})
+        end
+        if child.shader:hasUniform("position") then
+            child.shader:send("position", {x, y})
+        end
         love.graphics.setShader(child.shader)
     end
 
@@ -1700,24 +2181,23 @@ local draw_handler = function(child, no_draw, dt)
     elseif type(roundness) == "string" then
         love.graphics.setScissor(x - 1, y - 2, w + 2, h + 3)
     end
+
     local drawB = child.drawBorder
-    -- Set color
+
+    love.graphics.setColor(bg[1], bg[2], bg[3], vis)
+    draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
+
     love.graphics.setLineStyle("smooth")
-    love.graphics.setLineWidth(3)
+    love.graphics.setLineWidth(1)
+
     if drawB then
         love.graphics.setColor(bbg[1], bbg[2], bbg[3], vis)
         draw_factor(child,"line", x, y, w, h, rx, ry, nil, nil, segments)
-        -- love.graphics.rectangle("line", x, y, w, h, rx, ry, segments)
-    end
-    love.graphics.setColor(bg[1], bg[2], bg[3], vis)
-    draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
-    --love.graphics.rectangle("fill", x, y, w, h, rx, ry, segments)
-    
-    if drawB then
         if roundness == "top" then
+            love.graphics.setColor(bg[1], bg[2], bg[3], vis)
             draw_factor(child,"fill", x, y + ry / 2, w, h - ry / 2 + 1)
             --love.graphics.rectangle("fill", x, y + ry / 2, w, h - ry / 2 + 1)
-            love.graphics.setLineStyle("rough")
+            love.graphics.setLineStyle("smooth")
             love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
             love.graphics.setLineWidth(1)
             love.graphics.line(x, y + ry, x, y + h + 1, x + 1 + w, y + h + 1,
@@ -1729,9 +2209,10 @@ local draw_handler = function(child, no_draw, dt)
             love.graphics.line(x - 1, y + ry / 2 + 2, x - 1, y + h + 2)
             love.graphics.line(x + w + 2, y + ry / 2 + 2, x + w + 2, y + h + 2)
         elseif roundness == "bottom" then
+            love.graphics.setColor(bg[1], bg[2], bg[3], vis)
             draw_factor(child,"fill", x, y, w, h - ry + 2)
             --love.graphics.rectangle("fill", x, y, w, h - ry + 2)
-            love.graphics.setLineStyle("rough")
+            love.graphics.setLineStyle("smooth")
             love.graphics.setColor(bbg[1], bbg[2], bbg[3], 1)
             love.graphics.setLineWidth(2)
             love.graphics.line(x - 1, y + ry + 1, x - 1, y - 1, x + w + 1, y - 1,
@@ -1765,33 +2246,128 @@ end
 
 gui.draw_handler = draw_handler
 
-drawer:newLoop(function(self, dt)
+local function has_blur_ancestor(child)
+    local parent = child.parent
+    while parent and parent ~= gui and parent ~= gui.virtual do
+        if parent.__blur then return parent end
+        parent = parent.parent
+    end
+    return nil
+end
+
+local function blur_draw(child, dt)
+    local x, y, w, h = child:getAbsolutes()
+    child.x = x
+    child.y = y
+    child.w = w
+    child.h = h
+
+    local b = child.__blur
+    local pw, ph = math.max(1, math.ceil(w)), math.max(1, math.ceil(h))
+
+    if not b.canvas1
+    or b.canvas1:getWidth()  ~= pw
+    or b.canvas1:getHeight() ~= ph then
+        b.canvas1 = love.graphics.newCanvas(pw, ph)
+        b.canvas2 = love.graphics.newCanvas(pw, ph)
+    end
+
+    local prevCanvas = love.graphics.getCanvas()
+    local prevShader = love.graphics.getShader()
+    local pr, pg, pb, pa = love.graphics.getColor()
+
+    -- -------------------------------------------------------
+    -- Pass 1: draw the object AND all its descendants onto canvas1
+    -- -------------------------------------------------------
+    love.graphics.setCanvas(b.canvas1)
+    love.graphics.setShader()
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setScissor()
+
+    -- Shift everything into canvas space by offsetting by -x, -y
+    love.graphics.push()
+    love.graphics.translate(-x, -y)
+
+    -- Draw the parent object itself
+    draw_handler(child, nil, dt)
+
+    -- Draw all descendants in order
+    local descendants = child:getAllChildren()
+    for i = 1, #descendants do
+        local desc = descendants[i]
+        -- Recalculate absolutes so positions are correct
+        local dx, dy, dw, dh = desc:getAbsolutes()
+        desc.x = dx
+        desc.y = dy
+        desc.w = dw
+        desc.h = dh
+        draw_handler(desc, nil, dt)
+    end
+
+    love.graphics.pop()
+
+    -- -------------------------------------------------------
+    -- Pass 2: horizontal blur canvas1 → canvas2
+    -- -------------------------------------------------------
+    b.shader_h:send("size",   {pw, ph})
+    b.shader_h:send("radius", b.radius)
+
+    love.graphics.setCanvas(b.canvas2)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setShader(b.shader_h)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(b.canvas1, 0, 0)
+
+    -- -------------------------------------------------------
+    -- Pass 3: vertical blur canvas2 → screen
+    -- -------------------------------------------------------
+    b.shader_v:send("size",   {pw, ph})
+    b.shader_v:send("radius", b.radius)
+
+    love.graphics.setCanvas(prevCanvas)
+    love.graphics.setShader(b.shader_v)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(b.canvas2, x, y)
+
+    -- Restore state
+    love.graphics.setShader(prevShader)
+    love.graphics.setColor(pr, pg, pb, pa)
+    love.graphics.setScissor()
+end
+
+local draw_loop = drawer:newLoop(function(self, dt)
     local children = gui:getAllChildren()
     for i = 1, #children do
         local child = children[i]
-        if child.effect then
+        -- Skip if this child belongs to a blur parent
+        -- (blur_draw handles drawing it during the canvas capture pass)
+        if has_blur_ancestor(child) then
+            -- update x/y/w/h so layout still works, but don't draw
+            local x, y, w, h = child:getAbsolutes()
+            child.x = x
+            child.y = y
+            child.w = w
+            child.h = h
+        elseif child.__blur then
+            blur_draw(child, dt)
+        elseif child.effect then
             child.effect(function() draw_handler(child, nil, dt) end)
         else
-            draw_handler(child,nil,dt)
+            draw_handler(child, nil, dt)
         end
     end
-    first_loop = true
     love.graphics.setColor(1, 1, 1, 1)
 end)
+draw_loop:setName("GUI Draw Handler")
 
-drawer:newThread(function()
+drawer:newThread("Draw Handler",function()
     while true do
-        thread.sleep(.01)
+        thread.sleep(.1)
         local children = gui.virtual:getAllChildren()
         for i = 1, #children do
             local child = children[i]
-            if child.effect then
-                child.effect(function() draw_handler(child, true, 0) end)
-            else
-                draw_handler(child, true, 0)
-            end
+            draw_handler(child, true, 0)
         end
-        first_loop = true
     end
 end)
 
@@ -1808,7 +2384,7 @@ gui.update = function(dt)
 end
 
 function gui:newProcessor(name)
-    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(8), true)
+    local proc = multi:newProcessor(name or "UnNamedProcess_"..multi.randomString(4), true)
     table.insert(processors, proc.run)
     return proc
 end
@@ -1822,6 +2398,7 @@ gui.virtual.y = 0
 setmetatable(gui.virtual, gui)
 
 local w, h = love.graphics.getDimensions()
+
 gui.virtual.dualDim.offset.size.x = w
 gui.virtual.dualDim.offset.size.y = h
 gui.virtual.w = w
@@ -1854,7 +2431,6 @@ function gui:GetSizeAdjustedToAspectRatio(dWidth, dHeight)
         newWidth = dHeight * self.g_width  / self.g_height
         newHeight = dHeight
     end
-
     return newWidth, newHeight, (dWidth-newWidth)/2, (dHeight-newHeight)/2
 end
 
@@ -1868,33 +2444,51 @@ function gui:setAspectSize(w, h)
     end
 end
 
-gui.Events.OnResized(function(w, h)
-    if gui.aspect_ratio then
-        local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
-        gui.x = xt
-        gui.y = yt
-        gui.dualDim.offset.size.x = nw
-        gui.dualDim.offset.size.y = nh
-        gui.w = nw
-        gui.h = nh
+updater:newThread(function()
+    while true do
+        thread.yield()
+        local w, h = love.graphics.getDimensions()
+        if gui.aspect_ratio then
+            local nw, nh, xt, yt = gui:GetSizeAdjustedToAspectRatio(w, h)
+            gui.x = xt
+            gui.y = yt
+            gui.dualDim.offset.size.x = nw
+            gui.dualDim.offset.size.y = nh
+            gui.w = nw
+            gui.h = nh
 
-        gui.virtual.x = xt
-        gui.virtual.y = yt
-        gui.virtual.dualDim.offset.size.x = nw
-        gui.virtual.dualDim.offset.size.y = nh
-        gui.virtual.w = nw
-        gui.virtual.h = nh
-    else
-        gui.dualDim.offset.size.x = w
-        gui.dualDim.offset.size.y = h
-        gui.w = w
-        gui.h = h
+            gui.virtual.x = xt
+            gui.virtual.y = yt
+            gui.virtual.dualDim.offset.size.x = nw
+            gui.virtual.dualDim.offset.size.y = nh
+            gui.virtual.w = nw
+            gui.virtual.h = nh
+        else
+            gui.dualDim.offset.size.x = w
+            gui.dualDim.offset.size.y = h
+            gui.w = w
+            gui.h = h
 
-        gui.virtual.dualDim.offset.size.x = w
-        gui.virtual.dualDim.offset.size.y = h
-        gui.virtual.w = w
-        gui.virtual.h = h
+            gui.virtual.dualDim.offset.size.x = w
+            gui.virtual.dualDim.offset.size.y = h
+            gui.virtual.w = w
+            gui.virtual.h = h
+        end
     end
 end)
+
+-- start global updater
+updater:newThread(function()
+    while true do
+        thread.skip(5)
+        gui.Events.OnUpdate.Fire()
+    end
+end)
+
+-- load shaders
+files = love.filesystem.getDirectoryItems("gui/shaders")
+for i,v in pairs(files) do
+    require("gui.shaders."..v:sub(1,-5)).init(gui)
+end
 
 return gui

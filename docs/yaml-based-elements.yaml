@@ -1,0 +1,186 @@
+# ── Full GUI YAML reference ─────────────────────────────────────────
+
+# Every element shares these fields:
+type: frame          # frame | virtual-frame | visual-frame |
+                     # label | button | textbox |
+                     # image | image-button | video
+
+# ── Position & size (dual-dimension system) ─────────────────────────
+# Offset (pixels):
+x: 10
+y: 10
+w: 200
+h: 50
+# Or as lists:
+pos:  [10, 10]
+size: [200, 50]
+
+# Scale (0.0–1.0 of parent):
+sx: 0.0     # scale pos x
+sy: 0.0     # scale pos y
+sw: 0.5     # scale size x — 50% of parent width
+sh: 1.0     # scale size y — 100% of parent height
+# Or as lists:
+scale-pos:  [0.0, 0.0]
+scale-size: [0.5, 1.0]
+
+# Shorthand for "fill parent completely":
+full-frame: true
+
+# ── Appearance ───────────────────────────────────────────────────────
+color:        "#3a7bd5"           # hex string
+color:        [58, 123, 213]      # RGB 0-255
+color:        [0.23, 0.48, 0.84]  # RGB 0-1
+border-color: "#000000"
+draw-border:  true
+visible:      true
+active:       true
+visibility:   1.0    # 0.0–1.0 alpha for the background rect
+rotation:     45     # degrees
+
+# ── Form factor ──────────────────────────────────────────────────────
+form: rectangle    # default — no extra fields needed
+form: circle
+  radius: 40       # optional; derived from w if omitted
+  segments: 32
+
+form: arc
+  radius: 60
+  arc-type: open   # open | closed | pie
+  angle-start: 0
+  angle-end: 3.14159
+  segments: 32
+
+# ── Roundness ────────────────────────────────────────────────────────
+roundness: 8                      # uniform rx/ry
+roundness: [8, 8, 30]             # rx, ry, segments
+roundness: top                    # "top" or "bottom" special mode
+roundness:
+  side: top                       # full table form
+
+# ── Tags ─────────────────────────────────────────────────────────────
+tag: "my-element"      # single fast-lookup tag (gui:tag)
+tags:                  # multi-tag (gui:setTag)
+  - draggable-panel
+  - visual
+
+# ── Stack order ──────────────────────────────────────────────────────
+stack: top      # bring to front
+stack: bottom   # send to back
+
+# ── Centering ────────────────────────────────────────────────────────
+center-x: true   # horizontally center within parent
+center-y: true   # vertically center within parent
+
+# ── Dragging ─────────────────────────────────────────────────────────
+draggable: 1    # mouse button (1=primary, 2=secondary, 3=middle)
+                # false/omit to disable
+
+# ── Hierarchy & clipping ─────────────────────────────────────────────
+respect-hierarchy: true    # blocks presses when covered by sibling
+clip-descendants:  true    # scissor-clips all children to this rect
+
+# ── Square locking ───────────────────────────────────────────────────
+square: w    # force height = width
+square: h    # force width = height
+
+# ── Text element fields (label, button, textbox) ─────────────────────
+text:  "Hello, world!"
+align: left      # left | center | right
+text-color: "#ffffff"
+text-visibility: 1.0
+text-scale:  [1.0, 1.0]    # [scaleX, scaleY]
+text-offset: [0, 0]        # [offsetX, offsetY]
+text-shear:  [0, 0]        # [shearX, shearY]
+
+font: 16                            # size, uses default font
+font: "fonts/Roboto-Regular.ttf"    # path, uses font-size below
+font-size: 18
+font:
+  file: "fonts/Roboto-Regular.ttf"
+  size: 18
+
+fit-font: true               # auto-fit font to element bounds
+fit-font:
+  min: 8
+  max: 200
+  scale: 0.95                # shrink slightly from computed best
+
+center-font: true            # vertically center glyphs in box
+center-font: 10              # with y_offset
+
+# ── Image element fields (image, image-button) ───────────────────────
+source: "assets/logo.png"
+tile: [0, 0, 64, 64]          # sub-quad [x, y, w, h]
+scale-x: 1.0
+scale-y: 1.0
+flip: horizontal               # horizontal | vertical | both
+image-color: "#ffffff"
+image-visibility: 1.0
+
+# Gradient (replaces solid image with a generated gradient image):
+gradient:
+  direction: vertical          # vertical | horizontal
+  colors:
+    - [255, 80,  80,  255]
+    - [80,  80,  255, 255]
+
+# ── Video element fields ──────────────────────────────────────────────
+source: "assets/intro.ogv"
+volume: 0.8
+autoplay: true
+video-color: "#ffffff"
+video-visibility: 1.0
+
+# ── Events ───────────────────────────────────────────────────────────
+# Value can be a global function name (string) or inline Lua source.
+
+on-pressed:          "myPressHandler"
+on-released:         "myReleaseHandler"
+on-released-outer:   "myOuterRelease"
+on-pressed-outer:    "myOuterPress"
+on-enter:            "onHoverEnter"
+on-exit:             "onHoverExit"
+on-moved:            "onMouseMoved"
+on-drag-start:       "onDragStart"
+on-dragging:         "onDragging"
+on-drag-end:         "onDragEnd"
+on-wheel:            "onWheel"
+on-size-changed:     "onResized"
+on-position-changed: "onMoved"
+on-destroy:          "onDestroy"
+on-load:             "onLoaded"
+on-return:           "onSubmit"        # textbox only
+on-update:           "onUpdate"        # called every frame
+
+# Inline Lua (multi-line string):
+on-pressed: |
+  print("pressed!", self.text)
+
+# Per-element hotkeys:
+hotkeys:
+  - keys: [lctrl, s]
+    action: "saveDocument"
+  - keys: [escape]
+    action: "closeDialog"
+
+# ── Children ─────────────────────────────────────────────────────────
+children:
+  - type: label
+    text: "I am a child"
+    x: 10
+    y: 10
+    w: 180
+    h: 30
+    color: "#2a2a2a"
+    text-color: "#ffffff"
+    align: center
+
+  - type: button
+    text: "Click me"
+    x: 10
+    y: 50
+    w: 100
+    h: 36
+    on-pressed: "handleClick"
+    children: []   # buttons can also have children
