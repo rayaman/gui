@@ -127,6 +127,14 @@ local function parseColor(r, g, b, a)
 		elseif r:sub(1,3) == "hsl" then
 			local sh,ss,sl = r:match("hsl%((%d-),(%d-),(%d-)%)")
 			r,g,b,a = color.hsl(tonumber(sh), tonumber(ss), tonumber(sl))
+		elseif r:sub(1,5) == "oklab" then
+			local sl,sa,sb = r:match("oklab%(([+-]?%d*%.?%d+),([+-]?%d*%.?%d+),([+-]?%d*%.?%d+)%)")
+			r,g,b = color.oklab(tonumber(sl), tonumber(sa), tonumber(sb))
+		elseif r:sub(1,5) == "oklch" then
+			local sl,sc,sh = r:match("oklch%(([+-]?%d*%.?%d+),([+-]?%d*%.?%d+),([+-]?%d*%.?%d+)%)")
+			local rad = math.rad(tonumber(sh))
+			r,g,b = color.oklab(tonumber(sl), tonumber(sc)*math.cos(rad), tonumber(sc)*math.sin(rad))
+            print(r,g,b)
 		elseif r:sub(1,5) == "rgb01" then
 			local sr,sg,sb = r:match("rgb01%((%d*%.?%d+),(%d*%.?%d+),(%d*%.?%d+)%)")
 			r,g,b = tonumber(sr),tonumber(sg),tonumber(sb)
@@ -194,6 +202,66 @@ end
 function color.hueShift(c, dh, s, l)
 	local h, refS, refL = color.rgbToHsl(c)
 	return color.hsl((h + dh) % 360, s or refS, l or refL)
+end
+
+-- Oklab / Oklch -------------------------------------------------------------------
+-- Perceptually uniform color space by Björn Ottosson (https://bottosson.github.io/posts/oklab/).
+-- Conventions follow the reference implementation: L is 0-1, a/b and C are roughly
+-- -0.4..0.4, and oklch hue uses the standard degrees wheel (red ~29°, green ~144°,
+-- blue ~265°). Unlike this file's HSL, the Oklab hue circle is NOT mirrored.
+
+local function srgbToLinear(c)
+	if c <= 0.04045 then return c / 12.92 end
+	return ((c + 0.055) / 1.055) ^ 2.4
+end
+
+local function linearToSrgb(c)
+	if c <= 0.0031308 then return 12.92 * c end
+	return 1.055 * c ^ (1 / 2.4) - 0.055
+end
+
+local function cbrt(x)
+	if x < 0 then return -((-x) ^ (1 / 3)) end
+	return x ^ (1 / 3)
+end
+
+-- Converts any supported color (hex string, "rgb(...)", "hsl(...)", table, or r,g,b
+-- floats in 0-1) to Oklab. Returns L (0-1), a, b.
+function color.rgbToOklab(r, g, b)
+	if type(r) == "string" or type(r) == "table" then
+		r, g, b = parseColor(r)
+	end
+	local lr, lg, lb = srgbToLinear(r), srgbToLinear(g), srgbToLinear(b)
+	local l = cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb)
+	local m = cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb)
+	local s = cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb)
+	return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+		1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+		0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+end
+
+-- Oklab -> sRGB. Takes L 0-1 and a/b roughly -0.4..0.4; returns r,g,b in 0-1 clamped
+-- to the sRGB gamut. Named after the space it consumes, mirroring color.hsl.
+function color.oklab(L, a, b)
+	local l = (L + 0.3963377774 * a + 0.2158037573 * b) ^ 3
+	local m = (L - 0.1055613458 * a - 0.0638541728 * b) ^ 3
+	local s = (L - 0.0894841775 * a - 1.2914855480 * b) ^ 3
+	local r = linearToSrgb(4.0767416621 * l - 3.3077115904 * m + 0.2309699292 * s)
+	local g = linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
+	local bl = linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+	return min(max(r, 0), 1), min(max(g, 0), 1), min(max(bl, 0), 1)
+end
+
+-- Polar Oklab -> sRGB: L 0-1, C roughly 0..0.4, h in degrees on the standard wheel.
+function color.oklch(L, C, h)
+	local rad = math.rad(h)
+	return color.oklab(L, C * math.cos(rad), C * math.sin(rad))
+end
+
+-- Returns L (0-1), C (roughly 0..0.4), h (0-360).
+function color.rgbToOklch(r, g, b)
+	local L, a, bl = color.rgbToOklab(r, g, b)
+	return L, math.sqrt(a * a + bl * bl), math.deg(math.atan2(bl, a)) % 360
 end
 
 -- Standalone color constructor. Palettes already expose this as palette.new; this makes the
