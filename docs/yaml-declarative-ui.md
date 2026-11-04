@@ -37,7 +37,7 @@ The full annotated example lives in
 
 ## 1. Element types
 
-`type:` selects the constructor ([`builders` table, builder.lua L319](../yaml/builder.lua:319)):
+`type:` selects the constructor ([`builders` table, builder.lua L363](../yaml/builder.lua:363)):
 
 | `type` | Constructor |
 |---|---|
@@ -52,7 +52,7 @@ The full annotated example lives in
 | `video` | `newVideo` |
 
 Unknown types error loudly. `children:` is a list; each entry recurses through the same
-builder ([`build`, L362](../yaml/builder.lua:362)).
+builder ([`build`, L406](../yaml/builder.lua:406)).
 
 ---
 
@@ -86,7 +86,7 @@ Semantics identical to the [layout system](layout-system.md).
 
 ## 3. Shared & type-specific properties
 
-### Shared (every type) — [`applyShared`, L51](../yaml/builder.lua:51)
+### Shared (every type) — [`applyShared`, L65](../yaml/builder.lua:65)
 
 ```yaml
 color:        "#3a7bd5"          # hex string, or [r,g,b] 0-255 / 0-1, or {r,g,b,a}
@@ -113,7 +113,7 @@ effect: myEffectFn              # function name (resolved in env/_G)
 shader: myShader                # name lookup; userdata passes through
 ```
 
-### Text types (`label`, `button`, `textbox`) — [`applyTextProps`, L216](../yaml/builder.lua:216)
+### Text types (`label`, `button`, `textbox`) — [`applyTextProps`, L260](../yaml/builder.lua:260)
 
 ```yaml
 text: "Hello, world!"
@@ -131,7 +131,7 @@ fit-font: true                  # or {min: 8, max: 200, scale: 0.95}
 center-font: true               # or numeric offset
 ```
 
-### Image types (`image`, `image-button`) — [`applyImageProps`, L269](../yaml/builder.lua:269)
+### Image types (`image`, `image-button`) — [`applyImageProps`, L313](../yaml/builder.lua:313)
 
 ```yaml
 source: "assets/logo.png"
@@ -146,7 +146,7 @@ gradient:
   colors: [[255,80,80,255], [80,80,255,255]]
 ```
 
-### Video — [`applyVideoProps`, L305](../yaml/builder.lua:305)
+### Video — [`applyVideoProps`, L349](../yaml/builder.lua:349)
 
 ```yaml
 source: "assets/intro.ogv"
@@ -156,11 +156,68 @@ video-color: "#ffffff"
 video-visibility: 1.0
 ```
 
+### Flex layout — [`flex:` / `sizing:` keys, L168](../yaml/builder.lua:168)
+
+Opt-in flexbox (see [flexbox.md](flexbox.md)); maps 1:1 onto `setFlex` /
+`setSizing`. **Additive:** definitions without these keys behave exactly as
+before.
+
+```yaml
+flex:                        # or `flex: true` for all defaults
+  direction: column          # row (default) | column
+  gap: 4                     # px between children
+  padding: 12                # number, {l:,r:,t:,b:}, or [l, r, t, b]
+  alignX: center             # start (default) | center | end
+  alignY: end
+sizing:                      # child sizing (any element type)
+  width: grow                # "grow" | "fit" | "percent" | "fixed" | 200 (fixed px)
+  height: { mode: fixed, value: 30, min: 10, max: 100 }
+  aspectRatio: 2             # optional
+```
+
+Shorthands mirror `setSizing`: a bare number is fixed pixels;
+`{mode: percent, value: 0.5}` for fractions (0–1). tinyyaml's flow style
+(`{a: 1}`) yields numbers as strings — the builder coerces numeric strings
+inside `flex:`/`sizing:` tables before validation
+([`coerceNumericStrings`, L53](../yaml/builder.lua:53)). Invalid keys raise a
+Lua error naming the element, same as the imperative API.
+
+### Grid layout — [`grid:` / `grid-placement:` keys, L198](../yaml/builder.lua:198)
+
+Opt-in CSS-Grid-style layout (see [grid.md](grid.md)); maps 1:1 onto
+`setGrid` / `setGridPlacement`. **Additive:** definitions without these keys
+behave exactly as before. A container is `flex:` *or* `grid:`, never both.
+
+```yaml
+grid:                        # or `grid: true` for all defaults
+  columns: "1fr 200px repeat(2, minmax(100px, 1fr)) auto"   # CSS track grammar verbatim
+  rows: ["40px", "auto"]     # or a list of tokens
+  areas: ["header header", "side main"]                     # row strings, "." = empty cell
+  gap: 10                    # number, or { row: 8, column: 12 }
+  autoFlow: row              # row (default) | column
+  dense: true
+  justifyItems: center       # start | end | center | stretch (default stretch)
+  alignItems: stretch
+  justifyContent: space-between   # start | end | center | space-between | space-around | space-evenly
+  alignContent: start
+grid-placement:              # item placement (any element inside a grid container)
+  column: "1 / 3"            # also "span 2", "2", "-1 / -1", "areaName", "areaA / areaB", or 2
+  row: "span 2"
+  justifySelf: end           # start | end | center | stretch
+  alignSelf: center
+  placeSelf: "center end"    # "v h" shorthand
+```
+
+CSS grammar strings pass through untouched (coercion no-ops on `"1fr"`,
+`"span 2"`, `"1 / 3"`); a bare numeric line (`column: 2`) coerces to the
+number `2`, which the placement grammar accepts. Same loud validation as the
+imperative API.
+
 ---
 
 ## 4. Events & hotkeys
 
-[`applyEvents`, L155](../yaml/builder.lua:155) maps YAML keys to connections:
+[`applyEvents`, L199](../yaml/builder.lua:199) maps YAML keys to connections:
 
 | YAML key | Connection |
 |---|---|

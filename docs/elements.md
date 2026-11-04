@@ -342,6 +342,10 @@ Inherited by every element. (Full one-liner tables in
 `setDualDim`, `rawSetDualDim`, `getDualDim`, `getAbsolutes`, `move`, `size`,
 `moveInBounds`, `fullFrame`, `centerX/centerY`, `makeCircle`, `makeArc`,
 `getLocalCords(mx,my)` → mouse coords relative to the element.
+`setFlex{...}` / `setSizing{...}` opt an element into the opt-in flex
+auto-layout (containers / children); manual `setDualDim`/`move`/`size` on a
+flex-managed child escapes it back to plain dualDim — see
+[flexbox.md](flexbox.md).
 
 ### Tree
 `getChildren`, `getAllChildren` (visible, depth-first flat list), `isDescendantOf`,

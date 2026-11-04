@@ -90,6 +90,10 @@ Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
 | `intersecpt(x,y,w,h)` | overlap rect with another box |
 | `getLocalCords(mx,my)` | → mouse coords local to element |
 | `obj.square = "w"/"h"` | lock square aspect |
+| `setFlex{direction,gap,padding,alignX,alignY}` / `setFlex(false)` | opt into flex layout (container) — [flexbox](flexbox.md) |
+| `setSizing{width,height,aspectRatio}` / `setSizing(false)` | flex child sizing / permanent escape — [flexbox §3](flexbox.md#3-setsizing--child-sizing) |
+| `setGrid{columns,rows,areas,gap,autoFlow,dense,justifyItems,alignItems,justifyContent,alignContent,placeItems,placeContent,placeSelf}` / `setGrid(false)` | opt into grid layout (container) — [grid](grid.md) |
+| `setGridPlacement{column,row,justifySelf,alignSelf,placeSelf}` / `setGridPlacement(false)` | grid item placement / back to auto — [grid §4](grid.md#4-setgridplacement--item-placement) |
 
 ### Tree & lifecycle
 
@@ -185,6 +189,9 @@ textarea) · `OnSelectionChanged` (radio) · `OnProgressUpdated` (progress bar) 
 | [`core/menus`](../core/menus.lua) | `registerMenu`, `getMenu`, `init`, `hideMenus`, `getCurrentMenu`, `:visible` | [§5](core-modules.md#5-menus--menu-registry) |
 | [`core/simulate`](../core/simulate.lua) | `Press`, `Release`, `Click`, `Move` | [§6](core-modules.md#6-simulate--synthetic-input) |
 | [`core/probe`](../core/probe.lua) | `install(multi, opts)` → `multi:getLoad()`, `:getSchedulerLag()` | [§7](core-modules.md#7-probe--scheduler-load) |
+| [`core/flexbox`](../core/flexbox.lua) | auto-layout engine: `setFlex`/`setSizing` (on elements), `runPass`, `markDirty`, `sizeManaged`, `stats`, `debugVerifySubtree` | [flexbox](flexbox.md) |
+| [`core/grid`](../core/grid.lua) | grid root mode on the flex scheduler: `setGrid`/`setGridPlacement` (on elements via `flexbox.init`), `layoutGridRoot`, `intrinsic` | [grid](grid.md) |
+| [`core/measure`](../core/measure.lua) | `get(text, font, width, opts)`, `natural`, `beginPass`, `invalidate` — cached text measurement for the flex pass | [flexbox §4](flexbox.md#4-measured-text-fit-content) |
 | [`yaml/builder`](../yaml/builder.lua) | `build`, `buildMany`, `fromString` | [yaml doc](yaml-declarative-ui.md) |
 | [`yaml/toyaml`](../yaml/toyaml.lua) | `guiToYaml(obj, opts)` | [yaml §6](yaml-declarative-ui.md#6-serializer-toyaml) |
 | [`shaders/shaders`](../shaders/shaders.lua) | `gui.SHADERS.*`, `gui.NewShader`, `GetShaderUniforms` | [shaders §9](appearance-and-shaders.md#9-shader-library-reference) |

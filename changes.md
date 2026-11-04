@@ -1,1 +1,23 @@
-# 
+#
+
+## Opt-in CSS Grid layout (2026-10-25, Phases P1–P5)
+
+New opt-in CSS-Grid-style layout riding the flexbox scheduler, fully backwards compatible — elements that never call it are untouched, and flex-only trees observe byte-identical behavior.
+
+- **Core:** [`core/grid.lua`](core/grid.lua:1) implements the grid root pass — track-list/areas/placement parsers (parsed once at `setGrid` time), placement engine (explicit/negative lines, spans, areas, auto-flow row|column, dense, implicit tracks), track sizing (`px`/`auto`/`min-content`/`minmax`/`fr` + gaps), content + item alignment, Pass-B text wrap + auto-row re-solve, and `grid.intrinsic` for the cross-mode fit contribution.
+- **Generalized scheduler:** [`core/flexbox.lua`](core/flexbox.lua:1) — `isFlexRoot`/`markDirty`/lifecycle hooks/root dispatch generalized to `(e.__flex or e.__grid)`, `writeBack`/`fireGeometryEvents` extracted as shared helpers (byte-identical behavior), `seedAxis`/`propagateUp` consume `grid.intrinsic`, `sizeManaged`/`debugVerifySubtree` accept grid roots; `flexbox.init` installs `gui.setGrid`/`gui.setGridPlacement` via a lazy nil-guarded require, so deleting `core/grid.lua` leaves grid inert with flex fully working. Cross-mode nesting (grid-in-flex, flex-in-grid, grid-in-grid) falls out of the depth-ordered root model.
+- **API:** [`setGrid`](core/grid.lua:413) configures a container (columns/rows grammar, areas, gap, autoFlow, dense, `*-items`/`*-content` alignment, `place-*` shorthands); [`setGridPlacement`](core/grid.lua:531) places an item (`"1 / 3"`, `"span 2"`, negative lines, area names) + `justifySelf`/`alignSelf`/`placeSelf`; `setGrid(false)`/`setGridPlacement(false)` remove. Items reuse `setSizing` — default stretch fills the grid area (CSS default; `fit` opts into natural size).
+- **YAML:** [`yaml/builder.lua`](yaml/builder.lua:198) accepts `grid:` and `grid-placement:` keys on declarative elements (CSS grammar strings pass through coercion untouched).
+- **Demo/tests:** [`examples/grid-demo/`](examples/grid-demo/main.lua:1) runs a headless autotest (`love.exe examples/grid-demo --grid-autotest`) over the plan §6 scenario matrix — 79 checks, 0 failures; the unedited flex-demo remains the existing-behavior regression proof (78 checks, 0 failures).
+- **Docs:** [`docs/grid.md`](docs/grid.md:1) (user guide incl. Limitations vs CSS), cross-refs in [`docs/layout-system.md`](docs/layout-system.md:1), [`docs/flexbox.md`](docs/flexbox.md:1), [`docs/api-quick-reference.md`](docs/api-quick-reference.md:1), [`docs/yaml-declarative-ui.md`](docs/yaml-declarative-ui.md:1), [`docs/yaml-based-elements.yaml`](docs/yaml-based-elements.yaml:1); plan at [`plans/grid-integration-plan.md`](plans/grid-integration-plan.md:1).
+
+## Opt-in flexbox layout system (Phases 1–6)
+
+New opt-in flexbox layout for the GUI, fully backwards compatible — elements that never call it are untouched.
+
+- **Core:** [`core/flexbox.lua`](core/flexbox.lua:1) implements the layout pass (row/column, percent widths, grow/shrink, min/max clamps, wrap, aspect ratio, alignment, floating children, dirty-gated re-layout, re-entrancy-safe `runPass`); [`core/measure.lua`](core/measure.lua:1) is a cached text-measure service backing fit-content sizing.
+- **API:** [`setFlex`](core/flexbox.lua:1159) configures a container's flex properties; [`setSizing`](core/flexbox.lua:1160) opts an element into (or out of) size management. Managed elements get dualDim write-back (offset + size), so all existing positioning/collision/scroll logic keeps working; manual geometry calls (`move`/`size`/`setDualDim`) escape the element to floating.
+- **Hooks:** [`init.lua`](init.lua:7) loads the module via `pcall` and nil-guards every hook site (manual-geometry escape hatch, parent/child/destroy dirtying, draw-loop pre-pass, virtual refresh, late injection) — a missing module leaves the GUI byte-identical to before.
+- **YAML:** [`yaml/builder.lua`](yaml/builder.lua:1) accepts `flex:` and `sizing:` keys on declarative elements; scroll containers auto-fit content height (`fit-content`, `maxScrollY` derived, no manual `setContentSize`).
+- **Demo/tests:** [`examples/flex-demo/`](examples/flex-demo/main.lua:1) runs a headless autotest (`love.exe examples/flex-demo --flex-autotest`) covering all phases — 81 checks, 0 failures.
+- **Docs:** [`docs/flexbox.md`](docs/flexbox.md:1) (user guide) and [`docs/flexbox-integration-plan.md`](docs/flexbox-integration-plan.md:1) (design/plan).
