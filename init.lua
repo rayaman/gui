@@ -4,6 +4,8 @@ local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.core.color").newPalette("$gui.core.init")
 local gif   = require("gui.core.gifloader")
+local ok_flex, flexbox = pcall(require, "gui.core.flexbox") -- nil if absent; all hooks nil-guarded
+if not ok_flex then flexbox = nil end
 local gui = {}
 local updater = multi:newProcessor("UpdateManager", true)
 local drawer = multi:newProcessor("DrawManager", true)
@@ -297,12 +299,14 @@ self.dualDim = self:newDualDim(
 ]]
 
 function gui:move(x, y)
+    if flexbox then flexbox.onManualGeometry(self) end -- flex escape hatch
     self.dualDim.offsetX = self.dualDim.offsetX + x
     self.dualDim.offsetY = self.dualDim.offsetY + y
     self.OnPositionChanged:Fire(self, x, y)
 end
 
 function gui:size(x,y)
+    if flexbox then flexbox.onManualGeometry(self) end -- flex escape hatch
     self.dualDim.offsetW = self.dualDim.offsetW + x
     self.dualDim.offsetH = self.dualDim.offsetH + y
     self.OnSizeChanged:Fire(self, x, y)
@@ -410,11 +414,13 @@ function gui:newThread(func)
 end
 
 function gui:setDualDim(x, y, w, h, sx, sy, sw, sh)
+    if flexbox then flexbox.onManualGeometry(self) end -- flex escape hatch
     self:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
     self.OnSizeChanged:Fire(self, x, y, w, h, sx, sy, sw, sh)
 end
 
 function gui:rawSetDualDim(x, y, w, h, sx, sy, sw, sh)
+    if flexbox then flexbox.onManualGeometry(self) end -- flex escape hatch (guarded during write-back)
     local dd = self.dualDim
     self.dualDim = self:newDualDim(
         x or dd.offsetX,
@@ -493,11 +499,12 @@ function gui:isBeingCovered(mx, my, respect)
 end
 
 function gui:getLocalCords(mx, my)
-    x, y, w, h = self:getAbsolutes()
+    local x, y, w, h = self:getAbsolutes()
     return mx - x, my - y
 end
 
 function gui:setParent(parent)
+    if flexbox then flexbox.onChildRemoved(self) end -- old parent dirty
     local temp = self.parent:getChildren()
     for i = 1, #temp do
         if temp[i] == self then
@@ -508,6 +515,7 @@ function gui:setParent(parent)
     if parent then
         table.insert(parent.children, self)
         self.parent = parent
+        if flexbox then flexbox.onParentSet(self) end -- new parent dirty
     end
 end
 
@@ -713,6 +721,7 @@ function gui:destroy()
     if not foundIdx then return end
 
     -- Fire OnDestroy before teardown so listeners still work during the callback
+    if flexbox then flexbox.onChildRemoved(self) end -- flex: parent dirty
     self.OnDestroy:Fire(self)
 
     -- Recursively destroy all children first
@@ -1094,12 +1103,15 @@ function gui:newBase(typ, x, y, w, h, sx, sy, sw, sh, virtual)
         c.parent = self
         table.insert(self.children, c)
     end
+    if flexbox then flexbox.onChildAdded(c.parent, c) end -- flex: parent dirty
 
     local a = 0
 
     if typ == frame then
         gui.Events.OnCreated:Fire(c) -- Trigger frame types instantly
     end
+
+    c.debug = debug.traceback()
 
     gui:extend(c, typ)
 
@@ -2140,6 +2152,10 @@ local drawtypes = {
             local fh = child.font:getHeight()
             child.textOffsetY = (h-(fh*#wrappedtext))/2
         end
+        if child.textColor == nil then
+            print("'"..child.text.."'")
+            os.exit()
+        end
         love.graphics.setColor(child.textColor[1], child.textColor[2],
                                child.textColor[3], child.textVisibility)
         love.graphics.setFont(child.font)
@@ -2253,7 +2269,9 @@ local draw_handler = function(child, no_draw, dt)
     end
 
     local drawB = child.drawBorder
-
+    if bg == nil then
+        print(child.debug)
+    end
     love.graphics.setColor(bg[1], bg[2], bg[3], vis)
     draw_factor(child,"fill", x, y, w, h, rx, ry, nil, nil, segments)
 
@@ -2406,6 +2424,10 @@ local function blur_draw(child, dt)
 end
 
 local draw_loop = drawer:newLoop(function(self, dt)
+    if flexbox then
+        flexbox.runPass(gui)          -- flex layout pre-pass before parent-first draw caching
+        flexbox.runPass(gui.virtual)
+    end
     local children = gui:getAllChildren()
     for i = 1, #children do
         local child = children[i]
@@ -2433,6 +2455,7 @@ draw_loop:setName("GUI Draw Handler")
 drawer:newThread("Draw Handler",function()
     while true do
         thread.sleep(.1)
+        if flexbox then flexbox.runPass(gui.virtual) end -- parked flex subtrees stay current
         local children = gui.virtual:getAllChildren()
         for i = 1, #children do
             local child = children[i]
@@ -2560,5 +2583,8 @@ files = love.filesystem.getDirectoryItems("gui/shaders")
 for i,v in pairs(files) do
     require("gui.shaders."..v:sub(1,-5)).init(gui)
 end
+
+-- flexbox late injection (same pattern as shader modules: dodges circular require)
+if flexbox then flexbox.init(gui, updater, drawer) end
 
 return gui

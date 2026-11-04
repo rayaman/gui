@@ -3,11 +3,12 @@ local gui = require("gui")
 local theme = require("gui.core.theme")
 local color = require("gui.core.color")
 
-local TM_THEME = theme:new({
-    primary     = "#124559",
-    primaryDark = "#01161E",
-    primaryText = "#AEC3B0"
-})
+-- NOTE: theme's generator is `newTheme(reference, opts)` (core/theme.lua:50),
+-- which derives every slot from one reference color. The old multi-key table
+-- was never a valid argument and left TM_THEME nil (task-manager colors nil);
+-- the module could not even be required. Fixing the call keeps newScrollFrame
+-- usable (its colors are literal tables, not theme-derived).
+local TM_THEME = theme:newTheme("#124559")
 
 local default_theme = TM_THEME
 -- ── layout constants ──────────────────────────────────────────────────────────
@@ -261,8 +262,12 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         applyScroll()
     end)
 
-    content:OnSizeChanged(function()
-        if applying then return end
+    -- obj filter (see viewport:OnSizeChanged note): gui's VisualEvents are
+    -- global, so without this every descendant's size event — including the
+    -- scrollbar thumbs resized by updateScrollbars itself — re-entered
+    -- updateScrollbars -> setDualDim -> OnSizeChanged -> ... (stack overflow).
+    content:OnSizeChanged(function(obj)
+        if obj ~= content or applying then return end
         local _, _, cw, ch = content:getAbsolutes()
         local vw, vh = getViewSize()
         maxScrollY = math.max(0, ch - vh)
@@ -272,8 +277,14 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         updateScrollbars()
     end)
 
-    viewport:OnSizeChanged(function()
-        if applying then return end
+    -- gui's VisualEvents connections are global (init.lua:1060-1075: the Do
+    -- fires for EVERY element's event, filtered only by testVisual), so this
+    -- handler must filter by obj itself. Without the filter, ANY element's
+    -- OnSizeChanged re-entered applyScroll -> updateScrollbars -> thumb
+    -- setDualDim -> OnSizeChanged -> ... (unbounded recursion / stack
+    -- overflow once another subsystem fires size events, e.g. the flex pass).
+    viewport:OnSizeChanged(function(obj)
+        if obj ~= viewport or applying then return end
         applyScroll()
     end)
 

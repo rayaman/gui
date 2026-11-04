@@ -84,6 +84,45 @@ clip-descendants:  true    # scissor-clips all children to this rect
 square: w    # force height = width
 square: h    # force width = height
 
+# ── Flex layout (opt-in; see docs/flexbox.md) ─────────────────────────
+# Container config (maps onto setFlex):
+flex: true                       # all defaults (row, gap 0, no padding)
+flex:
+  direction: column              # row (default) | column
+  gap: 4                         # px between children
+  padding: 12                    # number, {l:,r:,t:,b:}, or [l, r, t, b]
+  alignX: center                 # start (default) | center | end
+  alignY: end
+
+# Child sizing (maps onto setSizing; any element type):
+sizing:
+  width: grow                    # grow | fit | percent | fixed | 200 (fixed px)
+  height: { mode: fixed, value: 30, min: 10, max: 100 }
+  aspectRatio: 2                 # optional, positive number
+sizing: { width: 100, height: 40 }   # compact one-liner
+
+# ── Grid layout (opt-in; see docs/grid.md) ───────────────────────────
+# Container config (maps onto setGrid; a container is flex OR grid, never both):
+grid: true                       # all defaults
+grid:
+  columns: "1fr 200px auto"      # track grammar: Nfr | Npx | bare N (=px) | auto |
+                                 #   min-content | minmax(A, B) | repeat(n, tokens)
+  rows: ["40px", "auto"]         # or a list of tokens
+  areas: ["header header", "side main"]   # row strings; "." = empty cell
+  gap: 10                        # number, or { row: 8, column: 12 }
+  autoFlow: row                  # row (default) | column
+  dense: true                    # boolean
+  justifyItems: center           # start | end | center | stretch (default stretch)
+  justifyContent: space-between  # ... | space-around | space-evenly
+
+# Item placement (maps onto setGridPlacement; inside a grid container):
+grid-placement:
+  column: "1 / 3"                # also "span 2" | "2" | "-1 / -1" | "areaName" | 2 (number)
+  row: "span 2"
+  justifySelf: end               # start | end | center | stretch
+  placeSelf: "center end"        # "v h" shorthand (align then justify)
+grid-placement: { column: 2, row: 2 }   # compact one-liner
+
 # ── Text element fields (label, button, textbox) ─────────────────────
 text:  "Hello, world!"
 align: left      # left | center | right

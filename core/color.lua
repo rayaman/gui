@@ -1,6 +1,12 @@
 local color = {}
 local palette = {colors = {}}
-palette.__index = palette
+palette.__index = function(t, k)
+    local member = rawget(palette, k)   -- methods like indexColor, new, listColors
+    if member ~= nil then
+        return member
+    end
+    error(("Invalid color [%s] indexed!"):format(tostring(k)), 2)
+end
 
 local mt = {
 	__add = function (c1,c2)
@@ -158,9 +164,9 @@ local function parseColor(r, g, b, a)
 		end
 	elseif type(r) == "table" then
 		if v3 then
-			return r[1], r[2], r[3]
+			return rawget(r,1), rawget(r,2), rawget(r,3)
 		else
-			return r[1], r[2], r[3], 1
+			return rawget(r,1), rawget(r,2), rawget(r,3), 1
 		end
 	end
 	if v3 then
@@ -263,6 +269,7 @@ function color.rgbToOklch(r, g, b)
 	local L, a, bl = color.rgbToOklab(r, g, b)
 	return L, math.sqrt(a * a + bl * bl), math.deg(math.atan2(bl, a)) % 360
 end
+local palettes = {}
 
 -- Standalone color constructor. Palettes already expose this as palette.new; this makes the
 -- same call available directly on the module.
@@ -273,14 +280,15 @@ function color.new(r, g, b, a)
 end
 
 function color.newPalette(name)
-    local p = {}
-    setmetatable(p,palette)
-    color[name] = p
+    local p = palettes[name]
+    if p then return p end
+    p = setmetatable({colors = {}}, palette)
+    palettes[name] = p
     return p
 end
 
 function color.getPalette(name)
-    return color[name]
+    return palettes[name]
 end
 
 function color.darken(c, v)
@@ -308,11 +316,13 @@ function palette:indexColor(name, r, g, b, a)
 end
 
 function palette:listColors()
-	local list = {}
-	for i,v in ipairs(self) do
-		list[#list+1] = v
-	end
-	return list
+    local list = {}
+    for i, v in ipairs(self.colors) do list[i] = v end
+    return list
+end
+
+function palette:has(name)
+    return rawget(self, name) ~= nil
 end
 
 -- Allows you to modify an existing color that has been indexed
@@ -322,21 +332,18 @@ function palette:reindexColor(name, r, g, b, a)
 		v3 = true
 	end
 	local r, g, b, a = parseColor(r, g, b, a)
-	self[string.lower(name)][1] = r
-	self[string.lower(name)][2] = g
-	self[string.lower(name)][3] = b
+    rawset(self[string.lower(name)],1,r)
+    rawset(self[string.lower(name)],2,g)
+	rawset(self[string.lower(name)],3,b)
 	if not v3 then
-		self[string.lower(name)][4] = a
+		rawset(self[string.lower(name)],4,a)
 	end
 	v3 = _v3
 end
 
 local initD = false
 function color.getDefaultPalette()
-    local p
-	if not color.getPalette("$gui.core.color") then
-		p = color.newPalette("$gui.core.color")
-    end
+    local p = color.getPalette("$gui.core.color") or color.newPalette("$gui.core.color")
     if not initD then
         initD = true
         p:indexColor("WHITE","rgb(255,255,255)")

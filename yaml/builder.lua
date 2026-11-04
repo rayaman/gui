@@ -48,6 +48,20 @@ local function parseDualDim(def)
     return px, py, pw, ph, sx, sy, sw, sh
 end
 
+-- tinyyaml's flow style ({a: 1}) yields numbers as strings; setFlex/setSizing
+-- validate types, so coerce numeric strings inside flex:/sizing: tables.
+local function coerceNumericStrings(t)
+    if type(t) ~= "table" then return end
+    for k, v in pairs(t) do
+        if type(v) == "table" then
+            coerceNumericStrings(v)
+        elseif type(v) == "string" then
+            local n = tonumber(v)
+            if n ~= nil then t[k] = n end
+        end
+    end
+end
+
 local function applyShared(parent, obj, def)
     -- Color / border
     if def.color        then obj.color       = parseColor(def.color) end
@@ -149,6 +163,60 @@ local function applyShared(parent, obj, def)
     if def.stack then
         if def.stack == "top"    then obj:topStack()    end
         if def.stack == "bottom" then obj:bottomStack() end
+    end
+
+    -- Flex layout (opt-in, docs/flexbox.md): flex: / sizing: map onto
+    -- setFlex / setSizing. Additive — definitions without these keys
+    -- behave exactly as before. Shorthand values follow the same
+    -- parseDualDim-style leniency: setSizing accepts "grow"|"fit"|
+    -- "percent"|"fixed", a plain number (fixed px), or {mode=,value=,
+    -- min=,max=} tables; setFlex accepts {direction, gap, padding,
+    -- alignX, alignY} (padding also as [l, r, t, b] sequences).
+    if def.flex ~= nil then
+        if obj.setFlex then
+            local f = (def.flex == true) and {} or def.flex
+            coerceNumericStrings(f) -- tinyyaml flow style keeps numbers as strings
+            if type(f) == "table" and type(f.padding) == "table"
+                and not f.padding.l and not f.padding.left then
+                local p = f.padding
+                f.padding = {
+                    l = p[1] or 0, r = p[2] or p[1] or 0,
+                    t = p[3] or p[1] or 0, b = p[4] or p[2] or p[1] or 0,
+                }
+            end
+            obj:setFlex(f)
+        end
+    end
+    if def.sizing ~= nil then
+        if obj.setSizing then
+            local s = (def.sizing == true) and {} or def.sizing
+            coerceNumericStrings(s)
+            obj:setSizing(s)
+        end
+    end
+
+    -- Grid layout (opt-in, plans/grid-integration-plan.md §3/§4): grid: /
+    -- grid-placement: map onto setGrid / setGridPlacement. Additive —
+    -- definitions without these keys behave exactly as before. Accepts the
+    -- same value shapes as the Lua API: strings keep the CSS grammar
+    -- verbatim ("1fr 2fr 100px", "span 2", "1 / 3"), tables for gap
+    -- {row=, column=}, arrays for columns/rows/areas. coerceNumericStrings
+    -- is safe on grammar strings (tonumber fails -> no-op) and turns a bare
+    -- numeric line "2" into number 2, which the placement grammar accepts
+    -- (plan §3 YAML note).
+    if def.grid ~= nil then
+        if obj.setGrid then
+            local g = (def.grid == true) and {} or def.grid
+            coerceNumericStrings(g)
+            obj:setGrid(g)
+        end
+    end
+    if def["grid-placement"] ~= nil then
+        if obj.setGridPlacement then
+            local gp = (def["grid-placement"] == true) and {} or def["grid-placement"]
+            coerceNumericStrings(gp)
+            obj:setGridPlacement(gp)
+        end
     end
 end
 
