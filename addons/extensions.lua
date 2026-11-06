@@ -18,15 +18,20 @@ local function noOf(sx,sy,sw,sh)
 end
 
 function gui:newVideoPlayer(source, x, y, w, h, sx, sy, sw, sh, draggable, th)
-    local window = self:newWindow(x, y, w, h, sx, sy, sw, sh, "", draggable, th or theme:new({
-        primary     = palette.black,
-        primaryDark = palette.blue,
-        primaryText = palette.white
-    }))
-    local video = window:newVideo(source, 0, 0, 0, 0, 0, .05, 1, .75)
+    local window = self:newWindow{
+        x, y, w, h, sx, sy, sw, sh,
+        title     = "",
+        draggable = draggable,
+        theme     = th or {
+            primaryBG   = palette.black,
+            primaryNav  = palette.blue,
+            primaryText = palette.white,
+        },
+    }
+    local video = window.content:newVideo(source, 0, 0, 0, 0, 0, .05, 1, .75)
     local length = video:getDuration()
-    local play_pause = window:newImageButton("gui/assets/play.png",0,0,0,0,.45,.86,0,.14)
-    local seek = window:newProgressBar(0,0,0,0,0,.8,1,.05,length*100,0)
+    local play_pause = window.content:newImageButton("gui/assets/play.png",0,0,0,0,.45,.86,0,.14)
+    local seek = window.content:newProgressBar(0,0,0,0,0,.8,1,.05,length*100,0)
     seek:OnProgressUpdated(function(self,_,value, drag)
         if drag then
             local status = video:isPlaying()
@@ -144,6 +149,111 @@ function gui:newRadioGroup(options, x, y, sx, sy, size)
     end
 
     return rg
+end
+
+-- newListBox: scrollable, single-selection list of rows.
+--
+--   local box = parent:newListBox(x, y, w, h, sx, sy, sw, sh, opts)
+--   opts = { items = {"One", "Two"} or { {text = "One", value = 1}, ... },
+--            rowHeight = 28, gap = 2,
+--            onChange = function(index, value) end }
+--
+--   box:add(text[, value])          box:setItems(items)      box:clear()
+--   box:select(index)               box:getSelected() -> index, value
+--
+-- Rows stack inside a newScrollFrame with autoMeasure on, so the box scrolls
+-- when items exceed its height. Requires gui.addons.system to be loaded
+-- (addons/init.lua requires it, same as everything using newWindow).
+--
+function gui:newListFrame(x, y, w, h, sx, sy, sw, sh, opts)
+    opts = opts or {}
+    local rowH = opts.rowHeight or 28
+    local gap  = opts.gap or 2
+    local align = opts.align or gui.ALIGN_CENTER
+    local scale = opts.scale or .85
+
+    local box = self:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
+    box.drawBorder = false
+    -- box.color = th.primaryFG
+    box.visibility = 0
+    box:autoMeasure(true)
+
+    local rows = {}
+    local selected
+
+    local function paint()
+        for i, row in ipairs(rows) do
+            row.color = (i == selected) and th.primaryNav or th.primaryText
+        end
+    end
+
+    local function layout()
+        for i, row in ipairs(rows) do
+            row:rawSetDualDim(0, gap + (i - 1) * (rowH + gap), 0, rowH, 0, 0, 1, 0)
+        end
+        box:markDirty()
+    end
+
+    local function addRow(text, value)
+        local i = #rows + 1
+        local row = box:newFrame(0, 0, 0, rowH, 0, 0, 1, 0)
+        row.drawBorder = false
+        row.value = value
+
+        local label = row:newTextLabel(tostring(text), 4, 0, -8, 0, 0, 0, 1, 1)
+        label.align = align
+        label.textColor = th.primaryText
+        label.color = th.primaryFG
+        label.ignore = true      -- clicks reach the row, not the label
+        label:scaleFont(scale)
+
+        rows[i] = row
+        row:OnReleased(function() box:select(i) end)
+    end
+
+    function box:setItems(items)
+        for _, row in ipairs(rows) do row:destroy() end
+        rows = {}
+        selected = nil
+        for _, item in ipairs(items or {}) do
+            if type(item) == "table" then
+                addRow(item.text or "", item.value)
+            else
+                addRow(item, item)
+            end
+        end
+        layout()
+        paint()
+    end
+
+    function box:add(text, value)
+        addRow(text, value or text)
+        layout()
+        paint()
+    end
+
+    function box:select(index)
+        if not index or index < 1 or index > #rows then return end
+        selected = index
+        paint()
+        if opts.onChange then opts.onChange(index, rows[index].value) end
+    end
+
+    function box:getSelected()
+        return selected, selected and rows[selected].value
+    end
+
+    function box:removeRox(i)
+        rows[i]:Destroy()
+        rows[i] = nil
+    end
+
+    function box:clear()
+        self:setItems(nil)
+    end
+
+    box:setItems(opts.items)
+    return box
 end
 
 function gui:newProgressBar(x, y, w, h, sx, sy, sw, sh, count, value)

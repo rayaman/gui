@@ -14,6 +14,7 @@ local core_conns = multi:newProcessor("gui.events", true)
 local bit = require("bit")
 local band, bor = bit.band, bit.bor
 local cursor_hand = love.mouse.getSystemCursor("hand")
+local cursor_arrow = love.mouse.getSystemCursor("arrow")
 local clips = {}
 local max, min, abs, rad, floor, ceil = math.max, math.min, math.abs, math.rad,
                                         math.floor, math.ceil
@@ -334,9 +335,9 @@ local function intersecpt(x1, y1, x2, y2, x3, y3, x4, y4)
     end
 
     local x7 = x5
-    local y7 = y6
+    local y7 = y5
     local x8 = x6
-    local y8 = y5
+    local y8 = y6
 
     return x7, y7, abs(x7 - x8), abs(y7 - y8)
 end
@@ -375,16 +376,30 @@ end
 function gui:getAbsolutes(transform) -- returns x, y, w, h
     local x, y, w, h
     local dd = self.dualDim
-    if transform then
-        x, y, w, h = transform((self.parent.w * dd.scaleX) + dd.offsetX + self.parent.x),
-                     transform((self.parent.h * dd.scaleY) + dd.offsetY + self.parent.y),
-                     transform((self.parent.w * dd.scaleW) + dd.offsetW),
-                     transform((self.parent.h * dd.scaleH) + dd.offsetH)
+    -- Read the parent's geometry LIVE (recursive) instead of its cached
+    -- x/y/w/h. Those cache fields are stamped only by draw_handler, which runs
+    -- for *visible* elements — so a hidden subtree (e.g. an off tab) keeps
+    -- stale screen-sized geometry and would render/hit-test outside its frame
+    -- the moment it becomes visible. Roots (parent == self, see gui.parent =
+    -- gui / gui.virtual.parent = gui.virtual) fall back to their own stamped
+    -- cache fields, which the update thread keeps current.
+    local p = self.parent
+    local px, py, pw, ph
+    if not p or p == self then
+        px, py, pw, ph = self.x, self.y, self.w, self.h
     else
-        x, y, w, h = (self.parent.w * dd.scaleX) + dd.offsetX + self.parent.x,
-                     (self.parent.h * dd.scaleY) + dd.offsetY + self.parent.y,
-                     (self.parent.w * dd.scaleW) + dd.offsetW,
-                     (self.parent.h * dd.scaleH) + dd.offsetH
+        px, py, pw, ph = p:getAbsolutes()
+    end
+    if transform then
+        x, y, w, h = transform((pw * dd.scaleX) + dd.offsetX + px),
+                     transform((ph * dd.scaleY) + dd.offsetY + py),
+                     transform((pw * dd.scaleW) + dd.offsetW),
+                     transform((ph * dd.scaleH) + dd.offsetH)
+    else
+        x, y, w, h = (pw * dd.scaleX) + dd.offsetX + px,
+                     (ph * dd.scaleY) + dd.offsetY + py,
+                     (pw * dd.scaleW) + dd.offsetW,
+                     (ph * dd.scaleH) + dd.offsetH
     end
     if self.square == "w" then
         h = w
@@ -645,6 +660,19 @@ function gui:parentHasTag(tag)
         if parent == gui.virtual or parent == gui then return false end
     end
     return false
+end
+
+local setHand = function()
+    love.mouse.setCursor(cursor_hand)
+end
+
+local setArrow = function()
+    love.mouse.setCursor(cursor_arrow)
+end
+
+function gui:EnableButton()
+    self:OnExit(setArrow)
+    self:OnEnter(setHand)
 end
 
 local function testVisual(c)
@@ -1063,7 +1091,7 @@ for _,v in pairs(VisualEvents) do
         __call = function(_, self, func)
             initEvents(self,v)
             self:addConnection(gui["_On".. v](function(obj, ...)
-                if testVisual(obj) then
+                if obj == self and testVisual(obj) then
                     func(obj, ...)
                 end
             end))
@@ -1596,7 +1624,7 @@ function gui:newTextArea(initialText, x, y, w, h, sx, sy, sw, sh)
         end
     end)
 
-    viewport.OnDestroy(function()
+    viewport:OnDestroy(function()
         gui.Events.OnTextInputed:Unconnect(_textInputRef)
         gui.Events.OnKeyPressed:Unconnect(_keyPressRef)
     end)
@@ -1639,35 +1667,38 @@ end
 
 -- local val used when drawing
 
+-- Horizontal offset that printf's alignment applies to the text, in local
+-- coordinates. (0=center, 1=left, 2=right, 3=justify)
+local function getAlignOffset(self)
+    if not self.align or self.align == gui.ALIGN_LEFT or
+        self.align == gui.ALIGN_JUSTIFY then
+        return 0
+    end
+    local font = self.font or love.graphics.getFont()
+    local _, _, w = self:getAbsolutes()
+    local tw = font:getWidth(self.text)
+    if self.align == gui.ALIGN_CENTER then
+        return (w - tw) / 2
+    elseif self.align == gui.ALIGN_RIGHT then
+        return w - tw
+    end
+    return 0
+end
+
+-- Map a local mouse x to the nearest caret position (0 .. #text), using the
+-- object's own font and accounting for textOffsetX/adjust and alignment.
 local function getTextPosition(text, self, mx, my, exact)
-    -- Initialize variables
-    local pos = 0
-    local font = love.graphics.getFont()
-    local width = 0
-    local height = font:getHeight()
-    -- Loop through each character in the string
+    local font = self.font or love.graphics.getFont()
+    local x = self.adjust + self.textOffsetX + getAlignOffset(self)
+    local best, best_dist = 0, math.abs(mx - x)
     for i = 1, #text do
-
-        local _w = font:getWidth(text:sub(i, i))
-        local x, y, w, h = math.floor(width + self.adjust + self.textOffsetX),
-                           0, _w, height
-
-        width = width + _w
-
-        if not (mx > x + w or mx < x or my > y + h or my < y) then
-            if not (exact) and
-                (_w -
-                    (width - (mx - math.floor(self.adjust + self.textOffsetX))) <
-                    _w / 2 and i >= 1) then
-                return i - 1
-            else
-                return i
-            end
-        elseif i == #text and mx > x + w then
-            return #text
+        x = x + font:getWidth(text:sub(i, i))
+        local d = math.abs(mx - x)
+        if d < best_dist then
+            best, best_dist = i, d
         end
     end
-    return pos
+    return best
 end
 
 local cur = love.mouse.getCursor()
@@ -1690,7 +1721,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     end
 
     function c:HasSelection()
-        return c.selection[1] ~= 0 and c.selection[2] ~= 0
+        return c.selection[1] ~= c.selection[2]
     end
 
     function c:GetSelection()
@@ -1722,6 +1753,9 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
         if not c.seek then return end
         c.cur_pos = getTextPosition(c.text, c, c:getLocalCords(x, y))
         c.selection[1] = c.cur_pos
+        -- Reset the drag end too, otherwise a selection left over from
+        -- Ctrl+A (or a previous drag) stays partially active.
+        c.selection[2] = c.cur_pos
         c.doSelection = true
     end)
 
@@ -1774,13 +1808,11 @@ local function insert(obj, n_text)
         obj.text = obj.text:sub(1, start - 1) .. n_text ..
                        obj.text:sub(stop + 1, -1)
         obj:ClearSelection()
-        obj.cur_pos = start
-        if #n_text > 1 then obj.cur_pos = start + #n_text end
+        obj.cur_pos = (start - 1) + #n_text
     else
         obj.text = obj.text:sub(1, obj.cur_pos) .. n_text ..
                        obj.text:sub(obj.cur_pos + 1, -1)
-        obj.cur_pos = obj.cur_pos + 1
-        if #n_text > 1 then obj.cur_pos = obj.cur_pos + #n_text end
+        obj.cur_pos = obj.cur_pos + #n_text
     end
 end
 
@@ -1790,29 +1822,32 @@ local function delete(obj, cmd)
         obj.text = obj.text:sub(1, start - 1) .. obj.text:sub(stop + 1, -1)
         obj:ClearSelection()
         obj.cur_pos = start - 1
-    else
-        if cmd == "delete" then
+    elseif cmd == "delete" then
+        if obj.cur_pos < #obj.text then
             obj.text = obj.text:sub(1, obj.cur_pos) ..
                            obj.text:sub(obj.cur_pos + 2, -1)
-        else
+        end
+    else
+        -- Guard: with cur_pos == 0 the old sub(1, -1) .. sub(1, -1)
+        -- duplicated the entire string.
+        if obj.cur_pos > 0 then
             obj.text = obj.text:sub(1, obj.cur_pos - 1) ..
                            obj.text:sub(obj.cur_pos + 1, -1)
-            object_focus.cur_pos = object_focus.cur_pos - 1
-            if object_focus.cur_pos == 0 then
-                object_focus.cur_pos = 1
-            end
+            obj.cur_pos = obj.cur_pos - 1
         end
     end
 end
 
 gui.HotKeys.OnSelectAll(function()
-    if object_focus:hasType(box) then
+    if object_focus:hasType(box) and #object_focus.text > 0 then
         object_focus.selection = {1, #object_focus.text}
+        object_focus.cur_pos = #object_focus.text
+        object_focus.bar_show = true
     end
 end)
 
 gui.Events.OnTextInputed(function(text)
-    if object_focus:hasType(box) then insert(object_focus, text) end
+    if object_focus:hasType(box) and object_focus:isActive() then insert(object_focus, text) end
 end)
 
 gui.HotKeys.OnCopy(function()
@@ -1836,19 +1871,40 @@ end)
 
 gui.Events.OnKeyPressed(function(key, scancode, isrepeat)
     -- Don't process if we aren't dealing with a textbox
-    if not object_focus:hasType(box) then return end
+    local f = object_focus
+    if not f:hasType(box) then return end
     if key == "left" then
-        object_focus.cur_pos = object_focus.cur_pos - 1
-        object_focus.bar_show = true
+        -- A selection collapses to its start instead of moving the caret
+        if f:HasSelection() then
+            f.cur_pos = f:GetSelection()
+            f:ClearSelection()
+        else
+            f.cur_pos = math.max(0, f.cur_pos - 1)
+        end
+        f.bar_show = true
     elseif key == "right" then
-        object_focus.cur_pos = object_focus.cur_pos + 1
-        object_focus.bar_show = true
+        if f:HasSelection() then
+            local _, stop = f:GetSelection()
+            f.cur_pos = stop
+            f:ClearSelection()
+        else
+            f.cur_pos = math.min(#f.text, f.cur_pos + 1)
+        end
+        f.bar_show = true
+    elseif key == "home" then
+        f.cur_pos = 0
+        f:ClearSelection()
+        f.bar_show = true
+    elseif key == "end" then
+        f.cur_pos = #f.text
+        f:ClearSelection()
+        f.bar_show = true
     elseif key == "return" then
-        object_focus.OnReturn:Fire(object_focus, object_focus.text)
+        f.OnReturn:Fire(f, f.text)
     elseif key == "backspace" then
-        delete(object_focus, "backspace")
+        delete(f, "backspace")
     elseif key == "delete" then
-        delete(object_focus, "delete")
+        delete(f, "delete")
     end
 end)
 
@@ -2100,6 +2156,18 @@ end
 
 -- Draw Function
 
+local draw_factor = function(child, mode, x, y, w, h, rx, ry, as, ae, seg)
+    if child.formFactor == gui.FORM_RECTANGLE then
+        love.graphics.rectangle(mode, x, y, w, h, rx, ry, seg)
+    elseif child.formFactor == gui.FORM_CIRCLE then
+        love.graphics.circle(mode, x+child.__radius, y+child.__radius, child.__radius, seg)
+    elseif child.formFactor == gui.FORM_ARC then
+        love.graphics.arc(mode, child.arcType, x+child.__radius, y+child.__radius, child.__radius, child.__angleS, child.__angleE, seg)
+    else
+        error("Invalid form factor selected: ".. tostring(child.formFactor))
+    end
+end
+
 -- local label, image, text, button, box, video, animation (spritesheet)
 local drawtypes = {
     [0] = function() end,
@@ -2166,26 +2234,28 @@ local drawtypes = {
                              child.textShearingFactorY)
     end,
     [4] = function(child, x, y, w, h)
+        -- caret/selection x must match printf's alignment offset, otherwise
+        -- the ibeam lands in the wrong place on center/right aligned boxes
+        local ox = x + child.textOffsetX + child.adjust +
+                   getAlignOffset(child)
         if child.bar_show then
             local lw = love.graphics.getLineWidth()
             love.graphics.setLineWidth(1)
             local font = child.font
             local fh = font:getHeight()
-            local fw = font:getWidth(child.text:sub(1, child.cur_pos))
-            love.graphics.line(child.textOffsetX + child.adjust + x + fw, y + 4,
-                               child.textOffsetX + child.adjust + x + fw,
-                               y + fh - 2)
+            local fw = font:getWidth(child.text:sub(1, math.max(0, math.min(child.cur_pos, #child.text))))
+            love.graphics.line(ox + fw, y + child.textOffsetY + 4,
+                               ox + fw, y + child.textOffsetY + fh - 2)
             love.graphics.setLineWidth(lw)
         end
         if child:HasSelection() then
             local blue = highlighter_blue
-            local start, stop = child.selection[1], child.selection[2]
-            if start > stop then start, stop = stop, start end
-            local x1, y1 = child.font:getWidth(child.text:sub(1, start - 1)), 0
-            local x2, y2 = child.font:getWidth(child.text:sub(1, stop)), h
+            local start, stop = child:GetSelection()
+            local x1 = ox +
+                       child.font:getWidth(child.text:sub(1, math.max(0, start - 1)))
+            local x2 = ox + child.font:getWidth(child.text:sub(1, stop))
             love.graphics.setColor(blue[1], blue[2], blue[3], .5)
-            draw_factor(child,"fill", x + x1 + child.adjust, y + y1, x2 - x1, y2 - y1)
-            --love.graphics.rectangle("fill", x + x1 + child.adjust, y + y1,x2 - x1, y2 - y1)
+            draw_factor(child, "fill", x1, y, x2 - x1, h)
         end
     end,
     [8] = function(child, x, y, w, h)
@@ -2207,17 +2277,6 @@ local drawtypes = {
     end
 }
 
-local draw_factor = function(child, mode, x, y, w, h, rx, ry, as, ae, seg)
-    if child.formFactor == gui.FORM_RECTANGLE then
-        love.graphics.rectangle(mode, x, y, w, h, rx, ry, seg)
-    elseif child.formFactor == gui.FORM_CIRCLE then
-        love.graphics.circle(mode, x+child.__radius, y+child.__radius, child.__radius, seg)
-    elseif child.formFactor == gui.FORM_ARC then
-        love.graphics.arc(mode, child.arcType, x+child.__radius, y+child.__radius, child.__radius, child.__angleS, child.__angleE, seg)
-    else
-        error("Invalid form factor selected: ".. tostring(child.formFactor))
-    end
-end
 
 local draw_handler = function(child, no_draw, dt)
     local bg = child.color

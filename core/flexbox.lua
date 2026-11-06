@@ -766,8 +766,16 @@ local function layoutFlexRoot(root, rx, ry, rw, rh)
     -- natural width so it hugs the text without further shrinking.
     for ti = 1, tn do
         local e = textBuf[ti]
-        local m = measure.get(e.text, e.font, e.__fw, textMeasureOpts(e))
-        e.__fh = m.height
+        -- Wrap re-solve applies to fit-height text only (Clay's text sizing is
+        -- fit). A child with an explicit fixed height (e.g. a 36px action
+        -- button) keeps it — otherwise setSizing{height=N} on any text element
+        -- silently collapses to the font line height. Grow/percent heights are
+        -- resolved by Pass D, not here.
+        local sy = axisSizing(e, "y")
+        if sy.mode == "fit" then
+            local m = measure.get(e.text, e.font, e.__fw, textMeasureOpts(e))
+            e.__fh = min(max(m.height, sy.min), sy.max)
+        end
     end
 
     -- aspect after X (clay.h:2638-2643; text elements are excluded, clay.h:2355)
@@ -1115,9 +1123,9 @@ function flexbox.apiSetFlex(self, opts)
     self.__flexDirty = true
     -- Plan §5.1 row 5: event connections installed on flex roots so an
     -- evented geometry change on the root itself (setDualDim/move/size)
-    -- marks it dirty. NOTE: gui's VisualEvents wrappers do NOT filter by
-    -- obj == self (init.lua:1060-1075 — the Do fires for every element's
-    -- event), so the handler must check obj itself. The `firing` guard
+    -- marks it dirty. gui's VisualEvents façaches filter `obj == self`
+    -- (init.lua:1060-1078), and the handlers below keep their own `obj`
+    -- check as belt-and-braces. The `firing` guard
     -- keeps the pass's own delta events from re-marking (re-entrancy,
     -- plan §5.3); `writing` guards the write-back window. Connections are
     -- registered via addConnection, auto-unconnected on destroy

@@ -508,9 +508,10 @@ function grid.apiSetGrid(self, opts)
     if fb then
         fb.register(self)
         -- Dirty-marking event connections mirror apiSetFlex (flex plan §5.1
-        -- row 5): gui's VisualEvents wrappers do NOT filter by obj, so the
-        -- handler checks obj itself; fb.inPass() covers the writing/firing
-        -- guard window so the pass's own events never re-mark.
+        -- row 5): gui's VisualEvents façaches filter `obj == self`
+        -- (init.lua:1060-1078) and the handlers keep their own obj check;
+        -- fb.inPass() covers the writing/firing guard window so the pass's
+        -- own events never re-mark.
         if not self.__gridEvents then
             self.__gridEvents = true
             self:OnSizeChanged(function(obj)
@@ -1142,7 +1143,13 @@ function grid.layoutGridRoot(root, rx, ry, rw, rh)
     for i = 1, nItems do
         local e = pitems[i].e
         if isGridText(e) then
-            e.__fh = measure.get(e.text, e.font, e.__fw, textOpts and textOpts(e) or nil).height
+            -- fit-height text only: an authored fixed height (e.g. a 36px
+            -- button) must survive the wrap re-solve, same guard as flex
+            -- Pass B (flexbox.lua).
+            local sh = (e.__sizing and e.__sizing.height) or DEFAULT_FIT_AXIS
+            if sh.mode == "fit" then
+                e.__fh = measure.get(e.text, e.font, e.__fw, textOpts and textOpts(e) or nil).height
+            end
         end
     end
 

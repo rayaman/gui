@@ -56,7 +56,7 @@ Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
 | `parent:newImageLabel(src, dd)` | image/gif | [§4.1](elements.md#41-imagelabel) |
 | `parent:newImageButton(src, dd)` | image w/ input | [§4.2](elements.md#42-imagebutton) |
 | `parent:newVideo(src, dd)` | video | [§5](elements.md#5-video) |
-| `parent:newWindow(x,y,w,h,sx,sy,sw,sh, title, draggable, theme)` (S) | window content frame | [widgets §1](widgets.md#1-window) |
+| `gui:newWindow(optsTable)` (S) | window root frame (title/draggable/resizable/scrollable) | [widgets §1](widgets.md#1-window) |
 | `parent:newScrollFrame(dd)` (S) | scrollable content frame | [widgets §2](widgets.md#2-scrollframe) |
 | `gui:newMessageBox(opts)` (S) | dialog window | [widgets §3](widgets.md#3-messagebox) |
 | `parent:newCheckbox(label, x, y, size, sx, sy)` (E) | checkbox | [widgets §4](widgets.md#4-checkbox--radiogroup) |

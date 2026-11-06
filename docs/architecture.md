@@ -269,7 +269,7 @@ The filter differs by event class:
 |---|---|---|
 | **Basic** | `OnLoad`, `OnDestroy`, `OnVideoFinished` | `obj == self` |
 | **Hierarchy** | `OnPressed`, `OnReleased`, `OnEnter`, `OnMoved` | `obj == self` **and** `testVisual(obj)` **and** `obj:testHierarchy(x, y)` |
-| **Visual** | everything else (`OnExit`, `OnDrag*`, `OnSizeChanged`, stick events, …) | `testVisual(obj)` |
+| **Visual** | everything else (`OnExit`, `OnDrag*`, `OnSizeChanged`, stick events, …) | `obj == self` **and** `testVisual(obj)` |
 
 ```mermaid
 flowchart TD

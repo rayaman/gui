@@ -1,5 +1,17 @@
 #
 
+## VisualEvents identity filter — window theming leaked across the whole app (2026-11-04)
+
+`obj:OnExit` / `OnPressedOuter` / `OnReleasedOuter` / `OnReleasedOther` / `OnDrag*` / `OnSizeChanged` / `OnPositionChanged` (the `VisualEvents` set) were installed behind a façade that filtered only `testVisual(obj)` — never `obj == self` — unlike the `HierarchyEvents` and `BasicEvents` façades ([`init.lua:1060-1078`](init.lua:1060)). Because the underlying `_OnXxx` connections are global and fired with the element that owns the event, a handler registered on element A ran for **every** element's event with that foreign element as `self`.
+
+Consequence in the app: creating any `newWindow`/`newMessageBox` permanently themed the whole GUI, since the window styles its buttons with `el:OnExit(function(self) self.color = th.button end)` ([`addons/system.lua:492-493`](addons/system.lua:492)) and its close button with an `OnExit` that sets `#e50000` (`:359-360`). After opening one message box, every element that left hover was repainted the window's button color — and `root:close()` only reparents to `gui.virtual` (`:471-474`), so the handlers survived the box.
+
+- **Fix:** the VisualEvents façade now applies `obj == self and testVisual(obj)`, mirroring the HierarchyEvents façade. Strict narrowing: every in-repo consumer either already guarded `obj == self` (`addons/system.lua` drag/thumb handlers, `core/flexbox.lua:1136`, `core/grid.lua:516`) or needs per-object semantics (textbox `OnPressedOuter` unfocus at `init.lua:1548`, extensions' color-picker/radio commit, scroll thumbs). No escape hatch needed.
+- **Not changed (deliberately left as belt-and-braces):** the consumer-side `if obj == X then` guards, so those handlers stay correct independent of façade rules.
+- **Also fixed in the same pass:** `X:OnExit(function(self) self.color = … end)` and `el:OnExit(function(self) … end)` in `newWindow` were already correct once filtered; the file-picker rows (`:799`, `:908`) and textbox cursor reset (`init.lua:1718`) were silently mis-firing on foreign elements and are now scoped.
+- **Tests:** `--window-hovertest` probe in the jeopardy app drives title → EDITOR → Save → message box and fires `gui._OnExit` at all editor nodes, asserting zero foreign recolors with no window / with the window / after closing — 0/0/0 (was 24/24/24). `--editor-clicktest`, `--editor-autotest`, `--flex-autotest` 78/78, `--grid-autotest` 79/79 all still pass.
+- **Docs:** filter table in [`docs/architecture.md`](docs/architecture.md:272) and the dirty-marking note in [`docs/flexbox.md`](docs/flexbox.md:183) updated; the "VisualEvents do NOT filter by obj" comments in `addons/system.lua`, `core/flexbox.lua:1126`, `core/grid.lua:510` corrected.
+
 ## Opt-in CSS Grid layout (2026-10-25, Phases P1–P5)
 
 New opt-in CSS-Grid-style layout riding the flexbox scheduler, fully backwards compatible — elements that never call it are untouched, and flex-only trees observe byte-identical behavior.

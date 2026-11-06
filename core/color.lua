@@ -291,14 +291,21 @@ function color.getPalette(name)
     return palettes[name]
 end
 
+-- Color tables store 0-1 components (parseColor → love.math.colorFromBytes).
+-- These must return 0-1 too; the old version scaled to 0-255 and handed that
+-- to color.new, whose numeric path passes values through unconverted — hover
+-- colors then came back 0-255 and love.graphics.setColor clamped them to
+-- white (any element themed with lighten/darken flashed white on hover).
 function color.darken(c, v)
 	local currentR,currentG,currentB=c[1],c[2],c[3]
-	return color.new((currentR*255) * (1 - v),(currentG*255) * (1 - v),(currentB*255) * (1 - v))
+	return color.new(currentR * (1 - v), currentG * (1 - v), currentB * (1 - v))
 end
 
 function color.lighten(c, v)
 	local currentR,currentG,currentB=c[1],c[2],c[3]
-	return color.new(currentR*255 + (255 - (currentR*255)) * v,currentG*255 + (255 - (currentG*255)) * v,currentB*255 + (255 - (currentB*255)) * v)
+	return color.new(currentR + (1 - currentR) * v,
+	                 currentG + (1 - currentG) * v,
+	                 currentB + (1 - currentB) * v)
 end
 
 function palette.new(r, g, b, a)

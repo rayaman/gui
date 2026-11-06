@@ -41,43 +41,62 @@ require("gui.addons.system")     -- + window / scroll frame / task manager / pic
 ```lua
 require("gui.addons.system")
 
-local win = gui:newWindow(x, y, w, h, sx, sy, sw, sh, "Title", draggable, theme)
+local win = gui:newWindow{
+    x, y, w, h, sx, sy, sw, sh,   -- optional geometry (dualDim)
+    title      = "Title",
+    draggable  = true,            -- header drag (default true)
+    resizable  = false,           -- edge/corner resize handles
+    scrollable = false,           -- content auto-scrolls when children exceed it
+    minW = 200, minH = 120,       -- resize clamps (max = screen bounds)
+    headerHeight = 30,
+    theme = theme:newTheme("#124559"),   -- new-framework theme table or preset
+    fonts = { primary = f, button = f },
+    onClose = function(win) end,
+}
 ```
 
-[`system.lua` L441](../addons/system.lua:441). Structure: a rounded **header** frame
-(35 px tall, drag handle) + a **content** frame below it (`clipDescendants = true`) +
-red **X** button + (currently commented-out) resize handles. Each window owns its own
-`multi` processor (`window_N`).
+[`system.lua`](../addons/system.lua). Structure: a rounded **header** frame
+(30 px default, drag handle) + a **content** frame below it (`clipDescendants = true`)
++ red **X** button. Each window owns its own `multi` processor (`window_N`), destroyed
+with the window.
 
-**Returns the content frame** — add children directly to it.
+**Returns the window root frame** — add children to `win.content`:
 
 ```lua
-local panel = win:newTextLabel("Settings")
-local ok    = win:newTextButton("OK", 10, 260, 100, 34)   -- auto-styled by theme
+local panel = win.content:newTextLabel("Settings")
+local ok    = win.content:newTextButton("OK", 10, 260, 100, 34)   -- auto-styled by theme
 ```
 
 | API | Description |
 |---|---|
-| `win:setTitle(t)` | change header text (re-fits font) |
-| `win:close()` / `win:OnClose(fn)` | hide (re-parent header to `gui.virtual`); fires `OnClose` |
+| `win.content` / `win.header` / `win.title` / `win.XButton` | the window parts (`win.root == win`) |
+| `win:setTitle(t)` / `win:getTitle()` | change / read header text (re-fits font) |
+| `win:close()` / `win:OnClose(fn)` | hide (re-parent to `gui.virtual`); fires `OnClose` |
 | `win:open()` | restore to the original parent |
-| `win:setTheme(th)` / `win:getTheme()` | re-apply / read theme |
+| `win:destroy()` | tear down the whole window **and its processor** |
+| `win:setTheme(th[, fonts])` / `win:getTheme()` | re-apply / read theme |
 | `win.XButton` | the close button element |
 | `win.process` | the window's processor |
+| `win.handles` | the 8 resize-handle frames (only when `resizable`) |
 
-**Auto-theming:** any child created inside fires the window's `OnCreated` hook; buttons get
-`colorButtonNormal/Highlight/Text` + hover swap + `fitFont`, text elements get
-`colorPrimaryText` + `fontPrimary` ([`system.lua` L559–582](../addons/system.lua:559)).
-Theme field shape: see [theming §4.4](theming-and-color.md#44-legacy-shape-in-add-ons).
+**Drag & resize:** when `draggable`, dragging the header moves the window and clamps it
+inside the screen on release. When `resizable`, eight invisible edge/corner handles
+(N/S/E/W/NE/NW/SE/SW) resize with `minW/minH` clamps and resize cursors. Clicking a
+window raises it above siblings (`topStack`).
 
-**Drag:** when `draggable`, dragging the header moves the window and clamps it inside the
-screen on release.
+**Auto-theming:** any child created inside the window is styled from the **new theme
+framework** slots (`primaryBG` content, `primaryNav` header, `primaryText` text,
+`primaryButton` buttons with lighten-hover). See
+[theming §4.4](theming-and-color.md#44-legacy-shape-in-add-ons) — the legacy
+`colorPrimary…` shape is no longer used by these widgets.
 
 ```mermaid
 flowchart TD
-    H["header frame (35px, roundness top, drag handle)<br/>title label + red X button"] --> W["window frame (content)<br/>clipDescendants = true"]
-    W --> C1["your children"]
-    W -.-> RH["edge resize frames<br/>(disabled in current source)"]
+    R["window root frame (the window)"] --> H["header frame (30px, roundness top, drag handle)<br/>title label + red X button"]
+    R --> C["content frame (clipDescendants = true)"]
+    C --> C1["your children"]
+    C -.-> SV["scroll viewport + content<br/>(scrollable = true)"]
+    R -.-> RH["8 edge/corner resize handles<br/>(resizable = true)"]
 ```
 
 ---
@@ -88,15 +107,15 @@ flowchart TD
 local content = parent:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
 ```
 
-[`system.lua` L158](../addons/system.lua:158). Viewport + auto-hiding vertical/horizontal
+[`system.lua`](../addons/system.lua). Viewport + auto-hiding vertical/horizontal
 scrollbars (8 px). **Returns the content frame**; children beyond the viewport trigger the
 bars.
 
 ```lua
 local log = panel:newScrollFrame(0, 0, 0, 0, 0, 0, 1, 1)
+log:autoMeasure(true)                     -- extent follows the children automatically
 for i = 1, 100 do
     log:newTextLabel("row " .. i, 0, (i-1)*20, 0, 20, 0, 0, 1)
-    log:setContentSize(nil, 100 * 20)      -- grow the scrollable area
 end
 ```
 
@@ -107,6 +126,8 @@ end
 | `setScrollSpeed(px)` | wheel pixels per tick (default 40) |
 | `getScrollPos()` → `x, y` / `getMaxScroll()` → `x, y` | queries |
 | `setContentSize(w, h[, full])` | explicit content extent (`full` = keep scaled width) |
+| `autoMeasure([bool])` | grow the extent from children each update pass (off by default; on for `scrollable` windows; skipped when flex/grid-managed) |
+| `markDirty()` | force a re-measure next pass |
 
 Wheel scrolling, draggable thumbs, and re-clamping on viewport/content resize are wired
 internally. Destroying the viewport destroys content.
@@ -278,20 +299,34 @@ scrollable directory listing (rows recycled through a pool), hidden-file handlin
 
 A scheduler debug window — live table of every processor/task/thread with columns
 Name / Type / State / Status / Uptime / Priority / pause / kill, sortable headers, tab
-bar (Tasks / Error Log), a load bar, per-row pause/kill buttons, and priority cycling
-([`system.lua` L886](../addons/system.lua:886)).
+bar (Tasks / Error Log), a search box + type filter, a load bar, per-row quick actions,
+priority cycling, and an **inspector pane** with the full multi control matrix
+([`system.lua`](../addons/system.lua)).
 
 ```lua
 require("gui.addons.system")
-gui:showTaskManager()
+gui:showTaskManager()      -- idempotent: re-opens after close
 ```
 
 Toggle hotkey: <kbd>Ctrl</kbd>+<kbd>\`</kbd> (`ToggleTaskManager` connection,
-[`system.lua` L1068](../addons/system.lua:1068)).
+end of [`system.lua`](../addons/system.lua)).
 
-Row pool + error pool recycle GUI objects so refreshes are cheap. State names map to the
-multi thread states (`holding`, `sleeping`, `skipping`, `yielding`, `running`, …) and
-priorities to the multi priority bands (`Core` … `Idle`).
+- **Data pipeline:** a 1 Hz collector thread (on the window's processor, gated on the
+  window being open) builds a snapshot from `multi:getStats()`; the GUI applies it on an
+  UpdateManager pass through a recycled row pool. Sort is **group-preserving** — each
+  processor header stays pinned above its own rows.
+- **Row quick actions:** Pause/Resume, Kill (`Kill`/`Destroy`/`Break` as available), and
+  priority cycling. Clicking a row selects it for the inspector.
+- **Inspector matrix** (per selected object): rename (`setName`), priority cycle /
+  `ResetPriority`; actors: `Pause/Resume/Break/Reset/Destroy`, `SetTime`/`ResolveTimer`;
+  threads: `Kill`, `Sleep`; processors: `Start/Stop/boost/Destroy`, `setMaxThreads`,
+  `setTaskDelay`; services: `Start/Stop/Pause/Resume`; connectors: `Destroy`; plus
+  `reallocate` to another processor and UID/creation-timestamp readout.
+- **Errors tab:** every thread's `OnError` is hooked retroactively and for future
+  threads/processors (plus the thread-manager process); capped at 200 entries, Clear
+  button. State names map to the multi thread states (`holding`, `sleeping`, `skipping`,
+  `yielding`, `running`, …) and priorities to the multi priority bands (`Core` … `Idle`).
+- **Load bar:** `core/probe.lua` `install(multi)` → non-blocking `multi:getLoad()`.
 
 ---
 

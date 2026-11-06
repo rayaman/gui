@@ -180,7 +180,7 @@ the nearest flex root, [`core/flexbox.lua:171`](../core/flexbox.lua:171)):
 | `setFlex` / `setSizing` | direct call in the API |
 | manual geometry on a managed child | `onManualGeometry` escape-hatch hooks |
 | child added / destroyed / reparented | `newBase` / `destroy` / `setParent` hooks ([`init.lua:1106/724/507-518`](../init.lua:1106)) |
-| flex root's own box changed by an *evented* write | `OnSizeChanged`/`OnPositionChanged` connections installed by `setFlex` ([`core/flexbox.lua:1016-1028`](../core/flexbox.lua:1016)) — handlers filter `obj == self` (gui's VisualEvents fire for every element, [`init.lua:1060`](../init.lua:1060)) and ignore the pass's own fires via the `firing`/`writing` guards |
+| flex root's own box changed by an *evented* write | `OnSizeChanged`/`OnPositionChanged` connections installed by `setFlex` ([`core/flexbox.lua:1016-1028`](../core/flexbox.lua:1016)) — the core VisualEvents façade already filters `obj == self` ([`init.lua:1060`](../init.lua:1060)); the handlers' own `obj == self` check is belt-and-braces, and they ignore the pass's own fires via the `firing`/`writing` guards |
 | parent box changed **without** events (letterbox/resize thread) | per-root **parent-watch safety net**: `runPass` re-checks the root's resolved seed (`__flexAX/AY/AW/AH`) and, for size-managed roots, the parent's cached `x/y/w/h` — cheap float compares ([`core/flexbox.lua:827-844`](../core/flexbox.lua:827)) |
 
 A dirty root re-runs the full pipeline (seed → Pass A → B → aspect-h → C1 → D
