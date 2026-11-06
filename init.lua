@@ -285,6 +285,8 @@ function gui:getProcessor() return updater end
 
 function gui:getObjectFocus() return object_focus end
 
+function gui:setObjectFocus(obj) object_focus = obj end
+
 function gui:hasType(t) return band(self.type, t) == t end
 
 --[[
@@ -673,6 +675,7 @@ end
 function gui:EnableButton()
     self:OnExit(setArrow)
     self:OnEnter(setHand)
+    self:OnReleasedOther(setArrow)
 end
 
 local function testVisual(c)
