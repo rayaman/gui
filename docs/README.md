@@ -23,7 +23,7 @@ Comprehensive documentation for the `gui` library: a LÖVE2D UI framework built 
 | [Theming & Color](theming-and-color.md) | `color` module, palettes, generated themes, presets, hue-wheel slot model |
 | [Widgets (Add-ons)](widgets.md) | Window, scroll frame, checkbox, radio group, progress bar, number picker, color picker, video player, task manager, message box, file picker, menus |
 | [YAML Declarative UI](yaml-declarative-ui.md) | Building element trees from YAML; full schema reference (incl. `flex:`/`sizing:` and `grid:`/`grid-placement:` keys) |
-| [Core Modules](core-modules.md) | `font`, `gifloader`, `transitions`, `canvas`, `menus`, `probe`, `simulate` |
+| [Core Modules](core-modules.md) | `font`, `gifloader`, `svgloader`, `transitions`, `canvas`, `menus`, `probe`, `simulate` |
 | [API Quick Reference](api-quick-reference.md) | Condensed one-line-per-entry tables of the entire public surface |
 
 ---
@@ -40,6 +40,7 @@ gui/
 │   ├── grid.lua         # Grid root mode on the flex scheduler (lazy nil-guarded require)
 │   ├── font.lua         # Font object cache
 │   ├── gifloader.lua   # Pure-Lua GIF decoder (LZW) + frame animator
+│   ├── svgloader.lua   # Pure-Lua SVG vector renderer (live-drawn, crisp at any scale)
 │   ├── menus.lua       # Menu registry (lazy build, hide/show)
 │   ├── measure.lua      # Cached text measurement for the flex pass
 │   ├── probe.lua        # Scheduler load probe

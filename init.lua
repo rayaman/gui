@@ -4,6 +4,7 @@ local multi, thread = require("multi"):init()
 local GLOBAL, THREAD = require("multi.integration.loveManager"):init()
 local color = require("gui.core.color").newPalette("$gui.core.init")
 local gif   = require("gui.core.gifloader")
+local svg   = require("gui.core.svgloader")
 local ok_flex, flexbox = pcall(require, "gui.core.flexbox") -- nil if absent; all hooks nil-guarded
 if not ok_flex then flexbox = nil end
 local gui = {}
@@ -2012,7 +2013,35 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
     c.setImage = function(self, i, x, y, w, h)
         if i == nil then return end
 
-        if type(i) == "string" and i:match(".gif") then
+        -- Replacing an SVG source with a non-SVG one must remove the vector
+        -- overlay installed by the branch below (user-set posts are untouched).
+        if c.__isSvg then c.post, c.__isSvg = nil, nil end
+
+        -- SVG: vector source. Drawn live via the documented `post` overlay hook
+        -- (see draw_handler) at the element's CURRENT box size each frame, so
+        -- it stays crisp at any scale (flex/dualDim resizes included). c.image
+        -- stays nil -> drawtypes[1] is a no-op via its `if child.image` guard;
+        -- this branch early-returns and never joins the image tail below.
+        if type(i) == "string" and i:match("%.svg$") then
+            local s = svg.load(i)
+            IMAGE = i
+            c.__isSvg = true
+            c.image = nil
+            c.quad = nil
+            c.imageWidth, c.imageHeight = s.width, s.height
+            c.imageColor = white
+            c.imageVisibility = 1
+            c.post = function(self)
+                local x, y, w, h = self:getAbsolutes()
+                s:draw(x, y, w, h, {
+                    rotation = self.rotation, scaleX = self.scaleX,
+                    scaleY = self.scaleY, alpha = self.imageVisibility,
+                })
+            end
+            return
+        end
+
+        if type(i) == "string" and i:match("%.gif$") then
             img = gif.load(i)
 
             gif.Updater(img, drawer)

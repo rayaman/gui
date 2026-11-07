@@ -493,6 +493,11 @@ Connections compose with multi's algebra: `+` is OR, `*` is AND — which is how
 - GIFs bypass the cache: `setImage("*.gif")` routes to
   [`gifloader.load`](../core/gifloader.lua:103) (pure-Lua LZW decoder) and registers an
   `OnDestroy` hook to kill the gif thread.
+- SVGs bypass the cache **and** the image draw pass: `setImage("*.svg")` routes to
+  [`svgloader.load`](../core/svgloader.lua:1) (pure-Lua vector renderer), leaves
+  `c.image = nil`, and installs a `post` hook that re-reads `getAbsolutes()` and
+  redraws the vectors at the element's current box size each frame — crisp at any
+  scale ([`init.lua` setImage](../init.lua:2025)).
 
 ---
 

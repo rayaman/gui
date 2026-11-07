@@ -19,7 +19,7 @@ any registered [extensions](architecture.md#14-extension--registration-system).
 3. [Text elements](#3-text-elements)
    - [TextLabel](#31-textlabel) · [TextButton](#32-textbutton) · [TextBox](#33-textbox) · [TextArea](#34-textarea-multiline)
 4. [Image elements](#4-image-elements)
-   - [ImageLabel](#41-imagelabel) · [ImageButton](#42-imagebutton) · [GIFs](#43-animated-gifs) · [Gradients](#44-gradients)
+   - [ImageLabel](#41-imagelabel) · [ImageButton](#42-imagebutton) · [GIFs](#43-animated-gifs) · [SVGs](#44-svg-vectors) · [Gradients](#45-gradients)
 5. [Video](#5-video)
 6. [Shared base API](#6-shared-base-api)
 7. [Cloning](#7-cloning)
@@ -274,7 +274,47 @@ gif.setFixedFramerate(g, 24)
 print(gif.getInfo(g).frameCount)
 ```
 
-### 4.4 Gradients
+### 4.4 SVG Vectors
+
+`setImage("anything.svg")` loads the SVG through the pure-Lua **vector** renderer
+([`core/svgloader.lua`](../core/svgloader.lua)). Unlike a raster, the SVG is drawn
+live every frame at the element's *current* box size, so it stays sharp no matter
+how the box is scaled (fixed sizes, flex layout, `dualDim` percentages, window
+resizes):
+
+```lua
+local icon = panel:newImageLabel("assets/bookmark.svg", 0, 0, 200, 200)
+icon:setDualDim(nil, nil, 400, 400)   -- re-renders crisp, no resampled blur
+```
+
+- The element's `c.image` stays `nil`; the vector is painted through the
+  documented `post` overlay hook each frame
+  ([`init.lua` setImage](../init.lua:2025)), so it composites on top of the
+  element's background/border (and any `applyGradient` image).
+- `getSource()` still returns the `.svg` path; `__isSvg` marks such elements.
+- Solid fills, strokes, `fill-rule="evenodd"` (holes punch correctly), opacity
+  and viewBox scaling are supported. Gradients, masks, filters, `text`, and
+  `A`/`a` arcs are **not** — see [core-modules §4](core-modules.md#4-svgloader--svg-vector-renderer).
+- Edges anti-alias via window MSAA (`t.window.msaa`); set it in `love.conf` for
+  smooth results matching pre-baked PNGs.
+
+Standalone use without an element:
+
+```lua
+local svg = require("gui.core.svgloader")
+local s = svg.load("assets/bookmark.svg")
+s:draw(100, 100, 256, 256)   -- any size, any frame
+```
+
+An interactive demo (PNG vs SVG side-by-side, resize ping-pong, autotest) lives
+at [`examples/svg-demo/`](../examples/svg-demo):
+
+```
+love examples/svg-demo                 # interactive window
+love examples/svg-demo --svg-autotest  # checks + pixel-diff vs the reference PNG
+```
+
+### 4.5 Gradients
 
 `applyGradient` synthesizes a 1-pixel-wide (or tall) gradient image and assigns it as the
 element's image with linear filtering — i.e. any frame can *become* a gradient:

@@ -185,10 +185,11 @@ textarea) · `OnSelectionChanged` (radio) · `OnProgressUpdated` (progress bar) 
 | [`core/font`](../core/font.lua) | `set`, `get`, `evict`, `clear`, `size` | [core-modules §1](core-modules.md#1-font--cached-font-loader) |
 | [`core/transitions`](../core/transitions.lua) | `glide`, `newTransition`, handle `OnStep/OnStop/Kill`, `SetFPS/GetFPS` | [§2](core-modules.md#2-transitions--interpolation-engine) |
 | [`core/gifloader`](../core/gifloader.lua) | `load`, `Updater`, `update`, `draw`, `play`, `pause`, `reset`, `setFixedFramerate`, `getInfo` | [§3](core-modules.md#3-gifloader--gif-decoder--animator) |
-| [`core/canvas`](../core/canvas.lua) | `newCanvas(domain)`, `:swap(a,b)` | [§4](core-modules.md#4-canvas--full-frame-roots) |
-| [`core/menus`](../core/menus.lua) | `registerMenu`, `getMenu`, `init`, `hideMenus`, `getCurrentMenu`, `:visible` | [§5](core-modules.md#5-menus--menu-registry) |
-| [`core/simulate`](../core/simulate.lua) | `Press`, `Release`, `Click`, `Move` | [§6](core-modules.md#6-simulate--synthetic-input) |
-| [`core/probe`](../core/probe.lua) | `install(multi, opts)` → `multi:getLoad()`, `:getSchedulerLag()` | [§7](core-modules.md#7-probe--scheduler-load) |
+| [`core/svgloader`](../core/svgloader.lua) | `load`, `:draw(x,y,w,h,opts)`, `getInfo`, `clearCache`; `:getWidth/:getHeight` | [§4](core-modules.md#4-svgloader--svg-vector-renderer) |
+| [`core/canvas`](../core/canvas.lua) | `newCanvas(domain)`, `:swap(a,b)` | [§5](core-modules.md#5-canvas--full-frame-roots) |
+| [`core/menus`](../core/menus.lua) | `registerMenu`, `getMenu`, `init`, `hideMenus`, `getCurrentMenu`, `:visible` | [§6](core-modules.md#6-menus--menu-registry) |
+| [`core/simulate`](../core/simulate.lua) | `Press`, `Release`, `Click`, `Move` | [§7](core-modules.md#7-simulate--synthetic-input) |
+| [`core/probe`](../core/probe.lua) | `install(multi, opts)` → `multi:getLoad()`, `:getSchedulerLag()` | [§8](core-modules.md#8-probe--scheduler-load) |
 | [`core/flexbox`](../core/flexbox.lua) | auto-layout engine: `setFlex`/`setSizing` (on elements), `runPass`, `markDirty`, `sizeManaged`, `stats`, `debugVerifySubtree` | [flexbox](flexbox.md) |
 | [`core/grid`](../core/grid.lua) | grid root mode on the flex scheduler: `setGrid`/`setGridPlacement` (on elements via `flexbox.init`), `layoutGridRoot`, `intrinsic` | [grid](grid.md) |
 | [`core/measure`](../core/measure.lua) | `get(text, font, width, opts)`, `natural`, `beginPass`, `invalidate` — cached text measurement for the flex pass | [flexbox §4](flexbox.md#4-measured-text-fit-content) |
