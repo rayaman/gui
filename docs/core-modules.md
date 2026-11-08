@@ -197,20 +197,35 @@ end
 
 Supported subset & limitations:
 
-- **Root:** `width`/`height` (px or unitless), `viewBox`, default `fill`.
-- **Elements:** `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
-  `polygon`, `g` (paint inheritance + `translate`/`scale` transforms).
+- **Root:** `width`/`height` (px/unitless, or `pt`/`pc`/`mm`/`cm`/`in`/`em`/`%`),
+  `viewBox`, default `fill`, `preserveAspectRatio`
+  (`xMin|xMid|xMax` + `YMin|YMid|YMax` + `meet|slice` + `none`).
+- **Elements:** `path`, `rect` (incl. `rx`/`ry` rounded corners), `circle`,
+  `ellipse`, `line`, `polyline`, `polygon`, `g` (paint inheritance + group
+  `opacity`), `defs` + `use` (`href`/`xlink:href`, `x`/`y`, presentation attrs,
+  `transform`) + `symbol` (its `viewBox` scaled into the `use` box); depth-capped,
+  forward references OK.
+- **Transforms:** `translate`, `scale`, `rotate(θ [cx cy])`, `skewX`, `skewY`,
+  `matrix` — full 2×3 affine composition.
 - **Path commands:** `M m L l H h V v Z z` exact; `C c S s` and `Q q T t`
-  flattened to polylines.
+  flattened to polylines; `A a` elliptical arcs (cubic-segment approximation).
 - **Paint:** solid fills (`#RGB`, `#RRGGBB`, `rgb()`, named, `none`),
-  `fill-opacity`, `fill-rule` (evenodd exact; nonzero approximated as even-odd),
-  `stroke` + `stroke-width` + `stroke-opacity`.
-- **Scaling:** `preserveAspectRatio` default `xMidYMid meet-fit` only.
-- **Not supported:** gradients, patterns, masks, clip-paths (clip-rule read but
-  ignored), filters, group opacity, `text`/`image`/`use`/`defs`/`symbol`, SMIL
-  animation, `A`/`a` arcs (warned once), `rx`/`ry`, stroke-dasharray, line
-  caps/joins, percent/em/pt units, non-default `preserveAspectRatio`,
-  `imageColor` tinting of SVGs.
+  `fill-opacity`, `fill-rule` (evenodd parity; nonzero winding — exact for
+  uniform-orientation contours, even-odd approximation + warn on mixed),
+  `stroke` + `stroke-width` + `stroke-opacity` + `stroke-dasharray`/
+  `stroke-dashoffset` + `stroke-linejoin` + butt/square `stroke-linecap`.
+- **Gradients:** `linearGradient` / `radialGradient` (`stop` offsets +
+  `stop-color`/`stop-opacity`, `gradientUnits`, `spreadMethod`) via `fill="url(#id)"`.
+- **clip-path:** `clipPath` (rect/circle/ellipse/convex-polygon children) applied
+  geometrically at load (Sutherland–Hodgman); multiple children intersect; concave
+  regions warn once and are skipped.
+- **mask:** `mask` rasterized at load to a 96px luminance→alpha texture
+  (`maskUnits`, `maskContentUnits`); solid-fill mask children only.
+- **Not supported:** patterns, filters, SMIL animation, `text`/`image` elements,
+  true round line caps/joins (this LÖVE build has no `setLineCap`; `round`
+  approximated via `setLineStyle("smooth")`), `gradientTransform`, radial focal
+  points (`fx`/`fy` treated as center), gradients inside masks, `imageColor`
+  tinting of SVGs.
 - Cost model: geometry + meshes are built once per file (cached); per-frame
   cost is draw calls only — trivial for icons. Very complex SVGs are better
   pre-baked to PNG.

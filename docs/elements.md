@@ -292,9 +292,11 @@ icon:setDualDim(nil, nil, 400, 400)   -- re-renders crisp, no resampled blur
   ([`init.lua` setImage](../init.lua:2025)), so it composites on top of the
   element's background/border (and any `applyGradient` image).
 - `getSource()` still returns the `.svg` path; `__isSvg` marks such elements.
-- Solid fills, strokes, `fill-rule="evenodd"` (holes punch correctly), opacity
-  and viewBox scaling are supported. Gradients, masks, filters, `text`, and
-  `A`/`a` arcs are **not** — see [core-modules §4](core-modules.md#4-svgloader--svg-vector-renderer).
+- Solid + gradient fills, strokes (incl. `stroke-dasharray`), `fill-rule`
+  (evenodd + nonzero), `rx`/`ry`, arcs (`A`/`a`), `clip-path`, `mask`,
+  `defs`/`use`/`symbol`, group opacity and viewBox scaling are supported.
+  Patterns, filters, SMIL and `text`/`image` are **not** — see
+  [core-modules §4](core-modules.md#4-svgloader--svg-vector-renderer).
 - Edges anti-alias via window MSAA (`t.window.msaa`); set it in `love.conf` for
   smooth results matching pre-baked PNGs.
 
