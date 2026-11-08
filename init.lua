@@ -676,7 +676,6 @@ end
 function gui:EnableButton()
     self:OnExit(setArrow)
     self:OnEnter(setHand)
-    self:OnReleasedOther(setArrow)
 end
 
 local function testVisual(c)
@@ -1004,7 +1003,9 @@ local initEvents = function(self, evnt_type)
             -- Only change and trigger the event if it is a different object
             if self ~= object_focus then
                 gui.Events.OnObjectFocusChanged:Fire(object_focus, self)
-                object_focus = self
+                updater:newTask(function()
+                    object_focus = self
+                end)
             end
 
             if self.draggable and button == self.dragbutton and not self:isBeingCovered(x, y, self.hierarchy) and
@@ -1015,6 +1016,7 @@ local initEvents = function(self, evnt_type)
             end
         else
             self.OnPressedOuter:Fire(self, x, y, button, istouch, presses)
+            object_focus = gui
         end
     end)
 
@@ -1715,6 +1717,7 @@ function gui:newTextBox(txt, x, y, w, h, sx, sy, sw, sh)
     c.selection = {0, 0}
     c.blink = true
     c.seek = true
+    c.editable = true
 
     function c:getUniques()
         return gui.getUniques(c, {
@@ -1851,7 +1854,7 @@ gui.HotKeys.OnSelectAll(function()
 end)
 
 gui.Events.OnTextInputed(function(text)
-    if object_focus:hasType(box) and object_focus:isActive() then insert(object_focus, text) end
+    if object_focus:hasType(box) and object_focus.editable then insert(object_focus, text) end
 end)
 
 gui.HotKeys.OnCopy(function()
@@ -1861,13 +1864,13 @@ gui.HotKeys.OnCopy(function()
 end)
 
 gui.HotKeys.OnPaste(function()
-    if object_focus:hasType(box) then
+    if object_focus:hasType(box) and object_focus.editable then
         insert(object_focus, love.system.getClipboardText())
     end
 end)
 
 gui.HotKeys.OnCut(function()
-    if object_focus:hasType(box) and object_focus:HasSelection() then
+    if object_focus:hasType(box) and object_focus.editable and object_focus:HasSelection() then
         love.system.setClipboardText(object_focus:GetSelectedText())
         delete(object_focus, "backspace")
     end
