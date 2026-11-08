@@ -120,7 +120,7 @@ palette:reindexColor("accent", "#ff8800")   -- mutate in place (objects are shar
 
 Because elements hold *references* to palette colors, `reindexColor` retroactively restyles
 everything using that color — the live-theme trick used by the color picker
-(`palette:reindexColor("preview", r, g, b)` in [`extensions.lua` L531](../addons/extensions.lua:531)).
+(`palette:reindexColor("preview", r, g, b)` in [`colorpicker.lua` L135](../addons/extensions/colorpicker.lua:135)).
 
 The built-in mega-palette (CSS/X11 names + color-name-dataset names + `gray0..255`):
 

@@ -328,7 +328,7 @@ panel:applyGradient("horizontal", {1,0,0,1}, {0,0,1,1})
 
 > Naming note (from the color-picker source): the direction name describes how the source
 > pixels are laid out, not the on-screen sweep — if it looks swapped, flip the string.
-> ([`extensions.lua` L502–508](../addons/extensions.lua:502))
+> ([`colorpicker.lua` L107–113](../addons/extensions/colorpicker.lua:107))
 
 ### Image caching
 

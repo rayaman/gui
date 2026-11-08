@@ -210,7 +210,7 @@ obj.square = "h"   -- force width := height
 
 Applied inside `getAbsolutes` after resolution ([`init.lua` L385–389](../init.lua:385)).
 Great for circular avatars, icon buttons, and the video player's square play button
-(`play_pause.square = "h"` in [`extensions.lua` L42](../addons/extensions.lua:42)).
+(`play_pause.square = "h"` in [`videoplayer.lua` L36](../addons/extensions/videoplayer.lua:36)).
 
 ---
 

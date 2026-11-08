@@ -105,7 +105,7 @@ end
 Additional processors can be added at runtime with `gui:newProcessor(name)` — their `run`
 is appended to the same list ([`init.lua` L2456–2460](../init.lua:2456)). Add-on modules use
 this to isolate their workloads (e.g. `media-updater`, `misc-updater` in
-[`addons/extensions.lua`](../addons/extensions.lua:5), one `window_N` processor per
+[`addons/extensions/shared.lua`](../addons/extensions/shared.lua:29), one `window_N` processor per
 [`newWindow`](../addons/system.lua:441)).
 
 ```mermaid

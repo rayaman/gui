@@ -1,5 +1,5 @@
 -- main.lua — standalone LÖVE demo + autotest for gui:newListFrame
--- (addons/extensions.lua).
+-- (addons/extensions/listframe.lua).
 --
 -- Run:  love examples/list-demo                 (interactive: three live lists,
 --                                               Add/Remove/Clear buttons, full

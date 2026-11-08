@@ -2,7 +2,7 @@
 
 Condensed tables for the whole public surface. Links jump to the deep-dive docs.
 Core entries reference [`gui/init.lua`](../init.lua); add-ons reference
-[`addons/extensions.lua`](../addons/extensions.lua) (E) or
+[`addons/extensions/`](../addons/extensions/) (E) or
 [`addons/system.lua`](../addons/system.lua) (S).
 
 Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs

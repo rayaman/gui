@@ -5,7 +5,7 @@ directly and return nothing.
 
 | Module | Loaded by `require("gui.addons")`? | Widgets |
 |---|---|---|
-| [`addons/extensions.lua`](../addons/extensions.lua) | ✅ yes | video player, checkbox, radio group, progress bar, number picker, color picker, list frame |
+| [`addons/extensions/`](../addons/extensions/) | ✅ yes — `addons/extensions.lua` requires each widget file | video player, checkbox, radio group, progress bar, number picker, color picker, list frame |
 | [`addons/system.lua`](../addons/system.lua) | ❌ **opt-in** — `require("gui.addons.system")` | window, scroll frame, message box, task manager, file picker |
 | [`addons/extensions_old.lua`](../addons/extensions_old.lua) | ❌ not loaded (legacy) | slider, tooltip, list frame, grid frame |
 | [`core/menus.lua`](../core/menus.lua) | core | menu registry |
@@ -171,7 +171,7 @@ cb:getLabel()
 cb.OnChanged(function(value) settings.sound = value end)
 ```
 
-[`extensions.lua` L82](../addons/extensions.lua:82). Structure: dark outer frame, inset
+[`checkbox.lua` L11](../addons/extensions/checkbox.lua:11). Structure: dark outer frame, inset
 white border, inner toggle square (visible = checked), optional label text.
 
 ### Radio group
@@ -183,7 +183,7 @@ rg:getSelectedOption()                 -- the selected checkbox element
 rg.OnSelectionChanged(function(group, selected) ... end)
 ```
 
-[`extensions.lua` L120](../addons/extensions.lua:120) — built from checkboxes with
+[`checkbox.lua` L49](../addons/extensions/checkbox.lua:49) — built from checkboxes with
 mutually-exclusive release handlers.
 
 ---
@@ -191,7 +191,7 @@ mutually-exclusive release handlers.
 ## 5. NumberPicker
 
 Stepper field: `−` button, numeric text box, `+` button
-([`extensions.lua` L259](../addons/extensions.lua:259)).
+([`numberpicker.lua` L7](../addons/extensions/numberpicker.lua:7)).
 
 ```lua
 local picker = parent:newNumberPicker(x, y, w, h, sx, sy, sw, sh, {
@@ -216,7 +216,7 @@ scroll wheel steps when focused. Buttons grey out at min/max.
 ## 6. ColorPicker
 
 Full HSV picker: saturation/value square, hue strip, preview swatch, R/G/B number pickers,
-and a hex input ([`extensions.lua` L460](../addons/extensions.lua:460)).
+and a hex input ([`colorpicker.lua` L64](../addons/extensions/colorpicker.lua:64)).
 
 ```lua
 local cp = gui:newColorPicker(x, y, w, h, sx, sy, sw, sh, {
@@ -253,7 +253,7 @@ bar:isClickable(true)     -- click/drag on the bar sets the value (seek-style)
 bar.OnProgressUpdated(function(self, percent, value, drag) ... end)
 ```
 
-[`extensions.lua` L149](../addons/extensions.lua:149). The video player's seek bar is a
+[`progressbar.lua` L11](../addons/extensions/progressbar.lua:11). The video player's seek bar is a
 clickable progress bar ([§8](#8-videoplayer)). Returns four handles so you can restyle
 `fill`, the percentage label, or the inner frame.
 
@@ -262,7 +262,7 @@ clickable progress bar ([§8](#8-videoplayer)). Returns four handles so you can 
 ## 8. VideoPlayer
 
 Ready-made media window: video + play/pause image button + seekable progress bar
-([`extensions.lua` L20](../addons/extensions.lua:20)).
+([`videoplayer.lua` L9](../addons/extensions/videoplayer.lua:9)).
 
 ```lua
 local player = gui:newVideoPlayer("movie.ogv", x, y, w, h, sx, sy, sw, sh,
@@ -360,7 +360,7 @@ either hide+park in `gui.virtual` or destroy themselves (`delete` flag).
 local list = parent:newListFrame(x, y, w, h, sx, sy, sw, sh, opts)
 ```
 
-[`extensions.lua`](../addons/extensions.lua). Scrollable single-selection list of
+[`extensions/listframe.lua`](../addons/extensions/listframe.lua). Scrollable single-selection list of
 rows on top of `newScrollFrame` (autoMeasure on, so the box scrolls when items
 overflow). Selection paints `theme.primaryNav`; hover tints with a lightened
 `primaryBG`; press darkens one step further. All state changes ride one shared
