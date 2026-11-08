@@ -77,4 +77,4 @@ New opt-in flexbox layout for the GUI, fully backwards compatible — elements t
 - **Hooks:** [`init.lua`](init.lua:7) loads the module via `pcall` and nil-guards every hook site (manual-geometry escape hatch, parent/child/destroy dirtying, draw-loop pre-pass, virtual refresh, late injection) — a missing module leaves the GUI byte-identical to before.
 - **YAML:** [`yaml/builder.lua`](yaml/builder.lua:1) accepts `flex:` and `sizing:` keys on declarative elements; scroll containers auto-fit content height (`fit-content`, `maxScrollY` derived, no manual `setContentSize`).
 - **Demo/tests:** [`examples/flex-demo/`](examples/flex-demo/main.lua:1) runs a headless autotest (`love.exe examples/flex-demo --flex-autotest`) covering all phases — 81 checks, 0 failures.
-- **Docs:** [`docs/flexbox.md`](docs/flexbox.md:1) (user guide) and [`docs/flexbox-integration-plan.md`](docs/flexbox-integration-plan.md:1) (design/plan).
+- **Docs:** [`docs/flexbox.md`](docs/flexbox.md:1) (user guide; its §13 preserves the design rationale from the original integration plan, since removed).

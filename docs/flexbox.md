@@ -1,10 +1,9 @@
 # Flexbox Layout
 
 Opt-in flex layout for the retained element tree — a scoped port of
-[Clay v0.14](../reference/clay/clay.h)'s auto-layout engine, adapted to
-`gui`'s dual-dimension system. The design document is
-[`docs/flexbox-integration-plan.md`](flexbox-integration-plan.md); this is the
-user guide.
+Clay v0.14's auto-layout engine, adapted to `gui`'s dual-dimension system.
+The design rationale that guided the port is distilled in
+[§13](#13-design-rationale--invariants).
 
 **Opt-in and additive:** nothing happens until you call `setFlex` on an
 element. Subtrees without flex keys are byte-identical to before — the layout
@@ -31,6 +30,7 @@ Hooks into [`init.lua`](../init.lua) are six nil-guarded call sites; removing
 10. [YAML keys](#10-yaml-keys)
 11. [Running the demo / autotest](#11-running-the-demo--autotest)
 12. [Limitations vs Clay](#12-limitations-vs-clay)
+13. [Design rationale & invariants](#13-design-rationale--invariants)
 
 ---
 
@@ -50,7 +50,7 @@ c:setSizing{ width = "grow" }               -- takes the remaining space
 ```
 
 The pass runs automatically at the top of the draw loop
-([`init.lua:2418-2422`](../init.lua:2418)); children's `dualDim` is rewritten
+([`init.lua:2521-2524`](../init.lua:2521)); children's `dualDim` is rewritten
 so the normal parent-first draw resolver reproduces the computed pixels
 exactly (`getAbsolutes() == __flexComputed`, verified to 1e-9 by the demo's
 `verify.lua` every frame).
@@ -134,9 +134,9 @@ lines == rendered lines* (the demo asserts this, Phase 1).
 
 **Any manual geometry write on a flex-managed child escapes it permanently:**
 `setDualDim`, `rawSetDualDim`, `move`, `size` ([hooks at
-`init.lua:302/309/417/423`](../init.lua:302)). The element gets
+`init.lua:306/313/435/441`](../init.lua:306)). The element gets
 `__flexEscaped = true`, leaves flow (siblings close ranks around it — Clay
-floating semantics, plan §4), keeps its manual rect, and is **not**
+floating semantics), keeps its manual rect, and is **not**
 re-adopted — except by an explicit `setSizing{...}` call, which re-enables
 management.
 
@@ -157,10 +157,10 @@ inside one are clipped to the container's absolutes like any other child.
 
 | Feature | Behavior |
 |---|---|
-| `square = "w"/"h"` | Honored through the pass (Pass E tail bakes `__fw == __fh`, so the resolver's square re-application at [`init.lua:385`](../init.lua:385) is a no-op on managed elements). Demo `SC`. |
+| `square = "w"/"h"` | Honored through the pass (Pass E tail bakes `__fw == __fh`, so the resolver's square re-application at [`init.lua:407`](../init.lua:407) is a no-op on managed elements). Demo `SC`. |
 | `centerX`/`centerY` | The centering loop writes dualDim every frame → the child **auto-escapes** (documented consequence of §5). Use `alignX/alignY = "center"` instead. Demo `CXR`. |
 | `fullFrame()` | On a flex root: ordinary dualDim seed. On a managed child: escape hatch (it's a `setDualDim`). |
-| `setAspectSize` letterbox | The resize/letterbox thread ([`init.lua:2532-2563`](../init.lua:2532)) mutates `gui.x/y/w/h` fields directly and fires no events — covered by the parent-watch safety net (§7). |
+| `setAspectSize` letterbox | The resize/letterbox thread ([`init.lua:2637`](../init.lua:2637)) mutates `gui.x/y/w/h` fields directly and fires no events — covered by the parent-watch safety net (§7). |
 | `move`/`size` incremental drags | Escape hatch by contract — dragging a flex child opts it out. Drag a managed child in the demo: it stays where dropped. |
 | Transitions animating a managed child | Any external `setDualDim` auto-escapes it — the transition wins, the element becomes floating. Animating a *container's* size while flex reflows it is unsupported (v1 caveat). |
 | Blur / shaders / `canPress` | See flex geometry for free — write-back keeps `dualDim` truthful, and the draw cache is refreshed parent-first from it. |
@@ -172,14 +172,14 @@ The pass runs at the top of `draw_loop` for both trees
 finished mutating geometry, before the parent-first draw DFS caches
 absolutes — so hit-testing and rendering see flex geometry the same frame.
 
-**What marks a flex root dirty** (plan §5.1, `flexbox.markDirty` walks up to
+**What marks a flex root dirty** (`flexbox.markDirty` walks up to
 the nearest flex root, [`core/flexbox.lua:171`](../core/flexbox.lua:171)):
 
 | Trigger | Mechanism |
 |---|---|
 | `setFlex` / `setSizing` | direct call in the API |
 | manual geometry on a managed child | `onManualGeometry` escape-hatch hooks |
-| child added / destroyed / reparented | `newBase` / `destroy` / `setParent` hooks ([`init.lua:1106/724/507-518`](../init.lua:1106)) |
+| child added / destroyed / reparented | `newBase` / `destroy` / `setParent` hooks ([`init.lua:1140/755/525`](../init.lua:1140)) |
 | flex root's own box changed by an *evented* write | `OnSizeChanged`/`OnPositionChanged` connections installed by `setFlex` ([`core/flexbox.lua:1016-1028`](../core/flexbox.lua:1016)) — the core VisualEvents façade already filters `obj == self` ([`init.lua:1060`](../init.lua:1060)); the handlers' own `obj == self` check is belt-and-braces, and they ignore the pass's own fires via the `firing`/`writing` guards |
 | parent box changed **without** events (letterbox/resize thread) | per-root **parent-watch safety net**: `runPass` re-checks the root's resolved seed (`__flexAX/AY/AW/AH`) and, for size-managed roots, the parent's cached `x/y/w/h` — cheap float compares ([`core/flexbox.lua:827-844`](../core/flexbox.lua:827)) |
 
@@ -198,7 +198,7 @@ The autotest asserts this (`idle frame visits 0 elements`). `stats`
 | `visited` | elements laid out (cumulative) — the perf gate: idle delta 0 |
 | `rootsScanned` | flex roots examined by `runPass` (cumulative) — the O(#roots) steady-state cost of the watch |
 
-**Re-entrancy** (plan §5.3): the pass fires delta-gated
+**Re-entrancy**: the pass fires delta-gated
 `OnSizeChanged`/`OnPositionChanged` after write-back (once per actual size
 change, `firing` guard so those fires don't re-mark dirty). If a user event
 handler calls back into `runPass` mid-pass, the `running` flag defers a
@@ -210,7 +210,7 @@ per change, deferred re-entry, and no recursion blowup.
 
 Windows moved into `gui.virtual` (hidden; updated but never drawn) keep
 working: `runPass(gui.virtual)` runs both in the draw loop and in the 100 ms
-virtual-refresh thread ([`init.lua:2450`](../init.lua:2450)). The parked
+virtual-refresh thread ([`init.lua:2551`](../init.lua:2551)). The parked
 subtree's `getAbsolutes()` invariant is asserted by the demo after the
 refresh thread's first tick.
 
@@ -224,7 +224,7 @@ frame (parent-first), preserving the invariant by construction.
 
 ## 9. Scroll containers (fit-content)
 
-Plan §7, implemented. A `newScrollFrame`'s content frame can be flex-sized
+A `newScrollFrame`'s content frame can be flex-sized
 so scroll extent derives from real content instead of manual
 `setContentSize`:
 
@@ -303,7 +303,7 @@ Autotest exit code is 0 only when `failed == 0 and invariantFails == 0`.
 
 ## 12. Limitations vs Clay
 
-Honest list (plan §10 non-goals + verified behavior):
+Honest list (port non-goals + verified behavior):
 
 - **No grid layout in the flex pass itself** — Clay v0.14 has none either;
   grid containers/items are a separate second root mode riding the same
@@ -331,3 +331,50 @@ Honest list (plan §10 non-goals + verified behavior):
   percent sums behave like fixed overflow (shrink-to-min), not CSS wrapping.
 - **No `flex-wrap`** — a single line per container, like Clay's
   `childCount`-per-container model without multi-line.
+
+---
+
+## 13. Design rationale & invariants
+
+Why the engine is built the way it is — the invariants that make it safe.
+(Distilled from the original integration plan; the plan file itself is no
+longer kept in the repo — `git log --follow` on its old path recovers it.)
+
+- **dualDim stays the single source of truth.** The pass is a pure pre-pass
+  that *writes* dualDim; it never changes the resolution formula in
+  `getAbsolutes`. Everything downstream — `draw_handler`, `canPress`, `__clip`
+  scissor stamping, blur, shaders reading `child.w/h`, `newScrollFrame`, the
+  YAML builder, every add-on — keeps working unchanged, because they all read
+  the same dualDim the pass just wrote.
+- **Write-back is exact, not approximate.** For a child at computed absolutes
+  `(cx, cy, cw, ch)` under parent absolutes `(px, py, pw, ph)`, the pass calls
+  `rawSetDualDim(cx - px, cy - py, cw, ch, 0, 0, 0, 0)`. Re-resolving through
+  the normal formula returns exactly `(cx, cy, cw, ch)` — no rounding, floats
+  reproduce bit-exactly — which is why the `getAbsolutes() == __flexComputed`
+  invariant holds to 1e-9.
+- **The pass runs at the top of `draw_loop`, not in UpdateManager**, for three
+  ordering guarantees: every update processor (addons included) has finished
+  mutating geometry; the resize/letterbox thread has already refreshed
+  `gui.w/h/x/y`; and hit-testing sees flex geometry through the same
+  parent-first draw cache the same frame. Nested flex roots are processed in
+  increasing depth, so a child root seeds from its parent's *same-frame*
+  fresh values.
+- **Fit-content doesn't fight parent-first caching.** Upward height
+  propagation computes children bottom-up *before* anything is written back,
+  so the draw resolver never sees half-laid-out fit-content states. Only the
+  flex root consumes one-frame-stale parent geometry — identical staleness to
+  every existing `getAbsolutes` consumer — and the parent-watch closes the
+  resize case.
+- **Re-entrancy guards mirror `newScrollFrame`'s `applying` flag.** A
+  `writing` flag suppresses the escape hatch and dirty-marking for the pass's
+  own `rawSetDualDim`/event fires; a `running` flag defers a re-run to the
+  next frame if a user `OnSizeChanged` handler calls back into the pass
+  mid-flight, instead of recursing.
+- **Idle frames cost nothing by design.** Dirty gating means a quiet frame
+  visits 0 elements; BFS/DFS buffers are module-level and reused (no
+  per-frame allocation churn for the GC); the measure cache is generation-
+  swept per pass. `stats.visited` deltas are the regression gate for this.
+- **Manual geometry *means* the user took control** — which is why the escape
+  hatch is one-way. Dragging, transitions, and `centerX/centerY`'s per-frame
+  `rawSetDualDim` all imply manual ownership, so they float the element
+  rather than oscillating against the pass.

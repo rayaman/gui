@@ -77,7 +77,7 @@ Z-index Enhancments:
 ## Flexbox layout (opt-in)
 
 Auto-layout on top of the dual-dim system — a scoped port of
-[Clay v0.14](reference/clay/clay.h)'s flex engine. Opt in per subtree with
+Clay v0.14's flex engine. Opt in per subtree with
 `setFlex` / `setSizing`; everything else is untouched (manual writes on a
 managed child escape it back to dualDim).
 
@@ -90,7 +90,7 @@ local b = row:newFrame(); b:setSizing{ width = "grow" }  -- takes the rest
 
 Docs: [flexbox guide](docs/flexbox.md) (API reference, escape-hatch
 semantics, dirty-flag scheduling, virtual-tree & scroll integration,
-limitations vs Clay) · [integration plan](docs/flexbox-integration-plan.md) ·
+design rationale, limitations vs Clay) ·
 YAML keys `flex:`/`sizing:` in [yaml-declarative-ui.md](docs/yaml-declarative-ui.md).
 
 Try it:
@@ -123,8 +123,7 @@ board:newFrame():setGridPlacement{ column = "header / header" }  -- spans both c
 ```
 
 Docs: [grid guide](docs/grid.md) (property reference, track/placement
-grammar, cross-mode nesting, limitations vs CSS) ·
-[integration plan](plans/grid-integration-plan.md) · YAML keys
+grammar, cross-mode nesting, limitations vs CSS) · YAML keys
 `grid:`/`grid-placement:` in [yaml-declarative-ui.md](docs/yaml-declarative-ui.md).
 
 Try it:

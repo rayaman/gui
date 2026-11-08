@@ -7,7 +7,6 @@ directly and return nothing.
 |---|---|---|
 | [`addons/extensions/`](../addons/extensions/) | ✅ yes — `addons/extensions.lua` requires each widget file | video player, checkbox, radio group, progress bar, number picker, color picker, list frame |
 | [`addons/system.lua`](../addons/system.lua) | ❌ **opt-in** — `require("gui.addons.system")` | window, scroll frame, message box, task manager, file picker |
-| [`addons/extensions_old.lua`](../addons/extensions_old.lua) | ❌ not loaded (legacy) | slider, tooltip, list frame, grid frame |
 | [`core/menus.lua`](../core/menus.lua) | core | menu registry |
 
 ```lua
@@ -33,7 +32,6 @@ require("gui.addons.system")     -- + window / scroll frame / task manager / pic
 10. [Task Manager](#10-task-manager)
 11. [Menu registry (core)](#11-menu-registry-core)
 12. [ListFrame](#12-listframe)
-13. [Legacy widgets](#13-legacy-widgets)
 
 ---
 
@@ -88,7 +86,7 @@ window raises it above siblings (`topStack`).
 **Auto-theming:** any child created inside the window is styled from the **new theme
 framework** slots (`primaryBG` content, `primaryNav` header, `primaryText` text,
 `primaryButton` buttons with lighten-hover). See
-[theming §4.4](theming-and-color.md#44-legacy-shape-in-add-ons) — the legacy
+[theming §4.4](theming-and-color.md#44-add-on-theme-shape-new-framework) — the legacy
 `colorPrimary…` shape is no longer used by these widgets.
 
 ```mermaid
@@ -409,36 +407,12 @@ Colors: `selectedColor` / `hoverColor` / `stripedColor` / `textColor` /
 Rows are full-width frames with an `ignore`d label, so clicks always reach the
 row. Wheel scrolling and scrollbars come from the underlying ScrollFrame.
 
-> **Note:** `newListFrame` in [`extensions_old.lua`](../addons/extensions_old.lua)
-> (§13) is a different, older auto-stacking widget that overrides this one if you
-> require it. The modern version above is what `require("gui.addons")` installs.
 > Demo + autotest: [`examples/list-demo/`](../examples/list-demo/main.lua:1)
 > (`love examples/list-demo --list-autotest`, 54 checks).
 
 ---
 
-## 13. Legacy widgets
-
-[`extensions_old.lua`](../addons/extensions_old.lua) is **not required** anywhere. It
-contains earlier implementations worth knowing exist (signatures from its header
-comments):
-
-```lua
-parent:newSlider(min, max, value, x, y, w, h, sx, sy, vertical)
-parent:newSlider(...):setValue(v) / :getValue() / :setRange(min, max)
-   -- OnValueChanged(self, value)
-
-local tt = gui:newTooltip(text, delay)
-tt:attach(element)        -- shows after hover delay
-
-parent:newListFrame(x, y, w, h, sx, sy, sw, sh,
-                    {direction="vertical"|"horizontal", gap=4, padding=6})
-   -- auto-stacks children (superseded by the modern ListFrame in §12;
-   -- requiring extensions_old overrides gui:newListFrame with this one)
-
-parent:newGridFrame(cols, cellW, cellH, x, y, sx, sy, gap, padding)
-   -- slot-based grid; newCheckbox/newSlider auto-wrap into cells
-```
-
-If you adopt these, `require("gui.addons.extensions_old")` — expect drift (it predates the
-current `newTextArea` in core, which it also defines).
+> The add-on layer has no slider, tooltip, or slot-based grid frame. Planned
+> replacements are tracked in the root [`README.md`](../README.md) TODO list; the
+> old `addons/extensions_old.lua` file that contained earlier versions of these
+> has been removed from the repo.

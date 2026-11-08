@@ -7,10 +7,11 @@ Two core modules power the library's visual identity:
 - [`gui/core/theme.lua`](../core/theme.lua) — a generated 12-slot palette plus 12 curated
   presets.
 
-> ⚠️ The theming module was recently rewritten around a hue-wheel generator. The current
+> ⚠️ The theming module was rewritten around a hue-wheel generator. The current
 > API is `newTheme`/presets/`getTheme`/`setTheme` — older docs describing `theme:new{...}`,
-> `theme:random()`, `t:dump()` no longer match the code, and some add-ons still reference
-> the legacy shape. See [§4.4](#44-legacy-shape-in-add-ons).
+> `theme:random()`, `t:dump()` no longer match the code. The add-on widgets consume the
+> new framework slots directly; the legacy `colorPrimary…` table shape is gone.
+> See [§4.4](#44-add-on-theme-shape-new-framework).
 
 ---
 
