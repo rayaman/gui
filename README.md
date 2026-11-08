@@ -49,7 +49,7 @@ Polish:
   - gui:newTooltip()
   - gui:newTextArea()
     - TODO: selection, hotkeys
-  - gui:newListFrame()
+  - ~~gui:newListFrame()~~ (selection, hover/press motion, add/remove animation, keyboard nav — see docs/widgets.md §12)
   - gui:newGridFrame()
 
 Better Transistions:

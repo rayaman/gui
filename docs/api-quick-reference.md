@@ -65,6 +65,7 @@ Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
 | `gui:newColorPicker(dd, opts)` (E) | HSV picker | [widgets §6](widgets.md#6-colorpicker) |
 | `parent:newProgressBar(dd, count, value)` (E) | `bar, fill, label, fillframe` | [widgets §7](widgets.md#7-progressbar) |
 | `gui:newVideoPlayer(src, dd, draggable, theme)` (E) | media window | [widgets §8](widgets.md#8-videoplayer) |
+| `parent:newListFrame(dd, opts)` (E) | scrollable single-select list (selection/hover/press motion, keyboard nav) | [widgets §12](widgets.md#12-listframe) |
 | `gui:newFilePicker(title, root, filter, cb)` (S) | file dialog window | [widgets §9](widgets.md#9-filepicker) |
 | `gui.OpenSaveDir(root)` (S) | open save dir in OS browser | §9 |
 | `gui:showTaskManager()` (S) | scheduler debug window | [widgets §10](widgets.md#10-task-manager) |

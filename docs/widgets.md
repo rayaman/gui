@@ -5,7 +5,7 @@ directly and return nothing.
 
 | Module | Loaded by `require("gui.addons")`? | Widgets |
 |---|---|---|
-| [`addons/extensions.lua`](../addons/extensions.lua) | ✅ yes | video player, checkbox, radio group, progress bar, number picker, color picker |
+| [`addons/extensions.lua`](../addons/extensions.lua) | ✅ yes | video player, checkbox, radio group, progress bar, number picker, color picker, list frame |
 | [`addons/system.lua`](../addons/system.lua) | ❌ **opt-in** — `require("gui.addons.system")` | window, scroll frame, message box, task manager, file picker |
 | [`addons/extensions_old.lua`](../addons/extensions_old.lua) | ❌ not loaded (legacy) | slider, tooltip, list frame, grid frame |
 | [`core/menus.lua`](../core/menus.lua) | core | menu registry |
@@ -32,7 +32,8 @@ require("gui.addons.system")     -- + window / scroll frame / task manager / pic
 9. [FilePicker](#9-filepicker)
 10. [Task Manager](#10-task-manager)
 11. [Menu registry (core)](#11-menu-registry-core)
-12. [Legacy widgets](#12-legacy-widgets)
+12. [ListFrame](#12-listframe)
+13. [Legacy widgets](#13-legacy-widgets)
 
 ---
 
@@ -353,7 +354,70 @@ either hide+park in `gui.virtual` or destroy themselves (`delete` flag).
 
 ---
 
-## 12. Legacy widgets
+## 12. ListFrame
+
+```lua
+local list = parent:newListFrame(x, y, w, h, sx, sy, sw, sh, opts)
+```
+
+[`extensions.lua`](../addons/extensions.lua). Scrollable single-selection list of
+rows on top of `newScrollFrame` (autoMeasure on, so the box scrolls when items
+overflow). Selection paints `theme.primaryNav`; hover tints with a lightened
+`primaryBG`; press darkens one step further. All state changes ride one shared
+tween loop (~150 ms exponential settle): adds fade + slide in with a short
+stagger, removes fade out and **collapse** while neighbours reflow, and an
+off-screen selection smooth-scrolls the viewport into place. Keyboard-driven
+selection snaps instantly — a key pressed hundreds of times a session must never
+animate. `animate = false` opts out entirely (state lands same-frame).
+
+```lua
+local files = gui:newListFrame(20, 60, 320, 300, 0, 0, 0, 0, {
+    items     = { { text = "Alpha", value = 1 }, "Bravo", "Charlie" },
+    keyboard  = true,                  -- ↑↓ PgUp PgDn Home End Del once focused
+    emptyText = "Nothing here yet",    -- placeholder while the list is empty
+    striped   = false,                 -- alternating row fill
+    rowHeight = 28, gap = 2, align = gui.ALIGN_LEFT, scale = .85,
+    onChange        = function(index, value) end,
+    onDoubleClicked = function(index, value) end,
+    onRightClick    = function(index, value, mx, my) end,
+})
+
+files:add("Delta", 4)                   -- returns the row frame
+files:insert(2, "Echo", 42)            -- live index: lands before old row 2
+files:remove(files:getSelected())      -- collapse + reflow + selection reassign
+files:select(4)                        -- smooth-scrolls into view if clipped
+local i, v = files:getSelected()
+```
+
+| API | Description |
+|---|---|
+| `add(text[, value])` / `insert(i, text[, value])` | append / insert at live index (row frame returned) |
+| `setItems(items)` | replace everything (strings or `{text=, value=}` tables) |
+| `remove(i)` → value / `removeValue(value)` → index, text | animated removal; selection reassigns to the next live row and fires the change event |
+| `clear([animate])` | remove all (`animate=false` destroys immediately) |
+| `select(i[, animate])` / `setSelected(i[, animate])` | select + fire events / silent variant; index or row frame accepted |
+| `getSelected()` → `index, value` | `nil, nil` when nothing selected |
+| `getItem(i)` / `getItems()` / `getItemCount()` / `indexOf(value)` / `isEmpty()` | queries (live indices — collapsing rows are never visible to the API) |
+| `scrollToShow(i)` | smooth-scroll a row into view |
+| `getRow(i)` / `getEmptyLabel()` | advanced access (row color is tween-driven — restyle via opts, don't write `row.color`) |
+| `isSettling()` | transitions still in flight (debug/testing) |
+| `setFocused(bool)` / `isFocused()` | keyboard-nav focus; also automatic (press inside focuses, press outside clears) |
+| `OnSelectionChanged` | connection, `:Fire(index, value)` like `onChange` |
+
+Colors: `selectedColor` / `hoverColor` / `stripedColor` / `textColor` /
+`emptyTextColor` / `backgroundColor` (viewport paint; default transparent).
+Rows are full-width frames with an `ignore`d label, so clicks always reach the
+row. Wheel scrolling and scrollbars come from the underlying ScrollFrame.
+
+> **Note:** `newListFrame` in [`extensions_old.lua`](../addons/extensions_old.lua)
+> (§13) is a different, older auto-stacking widget that overrides this one if you
+> require it. The modern version above is what `require("gui.addons")` installs.
+> Demo + autotest: [`examples/list-demo/`](../examples/list-demo/main.lua:1)
+> (`love examples/list-demo --list-autotest`, 54 checks).
+
+---
+
+## 13. Legacy widgets
 
 [`extensions_old.lua`](../addons/extensions_old.lua) is **not required** anywhere. It
 contains earlier implementations worth knowing exist (signatures from its header
@@ -369,7 +433,8 @@ tt:attach(element)        -- shows after hover delay
 
 parent:newListFrame(x, y, w, h, sx, sy, sw, sh,
                     {direction="vertical"|"horizontal", gap=4, padding=6})
-   -- auto-stacks children
+   -- auto-stacks children (superseded by the modern ListFrame in §12;
+   -- requiring extensions_old overrides gui:newListFrame with this one)
 
 parent:newGridFrame(cols, cellW, cellH, x, y, sx, sy, gap, padding)
    -- slot-based grid; newCheckbox/newSlider auto-wrap into cells

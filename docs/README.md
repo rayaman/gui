@@ -74,7 +74,7 @@ flowchart TD
     B3 --> B4["Starts background threads:<br/>hotkeys, textbox blink, resize sync,<br/>OnUpdate pump, draw loop"]
     B4 --> B5["Auto-loads gui/shaders/*<br/>→ gui.SHADERS, extensions"]
     A --> C["require('gui.addons') (optional)"]
-    C --> C1["extensions.lua:<br/>checkbox, radio, progress bar,<br/>number/color picker, video player"]
+    C --> C1["extensions.lua:<br/>checkbox, radio, progress bar,<br/>number/color picker, video player,<br/>list frame"]
     C --> C2["system.lua (commented out by default —<br/>require explicitly):<br/>newWindow, newScrollFrame, task manager,<br/>message box, file picker"]
 ```
 
