@@ -120,7 +120,7 @@ palette:reindexColor("accent", "#ff8800")   -- mutate in place (objects are shar
 
 Because elements hold *references* to palette colors, `reindexColor` retroactively restyles
 everything using that color — the live-theme trick used by the color picker
-(`palette:reindexColor("preview", r, g, b)` in [`extensions.lua` L531](../addons/extensions.lua:531)).
+(`palette:reindexColor("preview", r, g, b)` in [`colorpicker.lua` L135](../addons/extensions/colorpicker.lua:135)).
 
 The built-in mega-palette (CSS/X11 names + color-name-dataset names + `gray0..255`):
 
@@ -198,53 +198,27 @@ local th = theme:newTheme("#2d6a9f", {apply = true})   -- swap the whole app's c
 theme:setTheme(theme.midnight())                        -- apply a preset later
 ```
 
-### 4.4 Legacy shape in add-ons
+### 4.4 Add-on theme shape (new framework)
 
-`newWindow` (in [`addons/system.lua`](../addons/system.lua:545)) expects a table with
-fields:
+The system-addon widgets (`newWindow`, `newMessageBox`, task manager, `newVideoPlayer`)
+consume the **new theme-framework slots directly** — no `colorPrimary…` legacy shape
+anywhere. Pass any `theme:newTheme()` result or preset:
 
+```lua
+local win = gui:newWindow{
+    title = "Settings",
+    theme = theme:midnight(),          -- or theme:newTheme("#16202e")
+    fonts = { primary = love.graphics.newFont(14),
+              button  = love.graphics.newFont(14) },
+}
 ```
-colorPrimary, colorPrimaryDark, colorPrimaryText,
-colorButtonNormal, colorButtonHighlight, colorButtonText,
-fontPrimary, fontButton
-```
 
-while `addons/system.lua:6` and `extensions.lua:21` construct themes with the *older*
-`{primary, primaryDark, primaryText}` shape via `theme:new(...)` — a constructor the
-current theme module does not define. Practical guidance today:
+Slots read: `primaryBG` (content), `primaryNav` (header), `primaryText`,
+`primaryButton` (hover = `color.lighten(_, .15)`), `primaryFG` (accents). A partial
+table is fine — missing slots fall back to the default theme.
 
-- Build window themes as a **plain table** matching the `colorPrimary…` field list above
-  (that's what `window:setTheme` reads), e.g.:
-
-  ```lua
-  local winTheme = {
-      colorPrimary         = color.new("#124559"),
-      colorPrimaryDark     = color.new("#01161e"),
-      colorPrimaryText     = color.new("#aec3b0"),
-      colorButtonNormal    = color.new("#1e6f8a"),
-      colorButtonHighlight = color.new("#2a9bbf"),
-      colorButtonText      = color.new("#ffffff"),
-      fontPrimary          = love.graphics.newFont(14),
-      fontButton           = love.graphics.newFont(14),
-  }
-  ```
-
-- Or map a generated theme onto that shape:
-
-  ```lua
-  local g = theme:newTheme("#16202e")
-  local winTheme = {
-      colorPrimary     = g.primaryBG,
-      colorPrimaryDark = g.primaryNav,
-      colorPrimaryText = g.primaryText,
-      colorButtonNormal    = g.primaryButton,
-      colorButtonHighlight = color.lighten(g.primaryButton, 0.15),
-      colorButtonText      = g.primaryText,
-  }
-  ```
-
-(Adding a `theme:new` alias / shape adapter would close this gap — flagged in
-[`gui/fixes.md`](../fixes.md) territory.)
+Fonts are theme-independent: `opts.fonts` overrides the 14 px default. The old legacy
+`colorPrimary…` table shape is no longer supported by these widgets.
 
 ---
 

@@ -6,7 +6,18 @@ fixed sizes, fluid percentages, anchoring, padding, centering, and responsive sc
 with no separate layout engine.
 
 Reference: `gui:newDualDim` / `setDualDim` / `getAbsolutes` in
-[`init.lua` L1109–1122](../init.lua:1109), [L371–391](../init.lua:371).
+[`init.lua` L1119–1132](../init.lua:1119), [L375–413](../init.lua:375).
+
+> **Opt-in auto-layout:** on top of dualDim there is a layout engine
+> ([`core/flexbox.lua`](../core/flexbox.lua)) that *writes* dualDim for you —
+> `setFlex`/`setSizing` (flexbox, see [Flexbox Layout](flexbox.md)) and
+> `setGrid`/`setGridPlacement` (CSS-Grid-style containers/items, see
+> [Grid Layout](grid.md), which runs as a second root mode inside the same
+> scheduler; a container is flex *or* grid, never both, and the two nest
+> freely: a grid container in a flex one — or vice versa — is its own
+> independent root). It never alters the resolution formula below, and
+> subtrees without layout keys are unaffected (manual `setDualDim` on a
+> layout-managed child escapes that child back to this system).
 
 ---
 
@@ -199,7 +210,7 @@ obj.square = "h"   -- force width := height
 
 Applied inside `getAbsolutes` after resolution ([`init.lua` L385–389](../init.lua:385)).
 Great for circular avatars, icon buttons, and the video player's square play button
-(`play_pause.square = "h"` in [`extensions.lua` L42](../addons/extensions.lua:42)).
+(`play_pause.square = "h"` in [`videoplayer.lua` L36](../addons/extensions/videoplayer.lua:36)).
 
 ---
 

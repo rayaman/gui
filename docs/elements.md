@@ -19,7 +19,7 @@ any registered [extensions](architecture.md#14-extension--registration-system).
 3. [Text elements](#3-text-elements)
    - [TextLabel](#31-textlabel) · [TextButton](#32-textbutton) · [TextBox](#33-textbox) · [TextArea](#34-textarea-multiline)
 4. [Image elements](#4-image-elements)
-   - [ImageLabel](#41-imagelabel) · [ImageButton](#42-imagebutton) · [GIFs](#43-animated-gifs) · [Gradients](#44-gradients)
+   - [ImageLabel](#41-imagelabel) · [ImageButton](#42-imagebutton) · [GIFs](#43-animated-gifs) · [SVGs](#44-svg-vectors) · [Gradients](#45-gradients)
 5. [Video](#5-video)
 6. [Shared base API](#6-shared-base-api)
 7. [Cloning](#7-cloning)
@@ -274,7 +274,49 @@ gif.setFixedFramerate(g, 24)
 print(gif.getInfo(g).frameCount)
 ```
 
-### 4.4 Gradients
+### 4.4 SVG Vectors
+
+`setImage("anything.svg")` loads the SVG through the pure-Lua **vector** renderer
+([`core/svgloader.lua`](../core/svgloader.lua)). Unlike a raster, the SVG is drawn
+live every frame at the element's *current* box size, so it stays sharp no matter
+how the box is scaled (fixed sizes, flex layout, `dualDim` percentages, window
+resizes):
+
+```lua
+local icon = panel:newImageLabel("assets/bookmark.svg", 0, 0, 200, 200)
+icon:setDualDim(nil, nil, 400, 400)   -- re-renders crisp, no resampled blur
+```
+
+- The element's `c.image` stays `nil`; the vector is painted through the
+  documented `post` overlay hook each frame
+  ([`init.lua` setImage](../init.lua:2025)), so it composites on top of the
+  element's background/border (and any `applyGradient` image).
+- `getSource()` still returns the `.svg` path; `__isSvg` marks such elements.
+- Solid + gradient fills, strokes (incl. `stroke-dasharray`), `fill-rule`
+  (evenodd + nonzero), `rx`/`ry`, arcs (`A`/`a`), `clip-path`, `mask`,
+  `defs`/`use`/`symbol`, group opacity and viewBox scaling are supported.
+  Patterns, filters, SMIL and `text`/`image` are **not** — see
+  [core-modules §4](core-modules.md#4-svgloader--svg-vector-renderer).
+- Edges anti-alias via window MSAA (`t.window.msaa`); set it in `love.conf` for
+  smooth results matching pre-baked PNGs.
+
+Standalone use without an element:
+
+```lua
+local svg = require("gui.core.svgloader")
+local s = svg.load("assets/bookmark.svg")
+s:draw(100, 100, 256, 256)   -- any size, any frame
+```
+
+An interactive demo (PNG vs SVG side-by-side, resize ping-pong, autotest) lives
+at [`examples/svg-demo/`](../examples/svg-demo):
+
+```
+love examples/svg-demo                 # interactive window
+love examples/svg-demo --svg-autotest  # checks + pixel-diff vs the reference PNG
+```
+
+### 4.5 Gradients
 
 `applyGradient` synthesizes a 1-pixel-wide (or tall) gradient image and assigns it as the
 element's image with linear filtering — i.e. any frame can *become* a gradient:
@@ -286,7 +328,7 @@ panel:applyGradient("horizontal", {1,0,0,1}, {0,0,1,1})
 
 > Naming note (from the color-picker source): the direction name describes how the source
 > pixels are laid out, not the on-screen sweep — if it looks swapped, flip the string.
-> ([`extensions.lua` L502–508](../addons/extensions.lua:502))
+> ([`colorpicker.lua` L107–113](../addons/extensions/colorpicker.lua:107))
 
 ### Image caching
 
@@ -342,6 +384,10 @@ Inherited by every element. (Full one-liner tables in
 `setDualDim`, `rawSetDualDim`, `getDualDim`, `getAbsolutes`, `move`, `size`,
 `moveInBounds`, `fullFrame`, `centerX/centerY`, `makeCircle`, `makeArc`,
 `getLocalCords(mx,my)` → mouse coords relative to the element.
+`setFlex{...}` / `setSizing{...}` opt an element into the opt-in flex
+auto-layout (containers / children); manual `setDualDim`/`move`/`size` on a
+flex-managed child escapes it back to plain dualDim — see
+[flexbox.md](flexbox.md).
 
 ### Tree
 `getChildren`, `getAllChildren` (visible, depth-first flat list), `isDescendantOf`,

@@ -5,7 +5,7 @@ directly and return nothing.
 
 | Module | Loaded by `require("gui.addons")`? | Widgets |
 |---|---|---|
-| [`addons/extensions.lua`](../addons/extensions.lua) | ✅ yes | video player, checkbox, radio group, progress bar, number picker, color picker |
+| [`addons/extensions/`](../addons/extensions/) | ✅ yes — `addons/extensions.lua` requires each widget file | video player, checkbox, radio group, progress bar, number picker, color picker, list frame |
 | [`addons/system.lua`](../addons/system.lua) | ❌ **opt-in** — `require("gui.addons.system")` | window, scroll frame, message box, task manager, file picker |
 | [`addons/extensions_old.lua`](../addons/extensions_old.lua) | ❌ not loaded (legacy) | slider, tooltip, list frame, grid frame |
 | [`core/menus.lua`](../core/menus.lua) | core | menu registry |
@@ -32,7 +32,8 @@ require("gui.addons.system")     -- + window / scroll frame / task manager / pic
 9. [FilePicker](#9-filepicker)
 10. [Task Manager](#10-task-manager)
 11. [Menu registry (core)](#11-menu-registry-core)
-12. [Legacy widgets](#12-legacy-widgets)
+12. [ListFrame](#12-listframe)
+13. [Legacy widgets](#13-legacy-widgets)
 
 ---
 
@@ -41,43 +42,62 @@ require("gui.addons.system")     -- + window / scroll frame / task manager / pic
 ```lua
 require("gui.addons.system")
 
-local win = gui:newWindow(x, y, w, h, sx, sy, sw, sh, "Title", draggable, theme)
+local win = gui:newWindow{
+    x, y, w, h, sx, sy, sw, sh,   -- optional geometry (dualDim)
+    title      = "Title",
+    draggable  = true,            -- header drag (default true)
+    resizable  = false,           -- edge/corner resize handles
+    scrollable = false,           -- content auto-scrolls when children exceed it
+    minW = 200, minH = 120,       -- resize clamps (max = screen bounds)
+    headerHeight = 30,
+    theme = theme:newTheme("#124559"),   -- new-framework theme table or preset
+    fonts = { primary = f, button = f },
+    onClose = function(win) end,
+}
 ```
 
-[`system.lua` L441](../addons/system.lua:441). Structure: a rounded **header** frame
-(35 px tall, drag handle) + a **content** frame below it (`clipDescendants = true`) +
-red **X** button + (currently commented-out) resize handles. Each window owns its own
-`multi` processor (`window_N`).
+[`system.lua`](../addons/system.lua). Structure: a rounded **header** frame
+(30 px default, drag handle) + a **content** frame below it (`clipDescendants = true`)
++ red **X** button. Each window owns its own `multi` processor (`window_N`), destroyed
+with the window.
 
-**Returns the content frame** — add children directly to it.
+**Returns the window root frame** — add children to `win.content`:
 
 ```lua
-local panel = win:newTextLabel("Settings")
-local ok    = win:newTextButton("OK", 10, 260, 100, 34)   -- auto-styled by theme
+local panel = win.content:newTextLabel("Settings")
+local ok    = win.content:newTextButton("OK", 10, 260, 100, 34)   -- auto-styled by theme
 ```
 
 | API | Description |
 |---|---|
-| `win:setTitle(t)` | change header text (re-fits font) |
-| `win:close()` / `win:OnClose(fn)` | hide (re-parent header to `gui.virtual`); fires `OnClose` |
+| `win.content` / `win.header` / `win.title` / `win.XButton` | the window parts (`win.root == win`) |
+| `win:setTitle(t)` / `win:getTitle()` | change / read header text (re-fits font) |
+| `win:close()` / `win:OnClose(fn)` | hide (re-parent to `gui.virtual`); fires `OnClose` |
 | `win:open()` | restore to the original parent |
-| `win:setTheme(th)` / `win:getTheme()` | re-apply / read theme |
+| `win:destroy()` | tear down the whole window **and its processor** |
+| `win:setTheme(th[, fonts])` / `win:getTheme()` | re-apply / read theme |
 | `win.XButton` | the close button element |
 | `win.process` | the window's processor |
+| `win.handles` | the 8 resize-handle frames (only when `resizable`) |
 
-**Auto-theming:** any child created inside fires the window's `OnCreated` hook; buttons get
-`colorButtonNormal/Highlight/Text` + hover swap + `fitFont`, text elements get
-`colorPrimaryText` + `fontPrimary` ([`system.lua` L559–582](../addons/system.lua:559)).
-Theme field shape: see [theming §4.4](theming-and-color.md#44-legacy-shape-in-add-ons).
+**Drag & resize:** when `draggable`, dragging the header moves the window and clamps it
+inside the screen on release. When `resizable`, eight invisible edge/corner handles
+(N/S/E/W/NE/NW/SE/SW) resize with `minW/minH` clamps and resize cursors. Clicking a
+window raises it above siblings (`topStack`).
 
-**Drag:** when `draggable`, dragging the header moves the window and clamps it inside the
-screen on release.
+**Auto-theming:** any child created inside the window is styled from the **new theme
+framework** slots (`primaryBG` content, `primaryNav` header, `primaryText` text,
+`primaryButton` buttons with lighten-hover). See
+[theming §4.4](theming-and-color.md#44-legacy-shape-in-add-ons) — the legacy
+`colorPrimary…` shape is no longer used by these widgets.
 
 ```mermaid
 flowchart TD
-    H["header frame (35px, roundness top, drag handle)<br/>title label + red X button"] --> W["window frame (content)<br/>clipDescendants = true"]
-    W --> C1["your children"]
-    W -.-> RH["edge resize frames<br/>(disabled in current source)"]
+    R["window root frame (the window)"] --> H["header frame (30px, roundness top, drag handle)<br/>title label + red X button"]
+    R --> C["content frame (clipDescendants = true)"]
+    C --> C1["your children"]
+    C -.-> SV["scroll viewport + content<br/>(scrollable = true)"]
+    R -.-> RH["8 edge/corner resize handles<br/>(resizable = true)"]
 ```
 
 ---
@@ -88,15 +108,15 @@ flowchart TD
 local content = parent:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
 ```
 
-[`system.lua` L158](../addons/system.lua:158). Viewport + auto-hiding vertical/horizontal
+[`system.lua`](../addons/system.lua). Viewport + auto-hiding vertical/horizontal
 scrollbars (8 px). **Returns the content frame**; children beyond the viewport trigger the
 bars.
 
 ```lua
 local log = panel:newScrollFrame(0, 0, 0, 0, 0, 0, 1, 1)
+log:autoMeasure(true)                     -- extent follows the children automatically
 for i = 1, 100 do
     log:newTextLabel("row " .. i, 0, (i-1)*20, 0, 20, 0, 0, 1)
-    log:setContentSize(nil, 100 * 20)      -- grow the scrollable area
 end
 ```
 
@@ -107,6 +127,8 @@ end
 | `setScrollSpeed(px)` | wheel pixels per tick (default 40) |
 | `getScrollPos()` → `x, y` / `getMaxScroll()` → `x, y` | queries |
 | `setContentSize(w, h[, full])` | explicit content extent (`full` = keep scaled width) |
+| `autoMeasure([bool])` | grow the extent from children each update pass (off by default; on for `scrollable` windows; skipped when flex/grid-managed) |
+| `markDirty()` | force a re-measure next pass |
 
 Wheel scrolling, draggable thumbs, and re-clamping on viewport/content resize are wired
 internally. Destroying the viewport destroys content.
@@ -149,7 +171,7 @@ cb:getLabel()
 cb.OnChanged(function(value) settings.sound = value end)
 ```
 
-[`extensions.lua` L82](../addons/extensions.lua:82). Structure: dark outer frame, inset
+[`checkbox.lua` L11](../addons/extensions/checkbox.lua:11). Structure: dark outer frame, inset
 white border, inner toggle square (visible = checked), optional label text.
 
 ### Radio group
@@ -161,7 +183,7 @@ rg:getSelectedOption()                 -- the selected checkbox element
 rg.OnSelectionChanged(function(group, selected) ... end)
 ```
 
-[`extensions.lua` L120](../addons/extensions.lua:120) — built from checkboxes with
+[`checkbox.lua` L49](../addons/extensions/checkbox.lua:49) — built from checkboxes with
 mutually-exclusive release handlers.
 
 ---
@@ -169,7 +191,7 @@ mutually-exclusive release handlers.
 ## 5. NumberPicker
 
 Stepper field: `−` button, numeric text box, `+` button
-([`extensions.lua` L259](../addons/extensions.lua:259)).
+([`numberpicker.lua` L7](../addons/extensions/numberpicker.lua:7)).
 
 ```lua
 local picker = parent:newNumberPicker(x, y, w, h, sx, sy, sw, sh, {
@@ -194,7 +216,7 @@ scroll wheel steps when focused. Buttons grey out at min/max.
 ## 6. ColorPicker
 
 Full HSV picker: saturation/value square, hue strip, preview swatch, R/G/B number pickers,
-and a hex input ([`extensions.lua` L460](../addons/extensions.lua:460)).
+and a hex input ([`colorpicker.lua` L64](../addons/extensions/colorpicker.lua:64)).
 
 ```lua
 local cp = gui:newColorPicker(x, y, w, h, sx, sy, sw, sh, {
@@ -231,7 +253,7 @@ bar:isClickable(true)     -- click/drag on the bar sets the value (seek-style)
 bar.OnProgressUpdated(function(self, percent, value, drag) ... end)
 ```
 
-[`extensions.lua` L149](../addons/extensions.lua:149). The video player's seek bar is a
+[`progressbar.lua` L11](../addons/extensions/progressbar.lua:11). The video player's seek bar is a
 clickable progress bar ([§8](#8-videoplayer)). Returns four handles so you can restyle
 `fill`, the percentage label, or the inner frame.
 
@@ -240,7 +262,7 @@ clickable progress bar ([§8](#8-videoplayer)). Returns four handles so you can 
 ## 8. VideoPlayer
 
 Ready-made media window: video + play/pause image button + seekable progress bar
-([`extensions.lua` L20](../addons/extensions.lua:20)).
+([`videoplayer.lua` L9](../addons/extensions/videoplayer.lua:9)).
 
 ```lua
 local player = gui:newVideoPlayer("movie.ogv", x, y, w, h, sx, sy, sw, sh,
@@ -278,20 +300,34 @@ scrollable directory listing (rows recycled through a pool), hidden-file handlin
 
 A scheduler debug window — live table of every processor/task/thread with columns
 Name / Type / State / Status / Uptime / Priority / pause / kill, sortable headers, tab
-bar (Tasks / Error Log), a load bar, per-row pause/kill buttons, and priority cycling
-([`system.lua` L886](../addons/system.lua:886)).
+bar (Tasks / Error Log), a search box + type filter, a load bar, per-row quick actions,
+priority cycling, and an **inspector pane** with the full multi control matrix
+([`system.lua`](../addons/system.lua)).
 
 ```lua
 require("gui.addons.system")
-gui:showTaskManager()
+gui:showTaskManager()      -- idempotent: re-opens after close
 ```
 
 Toggle hotkey: <kbd>Ctrl</kbd>+<kbd>\`</kbd> (`ToggleTaskManager` connection,
-[`system.lua` L1068](../addons/system.lua:1068)).
+end of [`system.lua`](../addons/system.lua)).
 
-Row pool + error pool recycle GUI objects so refreshes are cheap. State names map to the
-multi thread states (`holding`, `sleeping`, `skipping`, `yielding`, `running`, …) and
-priorities to the multi priority bands (`Core` … `Idle`).
+- **Data pipeline:** a 1 Hz collector thread (on the window's processor, gated on the
+  window being open) builds a snapshot from `multi:getStats()`; the GUI applies it on an
+  UpdateManager pass through a recycled row pool. Sort is **group-preserving** — each
+  processor header stays pinned above its own rows.
+- **Row quick actions:** Pause/Resume, Kill (`Kill`/`Destroy`/`Break` as available), and
+  priority cycling. Clicking a row selects it for the inspector.
+- **Inspector matrix** (per selected object): rename (`setName`), priority cycle /
+  `ResetPriority`; actors: `Pause/Resume/Break/Reset/Destroy`, `SetTime`/`ResolveTimer`;
+  threads: `Kill`, `Sleep`; processors: `Start/Stop/boost/Destroy`, `setMaxThreads`,
+  `setTaskDelay`; services: `Start/Stop/Pause/Resume`; connectors: `Destroy`; plus
+  `reallocate` to another processor and UID/creation-timestamp readout.
+- **Errors tab:** every thread's `OnError` is hooked retroactively and for future
+  threads/processors (plus the thread-manager process); capped at 200 entries, Clear
+  button. State names map to the multi thread states (`holding`, `sleeping`, `skipping`,
+  `yielding`, `running`, …) and priorities to the multi priority bands (`Core` … `Idle`).
+- **Load bar:** `core/probe.lua` `install(multi)` → non-blocking `multi:getLoad()`.
 
 ---
 
@@ -318,7 +354,70 @@ either hide+park in `gui.virtual` or destroy themselves (`delete` flag).
 
 ---
 
-## 12. Legacy widgets
+## 12. ListFrame
+
+```lua
+local list = parent:newListFrame(x, y, w, h, sx, sy, sw, sh, opts)
+```
+
+[`extensions/listframe.lua`](../addons/extensions/listframe.lua). Scrollable single-selection list of
+rows on top of `newScrollFrame` (autoMeasure on, so the box scrolls when items
+overflow). Selection paints `theme.primaryNav`; hover tints with a lightened
+`primaryBG`; press darkens one step further. All state changes ride one shared
+tween loop (~150 ms exponential settle): adds fade + slide in with a short
+stagger, removes fade out and **collapse** while neighbours reflow, and an
+off-screen selection smooth-scrolls the viewport into place. Keyboard-driven
+selection snaps instantly — a key pressed hundreds of times a session must never
+animate. `animate = false` opts out entirely (state lands same-frame).
+
+```lua
+local files = gui:newListFrame(20, 60, 320, 300, 0, 0, 0, 0, {
+    items     = { { text = "Alpha", value = 1 }, "Bravo", "Charlie" },
+    keyboard  = true,                  -- ↑↓ PgUp PgDn Home End Del once focused
+    emptyText = "Nothing here yet",    -- placeholder while the list is empty
+    striped   = false,                 -- alternating row fill
+    rowHeight = 28, gap = 2, align = gui.ALIGN_LEFT, scale = .85,
+    onChange        = function(index, value) end,
+    onDoubleClicked = function(index, value) end,
+    onRightClick    = function(index, value, mx, my) end,
+})
+
+files:add("Delta", 4)                   -- returns the row frame
+files:insert(2, "Echo", 42)            -- live index: lands before old row 2
+files:remove(files:getSelected())      -- collapse + reflow + selection reassign
+files:select(4)                        -- smooth-scrolls into view if clipped
+local i, v = files:getSelected()
+```
+
+| API | Description |
+|---|---|
+| `add(text[, value])` / `insert(i, text[, value])` | append / insert at live index (row frame returned) |
+| `setItems(items)` | replace everything (strings or `{text=, value=}` tables) |
+| `remove(i)` → value / `removeValue(value)` → index, text | animated removal; selection reassigns to the next live row and fires the change event |
+| `clear([animate])` | remove all (`animate=false` destroys immediately) |
+| `select(i[, animate])` / `setSelected(i[, animate])` | select + fire events / silent variant; index or row frame accepted |
+| `getSelected()` → `index, value` | `nil, nil` when nothing selected |
+| `getItem(i)` / `getItems()` / `getItemCount()` / `indexOf(value)` / `isEmpty()` | queries (live indices — collapsing rows are never visible to the API) |
+| `scrollToShow(i)` | smooth-scroll a row into view |
+| `getRow(i)` / `getEmptyLabel()` | advanced access (row color is tween-driven — restyle via opts, don't write `row.color`) |
+| `isSettling()` | transitions still in flight (debug/testing) |
+| `setFocused(bool)` / `isFocused()` | keyboard-nav focus; also automatic (press inside focuses, press outside clears) |
+| `OnSelectionChanged` | connection, `:Fire(index, value)` like `onChange` |
+
+Colors: `selectedColor` / `hoverColor` / `stripedColor` / `textColor` /
+`emptyTextColor` / `backgroundColor` (viewport paint; default transparent).
+Rows are full-width frames with an `ignore`d label, so clicks always reach the
+row. Wheel scrolling and scrollbars come from the underlying ScrollFrame.
+
+> **Note:** `newListFrame` in [`extensions_old.lua`](../addons/extensions_old.lua)
+> (§13) is a different, older auto-stacking widget that overrides this one if you
+> require it. The modern version above is what `require("gui.addons")` installs.
+> Demo + autotest: [`examples/list-demo/`](../examples/list-demo/main.lua:1)
+> (`love examples/list-demo --list-autotest`, 54 checks).
+
+---
+
+## 13. Legacy widgets
 
 [`extensions_old.lua`](../addons/extensions_old.lua) is **not required** anywhere. It
 contains earlier implementations worth knowing exist (signatures from its header
@@ -334,7 +433,8 @@ tt:attach(element)        -- shows after hover delay
 
 parent:newListFrame(x, y, w, h, sx, sy, sw, sh,
                     {direction="vertical"|"horizontal", gap=4, padding=6})
-   -- auto-stacks children
+   -- auto-stacks children (superseded by the modern ListFrame in §12;
+   -- requiring extensions_old overrides gui:newListFrame with this one)
 
 parent:newGridFrame(cols, cellW, cellH, x, y, sx, sy, gap, padding)
    -- slot-based grid; newCheckbox/newSlider auto-wrap into cells

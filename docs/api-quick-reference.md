@@ -2,7 +2,7 @@
 
 Condensed tables for the whole public surface. Links jump to the deep-dive docs.
 Core entries reference [`gui/init.lua`](../init.lua); add-ons reference
-[`addons/extensions.lua`](../addons/extensions.lua) (E) or
+[`addons/extensions/`](../addons/extensions/) (E) or
 [`addons/system.lua`](../addons/system.lua) (S).
 
 Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
@@ -56,7 +56,7 @@ Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
 | `parent:newImageLabel(src, dd)` | image/gif | [§4.1](elements.md#41-imagelabel) |
 | `parent:newImageButton(src, dd)` | image w/ input | [§4.2](elements.md#42-imagebutton) |
 | `parent:newVideo(src, dd)` | video | [§5](elements.md#5-video) |
-| `parent:newWindow(x,y,w,h,sx,sy,sw,sh, title, draggable, theme)` (S) | window content frame | [widgets §1](widgets.md#1-window) |
+| `gui:newWindow(optsTable)` (S) | window root frame (title/draggable/resizable/scrollable) | [widgets §1](widgets.md#1-window) |
 | `parent:newScrollFrame(dd)` (S) | scrollable content frame | [widgets §2](widgets.md#2-scrollframe) |
 | `gui:newMessageBox(opts)` (S) | dialog window | [widgets §3](widgets.md#3-messagebox) |
 | `parent:newCheckbox(label, x, y, size, sx, sy)` (E) | checkbox | [widgets §4](widgets.md#4-checkbox--radiogroup) |
@@ -65,6 +65,7 @@ Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
 | `gui:newColorPicker(dd, opts)` (E) | HSV picker | [widgets §6](widgets.md#6-colorpicker) |
 | `parent:newProgressBar(dd, count, value)` (E) | `bar, fill, label, fillframe` | [widgets §7](widgets.md#7-progressbar) |
 | `gui:newVideoPlayer(src, dd, draggable, theme)` (E) | media window | [widgets §8](widgets.md#8-videoplayer) |
+| `parent:newListFrame(dd, opts)` (E) | scrollable single-select list (selection/hover/press motion, keyboard nav) | [widgets §12](widgets.md#12-listframe) |
 | `gui:newFilePicker(title, root, filter, cb)` (S) | file dialog window | [widgets §9](widgets.md#9-filepicker) |
 | `gui.OpenSaveDir(root)` (S) | open save dir in OS browser | §9 |
 | `gui:showTaskManager()` (S) | scheduler debug window | [widgets §10](widgets.md#10-task-manager) |
@@ -90,6 +91,10 @@ Legend: *(E)* loaded with `require("gui.addons")` · *(S)* needs
 | `intersecpt(x,y,w,h)` | overlap rect with another box |
 | `getLocalCords(mx,my)` | → mouse coords local to element |
 | `obj.square = "w"/"h"` | lock square aspect |
+| `setFlex{direction,gap,padding,alignX,alignY}` / `setFlex(false)` | opt into flex layout (container) — [flexbox](flexbox.md) |
+| `setSizing{width,height,aspectRatio}` / `setSizing(false)` | flex child sizing / permanent escape — [flexbox §3](flexbox.md#3-setsizing--child-sizing) |
+| `setGrid{columns,rows,areas,gap,autoFlow,dense,justifyItems,alignItems,justifyContent,alignContent,placeItems,placeContent,placeSelf}` / `setGrid(false)` | opt into grid layout (container) — [grid](grid.md) |
+| `setGridPlacement{column,row,justifySelf,alignSelf,placeSelf}` / `setGridPlacement(false)` | grid item placement / back to auto — [grid §4](grid.md#4-setgridplacement--item-placement) |
 
 ### Tree & lifecycle
 
@@ -181,10 +186,14 @@ textarea) · `OnSelectionChanged` (radio) · `OnProgressUpdated` (progress bar) 
 | [`core/font`](../core/font.lua) | `set`, `get`, `evict`, `clear`, `size` | [core-modules §1](core-modules.md#1-font--cached-font-loader) |
 | [`core/transitions`](../core/transitions.lua) | `glide`, `newTransition`, handle `OnStep/OnStop/Kill`, `SetFPS/GetFPS` | [§2](core-modules.md#2-transitions--interpolation-engine) |
 | [`core/gifloader`](../core/gifloader.lua) | `load`, `Updater`, `update`, `draw`, `play`, `pause`, `reset`, `setFixedFramerate`, `getInfo` | [§3](core-modules.md#3-gifloader--gif-decoder--animator) |
-| [`core/canvas`](../core/canvas.lua) | `newCanvas(domain)`, `:swap(a,b)` | [§4](core-modules.md#4-canvas--full-frame-roots) |
-| [`core/menus`](../core/menus.lua) | `registerMenu`, `getMenu`, `init`, `hideMenus`, `getCurrentMenu`, `:visible` | [§5](core-modules.md#5-menus--menu-registry) |
-| [`core/simulate`](../core/simulate.lua) | `Press`, `Release`, `Click`, `Move` | [§6](core-modules.md#6-simulate--synthetic-input) |
-| [`core/probe`](../core/probe.lua) | `install(multi, opts)` → `multi:getLoad()`, `:getSchedulerLag()` | [§7](core-modules.md#7-probe--scheduler-load) |
+| [`core/svgloader`](../core/svgloader.lua) | `load`, `:draw(x,y,w,h,opts)`, `getInfo`, `clearCache`; `:getWidth/:getHeight` | [§4](core-modules.md#4-svgloader--svg-vector-renderer) |
+| [`core/canvas`](../core/canvas.lua) | `newCanvas(domain)`, `:swap(a,b)` | [§5](core-modules.md#5-canvas--full-frame-roots) |
+| [`core/menus`](../core/menus.lua) | `registerMenu`, `getMenu`, `init`, `hideMenus`, `getCurrentMenu`, `:visible` | [§6](core-modules.md#6-menus--menu-registry) |
+| [`core/simulate`](../core/simulate.lua) | `Press`, `Release`, `Click`, `Move` | [§7](core-modules.md#7-simulate--synthetic-input) |
+| [`core/probe`](../core/probe.lua) | `install(multi, opts)` → `multi:getLoad()`, `:getSchedulerLag()` | [§8](core-modules.md#8-probe--scheduler-load) |
+| [`core/flexbox`](../core/flexbox.lua) | auto-layout engine: `setFlex`/`setSizing` (on elements), `runPass`, `markDirty`, `sizeManaged`, `stats`, `debugVerifySubtree` | [flexbox](flexbox.md) |
+| [`core/grid`](../core/grid.lua) | grid root mode on the flex scheduler: `setGrid`/`setGridPlacement` (on elements via `flexbox.init`), `layoutGridRoot`, `intrinsic` | [grid](grid.md) |
+| [`core/measure`](../core/measure.lua) | `get(text, font, width, opts)`, `natural`, `beginPass`, `invalidate` — cached text measurement for the flex pass | [flexbox §4](flexbox.md#4-measured-text-fit-content) |
 | [`yaml/builder`](../yaml/builder.lua) | `build`, `buildMany`, `fromString` | [yaml doc](yaml-declarative-ui.md) |
 | [`yaml/toyaml`](../yaml/toyaml.lua) | `guiToYaml(obj, opts)` | [yaml §6](yaml-declarative-ui.md#6-serializer-toyaml) |
 | [`shaders/shaders`](../shaders/shaders.lua) | `gui.SHADERS.*`, `gui.NewShader`, `GetShaderUniforms` | [shaders §9](appearance-and-shaders.md#9-shader-library-reference) |

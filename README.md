@@ -49,7 +49,7 @@ Polish:
   - gui:newTooltip()
   - gui:newTextArea()
     - TODO: selection, hotkeys
-  - gui:newListFrame()
+  - ~~gui:newListFrame()~~ (selection, hover/press motion, add/remove animation, keyboard nav — see docs/widgets.md §12)
   - gui:newGridFrame()
 
 Better Transistions:
@@ -73,3 +73,63 @@ Focus Management:
 Z-index Enhancments:
  - gui:setLayer(n)
  - gui:getLayer()
+
+## Flexbox layout (opt-in)
+
+Auto-layout on top of the dual-dim system — a scoped port of
+[Clay v0.14](reference/clay/clay.h)'s flex engine. Opt in per subtree with
+`setFlex` / `setSizing`; everything else is untouched (manual writes on a
+managed child escape it back to dualDim).
+
+```lua
+local row = gui:newFrame(20, 20, 400, 100)
+row:setFlex{ direction = "row", gap = 8, padding = 12, alignY = "center" }
+local a = row:newFrame(); a:setSizing{ width = 100, height = "grow" }
+local b = row:newFrame(); b:setSizing{ width = "grow" }  -- takes the rest
+```
+
+Docs: [flexbox guide](docs/flexbox.md) (API reference, escape-hatch
+semantics, dirty-flag scheduling, virtual-tree & scroll integration,
+limitations vs Clay) · [integration plan](docs/flexbox-integration-plan.md) ·
+YAML keys `flex:`/`sizing:` in [yaml-declarative-ui.md](docs/yaml-declarative-ui.md).
+
+Try it:
+
+```
+love examples/flex-demo                 # interactive scenarios + debug overlays
+love examples/flex-demo --flex-autotest # 78 assertions + per-frame write-back invariant, exit 0 on pass
+```
+
+Honest caveats: no grid inside the flex pass itself (grid is a separate root
+mode — see below), no zIndex/flex-wrap, no immediate mode; animating a flex
+container's size fights the pass (external writes escape the element); a
+flex root's parent box is read from the one-frame draw cache (same staleness
+every existing `getAbsolutes` consumer has, closed for resizes by the
+parent-watch).
+
+## Grid layout (opt-in)
+
+CSS-Grid-style containers and items — tracks (`fr`/`px`/`auto`/`minmax`/
+`repeat`), template areas, explicit lines/spans/dense auto-placement,
+content + item alignment. It runs as a second root mode inside the same
+scheduler, so flex and grid nest freely and share the escape hatch, dirty
+gating, write-back and events. A container is `setFlex` *or* `setGrid`.
+
+```lua
+local board = gui:newFrame(20, 20, 600, 200)
+board:setGrid{ areas = { "header header", "side main" },
+               columns = "200px 400px", gap = 10 }
+board:newFrame():setGridPlacement{ column = "header / header" }  -- spans both cols
+```
+
+Docs: [grid guide](docs/grid.md) (property reference, track/placement
+grammar, cross-mode nesting, limitations vs CSS) ·
+[integration plan](plans/grid-integration-plan.md) · YAML keys
+`grid:`/`grid-placement:` in [yaml-declarative-ui.md](docs/yaml-declarative-ui.md).
+
+Try it:
+
+```
+love examples/grid-demo                 # labeled scenarios + debug overlays
+love examples/grid-demo --grid-autotest # 79 assertions + per-frame invariant, exit 0 on pass
+```

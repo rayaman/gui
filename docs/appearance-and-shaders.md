@@ -193,7 +193,7 @@ end
 ```
 
 The color picker uses `post` to paint its SV gradient square
-([`extensions.lua` L481](../addons/extensions.lua:481)).
+([`colorpicker.lua` L85](../addons/extensions/colorpicker.lua:85)).
 
 ---
 

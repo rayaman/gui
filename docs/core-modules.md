@@ -10,10 +10,11 @@ The [`gui/core/`](../core) modules that aren't color/theme (covered in
 1. [font — cached font loader](#1-font--cached-font-loader)
 2. [transitions — interpolation engine](#2-transitions--interpolation-engine)
 3. [gifloader — GIF decoder & animator](#3-gifloader--gif-decoder--animator)
-4. [canvas — full-frame roots](#4-canvas--full-frame-roots)
-5. [menus — menu registry](#5-menus--menu-registry)
-6. [simulate — synthetic input](#6-simulate--synthetic-input)
-7. [probe — scheduler load](#7-probe--scheduler-load)
+4. [svgloader — SVG vector renderer](#4-svgloader--svg-vector-renderer)
+5. [canvas — full-frame roots](#5-canvas--full-frame-roots)
+6. [menus — menu registry](#6-menus--menu-registry)
+7. [simulate — synthetic input](#7-simulate--synthetic-input)
+8. [probe — scheduler load](#8-probe--scheduler-load)
 
 ---
 
@@ -141,7 +142,97 @@ sequenceDiagram
 
 ---
 
-## 4. canvas — full-frame roots
+## 4. svgloader — SVG vector renderer
+
+[`core/svgloader.lua`](../core/svgloader.lua). Pure-Lua SVG **vector** renderer (no
+rasterization, no native deps). Image elements wire this automatically for `.svg`
+sources ([elements §4.4](elements.md#44-svg-vectors)); standalone API:
+
+```lua
+local svg = require("gui.core.svgloader")
+
+local s = svg.load("assets/icon.svg")   -- parsed once, cached per filepath
+
+s:draw(x, y, w, h)                       -- absolute window space, meet-fit into the box
+s:draw(x, y, w, h, { rotation = 45, scaleX = -1, scaleY = 1, alpha = 0.5 })
+
+print(s.width, s.height)                 -- intrinsic px (from width/height attrs, else viewBox)
+print(svg.getInfo(s))                    -- {sourcePath, viewBox, width, height, shapeCount, hasStrokes}
+
+svg.clearCache()                         -- drop parses + their meshes (hot-reload/tests)
+```
+
+How it works — the SVG is parsed **once** into vector geometry, then **drawn live
+every frame** at the element's *current* box size, so it stays crisp at any scale
+(flex/dualDim resizes included):
+
+```mermaid
+flowchart LR
+    A[load filepath] --> B[XML-lite parse]
+    B --> C[curves flattened to polylines]
+    C --> D[love.math.triangulate per contour -> Mesh]
+    D --> E[one love.graphics.stencil invert parity pass]
+    E --> F[setStencilTest + fill box]
+    F --> G[crisp at any box size]
+```
+
+- The element hookup installs a `post` overlay hook that re-reads
+  `getAbsolutes()` each frame and calls `s:draw(...)`; `c.image` stays `nil`, so
+  the image draw pass is a no-op for SVG elements
+  ([`init.lua` setImage](../init.lua:2025)).
+- Even-odd fill (`fill-rule="evenodd"`) is computed as **stencil parity**: all
+  contour meshes are drawn inside one `love.graphics.stencil(..., "invert")`
+  call, so nested holes cancel correctly.
+- Anti-aliasing comes from **window MSAA** (`t.window.msaa = 4` in the demo
+  conf), not from the loader.
+
+Standalone use without an element:
+
+```lua
+local s = svg.load("bookmark.svg")
+function love.draw()
+    s:draw(100, 100, 256, 256)   -- any size; redraws sharp every frame
+end
+```
+
+Supported subset & limitations:
+
+- **Root:** `width`/`height` (px/unitless, or `pt`/`pc`/`mm`/`cm`/`in`/`em`/`%`),
+  `viewBox`, default `fill`, `preserveAspectRatio`
+  (`xMin|xMid|xMax` + `YMin|YMid|YMax` + `meet|slice` + `none`).
+- **Elements:** `path`, `rect` (incl. `rx`/`ry` rounded corners), `circle`,
+  `ellipse`, `line`, `polyline`, `polygon`, `g` (paint inheritance + group
+  `opacity`), `defs` + `use` (`href`/`xlink:href`, `x`/`y`, presentation attrs,
+  `transform`) + `symbol` (its `viewBox` scaled into the `use` box); depth-capped,
+  forward references OK.
+- **Transforms:** `translate`, `scale`, `rotate(θ [cx cy])`, `skewX`, `skewY`,
+  `matrix` — full 2×3 affine composition.
+- **Path commands:** `M m L l H h V v Z z` exact; `C c S s` and `Q q T t`
+  flattened to polylines; `A a` elliptical arcs (cubic-segment approximation).
+- **Paint:** solid fills (`#RGB`, `#RRGGBB`, `rgb()`, named, `none`),
+  `fill-opacity`, `fill-rule` (evenodd parity; nonzero winding — exact for
+  uniform-orientation contours, even-odd approximation + warn on mixed),
+  `stroke` + `stroke-width` + `stroke-opacity` + `stroke-dasharray`/
+  `stroke-dashoffset` + `stroke-linejoin` + butt/square `stroke-linecap`.
+- **Gradients:** `linearGradient` / `radialGradient` (`stop` offsets +
+  `stop-color`/`stop-opacity`, `gradientUnits`, `spreadMethod`) via `fill="url(#id)"`.
+- **clip-path:** `clipPath` (rect/circle/ellipse/convex-polygon children) applied
+  geometrically at load (Sutherland–Hodgman); multiple children intersect; concave
+  regions warn once and are skipped.
+- **mask:** `mask` rasterized at load to a 96px luminance→alpha texture
+  (`maskUnits`, `maskContentUnits`); solid-fill mask children only.
+- **Not supported:** patterns, filters, SMIL animation, `text`/`image` elements,
+  true round line caps/joins (this LÖVE build has no `setLineCap`; `round`
+  approximated via `setLineStyle("smooth")`), `gradientTransform`, radial focal
+  points (`fx`/`fy` treated as center), gradients inside masks, `imageColor`
+  tinting of SVGs.
+- Cost model: geometry + meshes are built once per file (cached); per-frame
+  cost is draw calls only — trivial for icons. Very complex SVGs are better
+  pre-baked to PNG.
+
+---
+
+## 5. canvas — full-frame roots
 
 [`core/canvas.lua`](../core/canvas.lua). The module *is* the constructor function:
 
@@ -163,7 +254,7 @@ then swap it with the live one in one step.
 
 ---
 
-## 5. menus — menu registry
+## 6. menus — menu registry
 
 Lazy, single-visible menu manager. Full API documented in
 [widgets §11](widgets.md#11-menu-registry-core).
@@ -174,7 +265,7 @@ just re-show it; `hideMenus()` parks (or destroys, with `delete`) the others.
 
 ---
 
-## 6. simulate — synthetic input
+## 7. simulate — synthetic input
 
 Drive the GUI from scripts/tests ([`core/simulate.lua`](../core/simulate.lua)); practical
 guide in [events §10](events-and-input.md#10-simulation-synthetic-input).
@@ -195,7 +286,7 @@ stream, so hover/drag chains behave as with a human.
 
 ---
 
-## 7. probe — scheduler load
+## 8. probe — scheduler load
 
 [`core/probe.lua`](../core/probe.lua) replaces `multi:getLoad()` with a cheap,
 non-blocking estimate. Despite the header's tick-slip theory, the installed
