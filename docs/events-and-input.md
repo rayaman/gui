@@ -215,7 +215,7 @@ end)
 
 Focus changes when a press lands on a new interactive element. Textboxes use focus to gate
 typing and caret blinking. Widgets that need "commit on click-away" use
-`OnPressedOuter` (see the [number picker](widgets.md#5-number-picker) pattern).
+`OnPressedOuter` (see the [number picker](widgets.md#5-numberpicker) pattern).
 
 Planned-but-not-implemented (from the README): `gui.focus.set/get/clear`, tab-order
 navigation.

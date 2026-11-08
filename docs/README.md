@@ -12,7 +12,7 @@ Comprehensive documentation for the `gui` library: a LÖVE2D UI framework built 
 
 | Document | Contents |
 |----------|----------|
-| [Getting Started](gui-library-docs.md) | Quick start, minimal app skeleton, first widgets, common recipes |
+| [Getting Started](getting-started.md) | Quick start, minimal app skeleton, first widgets, common recipes |
 | [Architecture & Internals](architecture.md) | Module map, frame loop, event routing, draw pipeline, threading model — with diagrams |
 | [Layout System](layout-system.md) | The dual-dimension (`dualDim`) system: offsets + fractional scale, anchoring recipes |
 | [Flexbox Layout](flexbox.md) | Opt-in auto-layout (Clay port): `setFlex`/`setSizing`, escape hatch, fit-content text, scroll integration |
@@ -30,38 +30,19 @@ Comprehensive documentation for the `gui` library: a LÖVE2D UI framework built 
 
 ## Library Layout
 
+Directory-level map only — per-module behavior is documented in the guides above,
+so this tree stays short on purpose (file-by-file detail here just drifts):
+
 ```
 gui/
 ├── init.lua            # Core library: elements, layout, events, draw pipeline
-├── core/
-│   ├── canvas.lua       # Full-frame root canvases + child-tree swap
-│   ├── color.lua        # Color parsing, math, palettes, ~1000 named colors
-│   ├── flexbox.lua      # Opt-in flex auto-layout (Clay port; nil-guarded hooks)
-│   ├── grid.lua         # Grid root mode on the flex scheduler (lazy nil-guarded require)
-│   ├── font.lua         # Font object cache
-│   ├── gifloader.lua   # Pure-Lua GIF decoder (LZW) + frame animator
-│   ├── svgloader.lua   # Pure-Lua SVG vector renderer (live-drawn, crisp at any scale)
-│   ├── menus.lua       # Menu registry (lazy build, hide/show)
-│   ├── measure.lua      # Cached text measurement for the flex pass
-│   ├── probe.lua        # Scheduler load probe
-│   ├── simulate.lua     # Synthetic mouse input for testing
-│   ├── theme.lua       # Generated palettes + 12 presets
-│   └── transitions.lua # Interpolation engine (glide)
-├── addons/
-│   ├── init.lua        # Loads `extensions` (system is opt-in)
-│   ├── extensions.lua  # Loader: requires each widget in extensions/ individually
-│   ├── extensions/     # One file per widget: videoplayer, checkbox, listframe,
-│   │                   # progressbar, numberpicker, colorpicker (+ shared.lua context)
-│   ├── system.lua      # Window, scroll frame, task manager, message box, file picker (opt-in)
-│   └── extensions_old.lua  # Legacy: slider, tooltip, list/grid frames (not loaded)
-├── shaders/
-│   ├── shaders.lua     # 13 built-in shader effects (auto-registered on gui.SHADERS)
-│   └── blur.lua        # setBlur/clearBlur extension (2-pass gaussian)
-├── yaml/
-│   ├── builder.lua     # YAML table → element tree
-│   ├── tinyyaml.lua    # Bundled YAML parser
-│   └── toyaml.lua      # Element tree → YAML serializer
+├── core/               # color, theme, font, transitions, gif/svg loaders, canvas,
+│                       # menus, simulate, probe, flexbox, grid, measure
+├── addons/             # Widget add-ons: extensions/ (auto-loaded) + system.lua (opt-in)
+├── shaders/            # shaders.lua (gui.SHADERS registry) + blur.lua extension
+├── yaml/               # Declarative builder, bundled tinyyaml parser, toyaml serializer
 ├── assets/             # play.png / pause.png (video player)
+├── examples/           # Demo apps: flex-demo, grid-demo, list-demo, svg-demo
 └── docs/               # ← you are here
 ```
 

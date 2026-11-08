@@ -2,9 +2,10 @@
 
 Opt-in CSS-Grid-style container/item layout for the retained element tree —
 a scoped implementation of the [CSS-Tricks complete-guide](https://css-tricks.com/snippets/css/complete-guide-grid/)
-subset, running as a second root mode inside the flexbox scheduler. The design
-document is [`plans/grid-integration-plan.md`](../plans/grid-integration-plan.md);
-this is the user guide.
+subset, running as a second root mode inside the flexbox scheduler.
+This is the user guide; the grid design-plan file has been removed from the
+repo, so design rationale lives here and in the
+[`core/grid.lua`](../core/grid.lua) source headers.
 
 **Opt-in and additive:** nothing happens until you call `setGrid` on an
 element. Subtrees without grid keys are untouched — grid containers register
@@ -224,7 +225,7 @@ Auto **columns** keep their max-content seed — no column-axis wrap re-solve
 ## 7. Cross-mode nesting & the shared scheduler
 
 Grid is not a second engine — it is a second **root mode** inside the flex
-scheduler ([plan §1](../plans/grid-integration-plan.md)). What that means
+scheduler. What that means
 for you:
 
 - **Roots:** `isFlexRoot` was generalized — a `__grid` element whose parent
@@ -296,7 +297,7 @@ are `__flexComputed`; amber marks escaped items. The status line prints
 `checks / invariantFails / passes / visited / frame`.
 
 Scenario names referenced in this guide map to the demo's labeled blocks
-(hand-computed expected rects, plan §6 matrix): `1` fr tracks + gap
+(hand-computed expected rects): `1` fr tracks + gap
 (`columns = "1fr 2fr 100px"`), `2` areas / `span 2` / explicit `"2"` lines /
 negative `"-1 / -2"`, `3`/`3b` auto-flow row overflow + `autoFlow = "column"`
 implicit columns, `4`/`4b` `dense = true` fills the hole vs the non-dense
@@ -316,7 +317,7 @@ autotest runs unedited alongside as the existing-behavior regression proof.
 
 ## 10. Limitations vs CSS
 
-Honest list (plan §1 non-goals + the deviations documented in the
+Honest list (port non-goals + the deviations documented in the
 [`layoutGridRoot` header, core/grid.lua:596-623](../core/grid.lua:596)):
 
 - **No subgrid** — planned non-goal.

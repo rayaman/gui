@@ -90,7 +90,7 @@ The README's "Better Transitions" list (easeInOut, bounce, elastic, back, cubic 
 is planned — only `glide` ships today; the `newTransition` pattern above is how to add
 them.
 
-Used internally by [`simulate.Move`](#6-simulate--synthetic-input).
+Used internally by [`simulate.Move`](#7-simulate--synthetic-input).
 
 ---
 

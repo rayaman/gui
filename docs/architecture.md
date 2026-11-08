@@ -151,7 +151,7 @@ Key invariants:
 - `obj:isDescendantOf(other)` walks the `parent` chain up to the roots
   ([`init.lua` L349](../init.lua:349)).
 - The roots' geometry is refreshed every frame by a dedicated thread
-  ([`init.lua` L2517–2548](../init.lua:2517)) — see [resize & aspect ratio](#resize-and-aspect-ratio).
+  ([`init.lua` L2517–2548](../init.lua:2517)) — see [Resize & aspect ratio](#resize--aspect-ratio).
 
 ### Constructors attach to `self`
 
@@ -533,5 +533,5 @@ Documented so they don't surprise you; several are also tracked in
 - `hasType(button)` on composite types requires *all* bits (`band == t`), so
   `text + button` matches `hasType(button)` only because `button` is a single bit.
 
-See [Events & Input](events-and-input.md#gotchas) and [Elements](elements.md) for
+See [Events & Input §11](events-and-input.md#11-gotchas) and [Elements](elements.md) for
 workarounds around each.
