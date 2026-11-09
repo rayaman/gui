@@ -76,7 +76,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
     local scrollX    = 0
     local maxScrollX = 0
     local SCROLL_SPEED = 40
-    local SCROLL_BAR_W = 8
+    local SCROLL_BAR_W = 12
     local applying     = false
     local measureOn    = false
     local measureDirty = true
@@ -119,7 +119,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         maxScrollY = math.max(0, ch - vh)
         if maxScrollY > 0 then
             vBar.visible = true
-            local thumbH = math.max(20, vh * (vh / ch))
+            local thumbH = math.max(28, vh * (vh / ch))
             local thumbY = (scrollY / maxScrollY) * (vh - thumbH)
             vThumb:setDualDim(nil, thumbY, nil, thumbH)
         else
@@ -130,7 +130,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         maxScrollX = math.max(0, cw - vw)
         if maxScrollX > 0 then
             hBar.visible = true
-            local thumbW = math.max(20, vw * (vw / cw))
+            local thumbW = math.max(28, vw * (vw / cw))
             local thumbX = (scrollX / maxScrollX) * (vw - thumbW)
             hThumb:setDualDim(thumbX, nil, thumbW, nil)
         else
@@ -159,8 +159,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         applyScroll()
     end)
 
-    vThumb:enableDragging(gui.MOUSE_PRIMARY)
-    vThumb:OnDragging(function(obj, dx, dy)
+    vThumb:OnDragging(function(obj, _, dy)
         if obj ~= vThumb then return end
         local _, vh = getViewSize()
         local _, _, _, thumbH = vThumb:getAbsolutes()
@@ -170,8 +169,7 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         applyScroll()
     end)
 
-    hThumb:enableDragging(gui.MOUSE_PRIMARY)
-    hThumb:OnDragging(function(obj, dx, dy)
+    hThumb:OnDragging(function(obj, dx)
         if obj ~= hThumb then return end
         local vw = getViewSize()
         local _, _, thumbW = hThumb:getAbsolutes()
@@ -180,6 +178,12 @@ function gui:newScrollFrame(x, y, w, h, sx, sy, sw, sh)
         scrollX = scrollX + dx * (maxScrollX / trackW)
         applyScroll()
     end)
+
+    gui.apply({
+        OnEnter = function() content:setTag("visual") end,
+        OnExit = function () content:removeTag("visual") end,
+        enableDragging = {gui.MOUSE_PRIMARY}
+    },hThumb,vThumb)
 
     content:OnSizeChanged(function(obj)
         if obj ~= content or applying then return end

@@ -9,7 +9,6 @@
 -- Addons modify the gui interface directly and do not return anything.
 
 require("gui.addons.extensions.shared")
-
 require("gui.addons.extensions.videoplayer")
 require("gui.addons.extensions.checkbox")
 require("gui.addons.extensions.listframe")
