@@ -1,5 +1,14 @@
 #
 
+## svgloader setSVGColor — per-element SVG recoloring (2026-11-09)
+
+Draw-time tint for SVG image elements: recolor icons to theme colors without re-parsing, re-meshing, or touching sibling elements that share the same cached `.svg`.
+
+- **Loader** ([`core/svgloader.lua`](core/svgloader.lua:1)): `SVGmt:draw` accepts `opts.tint`; `SVGmt:setSVGColor(c)` stores a persistent tint (accepts gui library color tables, `#rrggbb`/`rgb()`/named strings via `parsePaint`, or r,g,b[,a] floats; `nil` restores). Tint replaces every fill AND stroke RGB at the existing `setColor` sites; the color's alpha `[4]` multiplies into `fillAlpha`/`strokeAlpha` so `fill-opacity`/`stroke-opacity`/group opacity survive. Gradient ramps tint through the mesh vertex color; masked shapes now bake **white** RGB + luminance-alpha into the mask raster (was the shape's fill color) so the draw-time vertex color — fill or tint — carries the final color. No re-parse, no mesh rebuild; effective next frame.
+- **Element API** ([`init.lua` newImageBase](init.lua:1)): `element:setSVGColor(c|nil)` (guarded by `__isSvg`) stores a per-element tint that the `post` hook passes as `opts.tint` — **isolated per instance** even though `svg.load()` caches the parsed doc per filepath (loader-level `setSVGColor` affects every element sharing the file; documented). `setImage` with a new source resets the tint, mirroring the raster path's `imageColor = white` reset.
+- **Tests** ([`examples/svg-demo/main.lua`](examples/svg-demo/main.lua:1)): 96 → **106 checks, 0 failures** — setSVGColor storage units (hex/table/nil, gui alpha kept, shared-doc isolation) + five render boxes/probes (three tinted instances of the same cached doc side by side, tint→nil restore, untouched sibling still #1F2328). Two demo layout bugs found along the way: tint boxes overlapping the SVG400 box through the bookmark's punched hole, and box labels bleeding into the PNG/SVG200 pixel-diff region — moved to a free band.
+- **Docs**: recolor sections in [elements §4.4](docs/elements.md:1) and [core-modules §4](docs/core-modules.md:1); `:setSVGColor` + `opts.tint` in the [api-quick-reference](docs/api-quick-reference.md:1) svgloader row; loader header updated in place.
+
 ## newListFrame — selection, motion, removal (2026-11-08)
 
 Rewrote the draft [`gui:newListFrame`](addons/extensions.lua:197) into a finished list widget: scrollable single-selection rows on `newScrollFrame`, with hover/press/selection transitions, animated add/remove, and optional keyboard nav.

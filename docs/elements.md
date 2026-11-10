@@ -292,6 +292,20 @@ icon:setDualDim(nil, nil, 400, 400)   -- re-renders crisp, no resampled blur
   ([`init.lua` setImage](../init.lua:2025)), so it composites on top of the
   element's background/border (and any `applyGradient` image).
 - `getSource()` still returns the `.svg` path; `__isSvg` marks such elements.
+- **Recolor per element** with `setSVGColor` — handy for icons that should
+  follow a theme color:
+
+  ```lua
+  icon:setSVGColor(color.new("#30C5FF"))  -- gui library color
+  icon:setSVGColor("#ff0000")             -- hex / "rgb()" / named also work
+  icon:setSVGColor(1, 0, 0)               -- r,g,b floats
+  icon:setSVGColor(nil)                   -- back to the SVG's own colors
+  ```
+
+  The tint replaces every fill AND stroke color (its alpha multiplies into the
+  SVG's own opacities) and applies instantly — the vector redraws live, so
+  there is no re-parse. It is **per element**: sibling elements loading the
+  same `.svg` (the parse is cached per filepath) keep their own colors.
 - Solid + gradient fills, strokes (incl. `stroke-dasharray`), `fill-rule`
   (evenodd + nonzero), `rx`/`ry`, arcs (`A`/`a`), `clip-path`, `mask`,
   `defs`/`use`/`symbol`, group opacity and viewBox scaling are supported.

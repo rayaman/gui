@@ -186,7 +186,7 @@ textarea) · `OnSelectionChanged` (radio) · `OnProgressUpdated` (progress bar) 
 | [`core/font`](../core/font.lua) | `set`, `get`, `evict`, `clear`, `size` | [core-modules §1](core-modules.md#1-font--cached-font-loader) |
 | [`core/transitions`](../core/transitions.lua) | `glide`, `newTransition`, handle `OnStep/OnStop/Kill`, `SetFPS/GetFPS` | [§2](core-modules.md#2-transitions--interpolation-engine) |
 | [`core/gifloader`](../core/gifloader.lua) | `load`, `Updater`, `update`, `draw`, `play`, `pause`, `reset`, `setFixedFramerate`, `getInfo` | [§3](core-modules.md#3-gifloader--gif-decoder--animator) |
-| [`core/svgloader`](../core/svgloader.lua) | `load`, `:draw(x,y,w,h,opts)`, `getInfo`, `clearCache`; `:getWidth/:getHeight` | [§4](core-modules.md#4-svgloader--svg-vector-renderer) |
+| [`core/svgloader`](../core/svgloader.lua) | `load`, `:draw(x,y,w,h,opts)` (opts incl. `tint`), `getInfo`, `clearCache`; `:getWidth/:getHeight`, `:setSVGColor(c\|nil)` | [§4](core-modules.md#4-svgloader--svg-vector-renderer) |
 | [`core/canvas`](../core/canvas.lua) | `newCanvas(domain)`, `:swap(a,b)` | [§5](core-modules.md#5-canvas--full-frame-roots) |
 | [`core/menus`](../core/menus.lua) | `registerMenu`, `getMenu`, `init`, `hideMenus`, `getCurrentMenu`, `:visible` | [§6](core-modules.md#6-menus--menu-registry) |
 | [`core/simulate`](../core/simulate.lua) | `Press`, `Release`, `Click`, `Move` | [§7](core-modules.md#7-simulate--synthetic-input) |

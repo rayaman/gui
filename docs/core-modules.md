@@ -155,6 +155,10 @@ local s = svg.load("assets/icon.svg")   -- parsed once, cached per filepath
 
 s:draw(x, y, w, h)                       -- absolute window space, meet-fit into the box
 s:draw(x, y, w, h, { rotation = 45, scaleX = -1, scaleY = 1, alpha = 0.5 })
+s:draw(x, y, w, h, { tint = "#ff0000" }) -- one-off recolor (see setSVGColor)
+
+s:setSVGColor(color.new("#30C5FF"))      -- persistent recolor (gui color, hex,
+s:setSVGColor(nil)                       -- rgb()/named, or r,g,b floats); nil restores
 
 print(s.width, s.height)                 -- intrinsic px (from width/height attrs, else viewBox)
 print(svg.getInfo(s))                    -- {sourcePath, viewBox, width, height, shapeCount, hasStrokes}
@@ -180,6 +184,13 @@ flowchart LR
   `getAbsolutes()` each frame and calls `s:draw(...)`; `c.image` stays `nil`, so
   the image draw pass is a no-op for SVG elements
   ([`init.lua` setImage](../init.lua:2025)).
+- **Recoloring** is a draw-time tint: `setSVGColor` / `opts.tint` replace every
+  fill AND stroke RGB with the color's RGB, and its alpha `[4]` multiplies into
+  `fill-opacity`/`stroke-opacity` (gradient ramps and masked shapes tint too).
+  No re-parse, no mesh rebuild — effective next frame. Because `load()` caches
+  per filepath, the *loader-level* tint affects every element sharing the file;
+  prefer the per-element [`element:setSVGColor`](elements.md#44-svg-vectors),
+  which routes a private `tint` through the post hook instead.
 - Even-odd fill (`fill-rule="evenodd"`) is computed as **stencil parity**: all
   contour meshes are drawn inside one `love.graphics.stencil(..., "invert")`
   call, so nested holes cancel correctly.

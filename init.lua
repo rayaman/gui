@@ -2011,6 +2011,25 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
         return IMAGE
     end
 
+    -- Recolor an SVG image element per-instance. The tint rides the
+    -- svgloader's draw-time opts (core/svgloader.lua SVGmt:draw), so ONLY
+    -- this element changes even though svg.load() caches the parsed doc per
+    -- filepath and sibling elements share it. Accepts a gui library color,
+    -- a hex/"rgb()"/named string, or r,g,b[,a] floats; nil restores the
+    -- SVG's own colors. No-op on raster/gif elements (use imageColor there).
+    function c:setSVGColor(col, g, b, a)
+        if not c.__isSvg then return end
+        if col == nil then
+            c.svgTint = nil
+        elseif type(col) == "table" then
+            c.svgTint = { col[1], col[2], col[3], a or col[4] }
+        elseif type(col) == "string" then
+            c.svgTint = col   -- svgloader parses paint strings at draw time
+        else
+            c.svgTint = { col, g or 0, b or 0, a }
+        end
+    end
+
     local img
 
     c.setImage = function(self, i, x, y, w, h)
@@ -2034,11 +2053,13 @@ function gui:newImageBase(typ, x, y, w, h, sx, sy, sw, sh)
             c.imageWidth, c.imageHeight = s.width, s.height
             c.imageColor = white
             c.imageVisibility = 1
+            c.svgTint = nil   -- installing a source resets appearance, same as the raster path's imageColor reset
             c.post = function(self)
                 local x, y, w, h = self:getAbsolutes()
                 s:draw(x, y, w, h, {
                     rotation = self.rotation, scaleX = self.scaleX,
                     scaleY = self.scaleY, alpha = self.imageVisibility,
+                    tint = self.svgTint,   -- per-element setSVGColor override
                 })
             end
             return

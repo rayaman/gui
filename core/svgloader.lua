@@ -33,6 +33,8 @@
 --   local s = svg.load("bookmark-svg.svg")   -- parsed + cached per filepath
 --   s:draw(x, y, w, h)                       -- absolute window space, meet-fit
 --   s:draw(x, y, w, h, {rotation = 45, scaleX = -1, scaleY = 1, alpha = 0.5})
+--   s:draw(x, y, w, h, {tint = "#ff0000"})   -- draw-time recolor (see :setSVGColor)
+--   s:setSVGColor(colorTable)                -- persistent tint (nil restores)
 --   s.width, s.height                        -- intrinsic px
 --   svg.getInfo(s)
 --   svg.clearCache()
@@ -772,10 +774,12 @@ end
 -- ---------------------------------------------------------------------------
 -- mask (plan §H.1 probe revision): pure-Lua ImageData rasterization (this
 -- build has no canvas stencils). Luminance -> alpha (sRGB weights; linearRGB
--- is the spec default — documented deviation). The shape's fill color is
--- baked into the raster, so a masked fill draws as a tinted textured quad
--- under the normal shape stencil — same code path as gradient meshes, no
--- shader needed. maskUnits (objectBoundingBox default w/ SVG region defaults,
+-- is the spec default — documented deviation). WHITE RGB is baked into the
+-- raster (luminance rides pixel alpha); the shape's fill color — or the
+-- active draw-time tint — rides the vertex color at draw time, so a masked
+-- fill draws as a colored textured quad under the normal shape stencil,
+-- same code path as gradient meshes, no shader needed. maskUnits
+-- (objectBoundingBox default w/ SVG region defaults,
 -- userSpaceOnUse) and maskContentUnits (userSpaceOnUse default,
 -- objectBoundingBox) supported. Mask strokes and gradient fills inside masks:
 -- unsupported (warn once). mask + gradient on one shape: gradient wins.
@@ -879,8 +883,9 @@ local function buildMaskMesh(sh, node, doc)
     if #shapes == 0 then return nil end
 
     local img = love.image.newImageData(MASK_RES, MASK_RES)
-    local f = sh.fill or { 0, 0, 0 }
-    local R, G, B = f[1], f[2], f[3]
+    -- White RGB baked in: the final color (shape fill or setSVGColor tint) is
+    -- applied as the vertex color in SVGmt:draw's maskMesh branch.
+    local R, G, B = 1, 1, 1
     for py = 0, MASK_RES - 1 do
         local uy = my + mh * (py + 0.5) / MASK_RES
         for px = 0, MASK_RES - 1 do
@@ -1536,6 +1541,16 @@ function SVGmt:draw(x, y, w, h, opts)
     local rot = rad(opts.rotation or 0)
     local sx, sy = opts.scaleX or 1, opts.scaleY or 1
 
+    -- Draw-time recolor (opts.tint or the persistent self.tint from
+    -- setSVGColor): replaces every fill AND stroke RGB with the tint while
+    -- keeping per-shape fill/stroke alpha; the tint's own alpha [4]
+    -- multiplies in. Strings are parsed as SVG paints, so gui library color
+    -- tables, "#rrggbb", "rgb()" and named colors all work. Geometry and
+    -- meshes are untouched — the change shows next frame with no rebuild.
+    local tint = opts.tint or self.tint
+    if type(tint) == "string" then tint = parsePaint(tint) end
+    local tintA = tint and (tint[4] or 1) or 1
+
     -- mirror the image pipeline's flip adjust-offsets
     local X, Y = x + offX, y + offY
     if sx < 0 then X = X + self.vbW * sX end
@@ -1563,20 +1578,30 @@ function SVGmt:draw(x, y, w, h, opts)
             end, sh.fillOp or "invert", 1)
             love.graphics.setStencilTest("notequal", 0)
             if sh.gradMesh then
-                love.graphics.setColor(1, 1, 1, sh.fillAlpha * alpha)
+                -- the ramp texture holds the gradient; the vertex color is
+                -- white unless a tint recolors the whole ramp
+                if tint then
+                    love.graphics.setColor(tint[1], tint[2], tint[3], sh.fillAlpha * alpha * tintA)
+                else
+                    love.graphics.setColor(1, 1, 1, sh.fillAlpha * alpha)
+                end
                 love.graphics.draw(sh.gradMesh)
             elseif sh.maskMesh then
-                -- tint + luminance-alpha baked into the mask texture
-                love.graphics.setColor(1, 1, 1, alpha)
+                -- mask raster bakes white RGB + luminance-alpha (see
+                -- buildMaskMesh); fill color (or tint) rides the vertex color
+                local mc = tint or sh.fill
+                love.graphics.setColor(mc[1], mc[2], mc[3], alpha * tintA)
                 love.graphics.draw(sh.maskMesh)
             else
-                love.graphics.setColor(sh.fill[1], sh.fill[2], sh.fill[3], sh.fillAlpha * alpha)
+                local fc = tint or sh.fill
+                love.graphics.setColor(fc[1], fc[2], fc[3], sh.fillAlpha * alpha * tintA)
                 love.graphics.rectangle("fill", 0, 0, self.vbW, self.vbH)
             end
             love.graphics.setStencilTest()
         end
         if sh.stroke and sh.strokeMeshes then
-            love.graphics.setColor(sh.stroke[1], sh.stroke[2], sh.stroke[3], sh.strokeAlpha * alpha)
+            local sc = tint or sh.stroke
+            love.graphics.setColor(sc[1], sc[2], sc[3], sh.strokeAlpha * alpha * tintA)
             love.graphics.setLineWidth(sh.strokeWidth) -- scales with the transform
             local join = sh.linejoin
             if join == "round" then
@@ -1597,6 +1622,29 @@ end
 
 function SVGmt:getWidth() return self.width end
 function SVGmt:getHeight() return self.height end
+
+-- Persistent draw-time recolor: every fill AND stroke draws with c's RGB;
+-- c[4] (gui library colors carry it) multiplies into fill/stroke alpha, so
+-- fill-opacity / stroke-opacity / group opacity survive. Accepts a gui
+-- library color table, an SVG paint string ("#rrggbb", "rgb()", named), or
+-- r,g,b[,a] floats; nil restores the SVG's own parsed colors. Purely a draw
+-- concern — no re-parse, no mesh rebuild, effective next frame.
+-- NOTE: load() caches per filepath, so this recolors EVERY element sharing
+-- the file. For per-instance color prefer the element-level setSVGColor in
+-- init.lua, which passes opts.tint through the post hook instead.
+function SVGmt:setSVGColor(c, g, b, a)
+    if c == nil then
+        self.tint = nil
+    elseif type(c) == "string" then
+        local t = parsePaint(c)
+        self.tint = t and { t[1], t[2], t[3], a } or nil
+    elseif type(c) == "table" then
+        self.tint = { c[1], c[2], c[3], a or c[4] }
+    else
+        self.tint = { c, g or 0, b or 0, a }
+    end
+    return self
+end
 
 -- ---------------------------------------------------------------------------
 -- Public API + filepath-keyed parse cache (geometry/meshes are size-independent)

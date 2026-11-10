@@ -46,9 +46,9 @@ local verify = require("verify")
 -- and use those love-relative paths instead. Everything downstream then uses
 -- plain love paths, which every loader accepts.
 local function stageFixtures()
-    if love.filesystem.getInfo("gui/bookmark-svg.png")
-       and love.filesystem.getInfo("gui/bookmark-svg.svg") then
-        return "gui/bookmark-svg.svg", "gui/bookmark-svg.png"
+    if love.filesystem.getInfo("bookmark-svg.png")
+       and love.filesystem.getInfo("bookmark-svg.svg") then
+        return "bookmark-svg.svg", "bookmark-svg.png"
     end
     love.filesystem.createDirectory("fixtures")
     for _, name in ipairs({ "bookmark-svg.svg", "bookmark-svg.png" }) do
@@ -171,6 +171,7 @@ end
 -- Layout elements
 -- ---------------------------------------------------------------------------
 local PNG_LABEL, SVG200, SVG400, SVGGROW
+local SVG_TINT_A, SVG_TINT_B, SVG_TINT_C
 local frame = 0
 
 local function build()
@@ -200,6 +201,18 @@ local function build()
     CLIP = gui:newImageLabel(CLIP_SVG, 730, 545, 110, 110, 0, 0, 0, 0)
     MASK = gui:newImageLabel(MASK_SVG, 850, 545, 110, 110, 0, 0, 0, 0)
 
+    -- setSVGColor boxes: same .svg file (one shared cached parse) recolored
+    -- per element via the post-hook tint opt — instances stay isolated.
+    -- Placed in the free band under PNG/SVG200 (y>320) so nothing overlaps
+    -- their artwork through the bookmark's punched hole.
+    SVG_TINT_A = gui:newImageLabel(SVG_SRC, 40, 330, 110, 110, 0, 0, 0, 0)
+    SVG_TINT_A:setSVGColor("#d1495b")                       -- hex string
+    SVG_TINT_B = gui:newImageLabel(SVG_SRC, 200, 330, 110, 110, 0, 0, 0, 0)
+    SVG_TINT_B:setSVGColor(0.12, 0.55, 0.85)                -- r,g,b floats
+    SVG_TINT_C = gui:newImageLabel(SVG_SRC, 360, 330, 110, 110, 0, 0, 0, 0)
+    SVG_TINT_C:setSVGColor("#00ff00")                       -- tinted then...
+    SVG_TINT_C:setSVGColor(nil)                             -- ...restored
+
     -- labels
     local function label(txt, x, y)
         local l = gui:newTextLabel(txt, x, y, 400, 20, 0, 0, 0, 0)
@@ -218,6 +231,12 @@ local function build()
     label("clip-path disc", 730, 528)
     label("luminance mask", 850, 528)
     label("linear | radial gradient", 830, 95)
+    -- Labels BELOW the tint boxes: text at y=315 would bleed into the bottom
+    -- rows of the PNG/SVG200 comparison boxes (they end at y=320) and poison
+    -- the pixel-diff's white-vs-fill disagreement count.
+    label('setSVGColor("#d1495b")', 40, 445)
+    label("setSVGColor(0.12,0.55,0.85)", 200, 445)
+    label("tint then nil -> original", 360, 445)
 end
 
 -- ---------------------------------------------------------------------------
@@ -420,6 +439,22 @@ local function staticChecks()
     expect(#maskDoc.shapes == 1 and maskDoc.shapes[1].maskId == "stripes",
         "mask fixture: maskId captured on shape")
     expect(maskDoc.defs.stripes.name == "mask", "mask fixture: mask registered in defs")
+
+    -- setSVGColor storage semantics (loader-level tint). MUST restore nil:
+    -- the doc is the shared cache entry the pixel-diff render below uses.
+    local ts = svg.load(SVG_SRC)
+    ts:setSVGColor("#ff0000")
+    expect(ts.tint and ts.tint[1] == 1 and ts.tint[2] == 0 and ts.tint[3] == 0,
+        "setSVGColor hex string stored as 0-1 tint")
+    ts:setSVGColor({ 0, 1, 0, 0.5 })
+    expect(ts.tint and ts.tint[2] == 1 and ts.tint[4] == 0.5,
+        "setSVGColor table keeps gui alpha in tint[4]")
+    ts:setSVGColor(nil)
+    expect(ts.tint == nil, "setSVGColor(nil) clears the tint")
+    -- element-level setSVGColor stores on the element, not the shared doc
+    expect(SVG_TINT_A.svgTint and ts.tint == nil,
+        "element setSVGColor stays isolated from the shared cached doc")
+    expect(SVG_TINT_C.svgTint == nil, "element setSVGColor(nil) restores original")
 end
 
 -- ---------------------------------------------------------------------------
@@ -563,6 +598,32 @@ local function pixelDiff()
     cmProbe("mask", 850, 50, 50, false)    -- black gap between stripes
     cmProbe("mask", 850, 80, 50, true)     -- white stripe 2
     cmProbe("mask", 850, 5, 50, false)     -- black before stripe 1
+
+    -- setSVGColor render probes: one cached doc, three 110px boxes at y=330
+    -- (viewBox 0..24). Same geometry, different colors per element.
+    local function tintProbe(tag, boxX, vx, vy, test)
+        local px, py = boxX + vx / 24 * 110 + 0.5, 330 + vy / 24 * 110 + 0.5
+        local r, g, b = snap:getPixel(px, py)
+        expect(test(r, g, b), string.format(
+            "tint %s probe (%g,%g) -> (%.2f,%.2f,%.2f)", tag, vx, vy, r, g, b))
+    end
+    -- A: #d1495b on the frame band; the punched hole stays page bg (a tint
+    -- recolors the PAINT, it doesn't fill the bounding box)
+    tintProbe("A-frame", 40, 6.75, 12, function(r, g, b)
+        return r > 0.5 and g < 0.45 and b < 0.5 end)
+    tintProbe("A-hole", 40, 12, 8, function(r, g, b)
+        return r > 0.85 and g > 0.85 and b > 0.85 end)
+    -- B: blue tint on a second element of the SAME cached doc
+    tintProbe("B-frame", 200, 6.75, 12, function(r, g, b)
+        return b > 0.5 and r < 0.4 end)
+    -- C: tinted then nil -> back to the parsed dark fill
+    tintProbe("C-restored", 360, 6.75, 12, function(r, g, b)
+        return r < 0.3 and g < 0.3 and b < 0.35 end)
+    -- isolation: the untouched SVG200 box (200px mapping) still renders #1F2328
+    local ix, iy = 280 + 6.75 / 24 * 200 + 0.5, 120 + 12 / 24 * 200 + 0.5
+    local ir, ig, ib = snap:getPixel(ix, iy)
+    expect(ir < 0.3 and ig < 0.3 and ib < 0.35, string.format(
+        "untinted SVG200 isolated from sibling tints -> (%.2f,%.2f,%.2f)", ir, ig, ib))
 end
 
 local function showSummary()
